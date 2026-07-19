@@ -62,6 +62,12 @@ const WHEN = {
   "toggle-group": "exclusive or multi toggle row (view switches)",
   tooltip: "hover hint; wrapper Tip gives label+child API",
   "use-mobile": "hook: viewport-below-768 boolean (sidebar dependency)",
+  field: "labeled field scaffolding (Field/FieldGroup/FieldLabel…) used by newer blocks; form.tsx remains the react-hook-form wiring",
+};
+
+const BLOCK_WHEN = {
+  "login-03": "copy-out starting screen: card login with provider slots — richer than the starter's built-in gate",
+  "sidebar-07": "copy-out starting shell: collapsible sidebar app frame (breadcrumb header, icon rail) — adopt when an app outgrows the starter's hand-rolled shell",
 };
 
 const OURS = [
@@ -87,6 +93,15 @@ for (const [name, meta] of Object.entries(manifest.components).sort()) {
     import: meta.files.map((f) => "src/" + f).join(" · "),
     when: WHEN[name] ?? "(add a WHEN line in scripts/gen-docs.mjs)",
     source: `shadcn/ui ${manifest.style} (MIT — NOTICE.md)`,
+  });
+}
+for (const [name, meta] of Object.entries(manifest.blocks ?? {}).sort()) {
+  items.push({
+    name,
+    kind: "block",
+    import: meta.files.map((f) => "src/" + f).join(" · "),
+    when: BLOCK_WHEN[name] ?? "(add a BLOCK_WHEN line in scripts/gen-docs.mjs)",
+    source: `shadcn/ui ${manifest.style} block (MIT — NOTICE.md); copy-out example tissue, not a runtime import`,
   });
 }
 for (const [file, kind, exports_, when] of OURS) {

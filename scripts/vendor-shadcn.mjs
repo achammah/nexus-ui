@@ -26,10 +26,19 @@ const COMPONENTS = [
   "table", "separator", "scroll-area", "avatar", "skeleton", "card", "alert",
   "accordion", "collapsible", "aspect-ratio", "carousel", "resizable", "progress",
   // data + forms + feedback
-  "form", "calendar", "chart", "sonner",
+  "form", "field", "calendar", "chart", "sonner",
   // registry hook deps (fetched explicitly — the script resolves named items only)
   "use-mobile",
 ];
+
+/* Blocks — bigger app-level compositions (login screens, sidebar shells, dashboards).
+   Each lands SELF-CONTAINED under src/blocks/<name>/ (its pages/components keep their
+   relative targets); blocks import the shared kit via @/components/ui like everything
+   else. Consumers copy a block out as a starting screen — blocks are EXAMPLE tissue,
+   not runtime deps. */
+/* dashboard-01 was evaluated and REJECTED: it vendors a second icon library
+   (@tabler) + a parallel data-table — our record-core is the dashboard/table layer. */
+const BLOCKS = ["login-03", "sidebar-07"];
 
 // registry file types → destinations (hooks/lib files ride along with some items)
 const DEST = {
@@ -65,6 +74,33 @@ for (const name of COMPONENTS) {
   }
   console.log(`  ok ${name}`);
 }
+for (const name of BLOCKS) {
+  const res = await fetch(`https://ui.shadcn.com/r/styles/${STYLE}/${name}.json`);
+  if (!res.ok) {
+    console.error(`FAIL block ${name}: ${res.status}`);
+    process.exitCode = 1;
+    continue;
+  }
+  const item = await res.json();
+  for (const d of item.dependencies ?? []) deps.add(d);
+  const bdir = path.join(SRC, "blocks", name);
+  mkdirSync(bdir, { recursive: true });
+  for (const f of item.files ?? []) {
+    // FLATTEN: every block file lands at the block root (pages import siblings "./x")
+    const dest = path.join(bdir, path.basename(f.path));
+    const content = f.content
+      .replaceAll(`@/registry/${STYLE}/ui/`, "@/components/ui/")
+      .replaceAll(`@/registry/${STYLE}/lib/`, "@/lib/")
+      .replaceAll(`@/registry/${STYLE}/hooks/`, "@/hooks/")
+      .replaceAll(`@/registry/${STYLE}/blocks/${name}/components/`, "./")
+      .replaceAll(`@/registry/${STYLE}/blocks/${name}/`, "./");
+    writeFileSync(dest, content);
+    (manifest.blocks ??= {})[name] ??= { files: [] };
+    manifest.blocks[name].files.push(path.relative(SRC, dest));
+  }
+  console.log(`  ok block ${name}`);
+}
+
 writeFileSync(path.join(OUT, ".vendor-manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
-console.log(`\nvendored ${Object.keys(manifest.components).length}/${COMPONENTS.length} → src/components/ui`);
+console.log(`\nvendored ${Object.keys(manifest.components).length}/${COMPONENTS.length} components + ${Object.keys(manifest.blocks ?? {}).length}/${BLOCKS.length} blocks`);
 console.log("registry deps:", [...deps].join(", "));

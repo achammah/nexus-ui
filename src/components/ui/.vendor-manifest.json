@@ -1,6 +1,6 @@
 {
   "style": "new-york-v4",
-  "fetchedAt": "2026-07-19T15:04:14.037Z",
+  "fetchedAt": "2026-07-19T15:24:27.759Z",
   "source": "https://ui.shadcn.com/r",
   "components": {
     "button": {
@@ -338,6 +338,12 @@
         "react-hook-form"
       ]
     },
+    "field": {
+      "files": [
+        "components/ui/field.tsx"
+      ],
+      "deps": []
+    },
     "calendar": {
       "files": [
         "components/ui/calendar.tsx"
@@ -370,6 +376,24 @@
         "hooks/use-mobile.ts"
       ],
       "deps": []
+    }
+  },
+  "blocks": {
+    "login-03": {
+      "files": [
+        "blocks/login-03/page.tsx",
+        "blocks/login-03/login-form.tsx"
+      ]
+    },
+    "sidebar-07": {
+      "files": [
+        "blocks/sidebar-07/page.tsx",
+        "blocks/sidebar-07/app-sidebar.tsx",
+        "blocks/sidebar-07/nav-main.tsx",
+        "blocks/sidebar-07/nav-projects.tsx",
+        "blocks/sidebar-07/nav-user.tsx",
+        "blocks/sidebar-07/team-switcher.tsx"
+      ]
     }
   }
 }

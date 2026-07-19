@@ -10,6 +10,7 @@ Origin tags: `ours` = authored from scratch · `rebuilt` = clean-room reauthored
 | src/primitives/* | ours | thin wrappers giving record-core/apps a stable API over the vendored components; all local styling opinions live here |
 | src/tokens/tokens.css · src/styles/shadcn.css | ours | the Nexus token canvas + the shadcn semantic-variable bridge (a design lock restyles everything via tokens) |
 | src/record-core/* | rebuilt | clean-room from the record-system interaction specs captured in the ATS postmortem workstream (record-page anatomy, kanban interaction model, table conventions — ideas/IA only; no third-party source consulted during authoring) |
+| src/blocks/* | **derived — shadcn/ui blocks, MIT © shadcn** | copy-out EXAMPLE tissue (login-03, sidebar-07), flattened per block, vendored by the same script; never a runtime import |
 | src/lib/utils.ts | derived — shadcn convention (cn), MIT | 4-line utility per the shadcn contract |
 | scripts/vendor-shadcn.mjs | ours | the vendor-sync lever |
 

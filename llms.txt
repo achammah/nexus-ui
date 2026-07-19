@@ -1,0 +1,7 @@
+# nexus-ui — agent entry points
+# Read order: AGENTS.md -> docs/INDEX.md (catalog; JSON twin: docs/catalog.json) -> docs/record-core.md
+AGENTS.md
+docs/INDEX.md
+docs/catalog.json
+docs/record-core.md
+PROVENANCE.md

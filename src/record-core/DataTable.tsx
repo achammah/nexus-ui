@@ -7,6 +7,7 @@ import {
   useReactTable,
   type SortingState,
 } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Checkbox } from "../primitives/fields";
 import type { FieldDef, ObjectConfig, RecordRow } from "./types";
@@ -181,8 +182,31 @@ export function DataTable({
     getSortedRowModel: getSortedRowModel(),
   });
 
+  // Big lists virtualize (rows beyond VIRTUAL_AT render on scroll, not in the DOM) —
+  // the wrap becomes the scroll container; spacer rows keep the table layout honest.
+  const VIRTUAL_AT = 80;
+  const modelRows = table.getRowModel().rows;
+  const virtual = modelRows.length > VIRTUAL_AT;
+  const wrapRef = React.useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: modelRows.length,
+    getScrollElement: () => wrapRef.current,
+    estimateSize: () => 37,
+    overscan: 12,
+    enabled: virtual,
+  });
+  const vItems = virtual ? virtualizer.getVirtualItems() : null;
+  const padTop = vItems && vItems.length ? vItems[0].start : 0;
+  const padBottom = vItems && vItems.length ? virtualizer.getTotalSize() - vItems[vItems.length - 1].end : 0;
+  const visibleRows = vItems ? vItems.map((vi) => modelRows[vi.index]) : modelRows;
+
   return (
-    <div className="nxTableWrap" data-testid={`table-${config.key}`}>
+    <div
+      className="nxTableWrap"
+      data-testid={`table-${config.key}`}
+      ref={wrapRef}
+      style={virtual ? { maxHeight: "70vh" } : undefined}
+    >
       <table className="nxTable">
         <thead>
           {table.getHeaderGroups().map((hg) => (
@@ -202,7 +226,12 @@ export function DataTable({
           ))}
         </thead>
         <tbody>
-          {table.getRowModel().rows.map((r) => (
+          {padTop > 0 && (
+            <tr aria-hidden>
+              <td style={{ height: padTop, padding: 0, border: 0 }} colSpan={columns.length} />
+            </tr>
+          )}
+          {visibleRows.map((r) => (
             <tr key={r.id} data-testid={`row-${(r.original as RecordRow).id}`}>
               {r.getVisibleCells().map((c) => {
                 const f = config.fields.find((x) => x.key === c.column.id);
@@ -213,6 +242,11 @@ export function DataTable({
               })}
             </tr>
           ))}
+          {padBottom > 0 && (
+            <tr aria-hidden>
+              <td style={{ height: padBottom, padding: 0, border: 0 }} colSpan={columns.length} />
+            </tr>
+          )}
         </tbody>
       </table>
       {rows.length === 0 && (

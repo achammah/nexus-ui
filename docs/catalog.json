@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-07-19T15:13:14.774Z",
+  "generatedAt": "2026-07-19T15:28:37.888Z",
   "style": "new-york-v4",
-  "count": 57,
+  "count": 60,
   "items": [
     {
       "name": "accordion",
@@ -134,6 +134,13 @@
       "kind": "vendored",
       "import": "src/components/ui/dropdown-menu.tsx",
       "when": "kebab/row action menus; wrapper Menu gives trigger+items API",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "field",
+      "kind": "vendored",
+      "import": "src/components/ui/field.tsx",
+      "when": "labeled field scaffolding (Field/FieldGroup/FieldLabel…) used by newer blocks; form.tsx remains the react-hook-form wiring",
       "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
     },
     {
@@ -331,6 +338,20 @@
       "import": "src/hooks/use-mobile.ts",
       "when": "hook: viewport-below-768 boolean (sidebar dependency)",
       "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "login-03",
+      "kind": "block",
+      "import": "src/blocks/login-03/page.tsx · src/blocks/login-03/login-form.tsx",
+      "when": "copy-out starting screen: card login with provider slots — richer than the starter's built-in gate",
+      "source": "shadcn/ui new-york-v4 block (MIT — NOTICE.md); copy-out example tissue, not a runtime import"
+    },
+    {
+      "name": "sidebar-07",
+      "kind": "block",
+      "import": "src/blocks/sidebar-07/page.tsx · src/blocks/sidebar-07/app-sidebar.tsx · src/blocks/sidebar-07/nav-main.tsx · src/blocks/sidebar-07/nav-projects.tsx · src/blocks/sidebar-07/nav-user.tsx · src/blocks/sidebar-07/team-switcher.tsx",
+      "when": "copy-out starting shell: collapsible sidebar app frame (breadcrumb header, icon rail) — adopt when an app outgrows the starter's hand-rolled shell",
+      "source": "shadcn/ui new-york-v4 block (MIT — NOTICE.md); copy-out example tissue, not a runtime import"
     },
     {
       "name": "Button",
