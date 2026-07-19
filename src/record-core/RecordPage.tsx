@@ -296,6 +296,7 @@ export function RecordPage({
   files,
   onLogActivity,
   onEnrich,
+  readOnly,
 }: {
   config: ObjectConfig;
   row: RecordRow;
@@ -319,6 +320,8 @@ export function RecordPage({
   onLogActivity?: (kind: "call" | "email" | "meeting", text: string) => void;
   /* AI-enrichment: fields carrying `primitive` show a Run affordance → this fires */
   onEnrich?: (fieldKey: string) => void;
+  /* permission-driven: fields render as text; composers/upload/enrich hidden */
+  readOnly?: boolean;
 }) {
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
   const stageField = config.fields.find((f) => f.key === config.stageField);
@@ -352,7 +355,9 @@ export function RecordPage({
                 <div className="nxFieldRow" key={f.key}>
                   <span className="nxFieldLabel">{f.label}</span>
                   <span className="nxFieldValue">
-                    {f.type === "user" ? (
+                    {readOnly ? (
+                      <span data-testid={`field-${f.key}`}>{formatCell(row[f.key], f.type) || "—"}</span>
+                    ) : f.type === "user" ? (
                       <RelationPicker
                         fieldKey={f.key}
                         label={f.label}
@@ -415,7 +420,7 @@ export function RecordPage({
                         }}
                       />
                     )}
-                    {f.primitive && onEnrich && (
+                    {f.primitive && onEnrich && !readOnly && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -470,7 +475,7 @@ export function RecordPage({
             ]}
           >
             <TabPanel value="timeline">
-              {onLogActivity && (
+              {onLogActivity && !readOnly && (
                 <div style={{ display: "flex", gap: 8, margin: "14px 0", alignItems: "center", flexWrap: "wrap" }} data-testid="activity-composer">
                   <div className="nxSeg">
                     {ACTIVITY_KINDS.map((k) => (
@@ -532,6 +537,7 @@ export function RecordPage({
             </TabPanel>
             {files && (
               <TabPanel value="files">
+                {!readOnly && (
                 <div style={{ display: "flex", margin: "14px 0" }}>
                   <input
                     ref={fileInput}
@@ -551,6 +557,7 @@ export function RecordPage({
                     Upload file
                   </Button>
                 </div>
+                )}
                 <div className="nxFieldList" data-testid="files-list">
                   {files.list.length === 0 && (
                     <div style={{ padding: 16, color: "var(--nx-fg-faint)" }}>No files yet.</div>
@@ -574,6 +581,7 @@ export function RecordPage({
               </TabPanel>
             )}
             <TabPanel value="notes">
+              {!readOnly && (
               <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
                 <input
                   className="nxInput"
@@ -601,6 +609,7 @@ export function RecordPage({
                   Add
                 </Button>
               </div>
+              )}
               <div className="nxTimeline" data-testid="notes-list">
                 {timeline.filter((t) => t.kind === "note").map((ev) => (
                   <div className="nxTlItem" key={ev.id}>

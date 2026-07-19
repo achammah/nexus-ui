@@ -81,6 +81,7 @@ export function KanbanBoard({
   onOpen,
   groupField,
   groupOptions,
+  readOnly,
 }: {
   config: ObjectConfig;
   rows: RecordRow[];
@@ -90,6 +91,8 @@ export function KanbanBoard({
   groupField?: string;
   /* column set override (required for `user` fields — options live in app config) */
   groupOptions?: string[];
+  /* permission-driven: cards stay clickable, dragging is off */
+  readOnly?: boolean;
 }) {
   const groupKey = groupField ?? config.stageField;
   const stageField = config.fields.find((f) => f.key === groupKey);
@@ -100,6 +103,7 @@ export function KanbanBoard({
 
   const onDragEnd = (e: DragEndEvent) => {
     setActiveId(null);
+    if (readOnly) return;
     const over = e.over?.id;
     if (typeof over === "string" && over.startsWith("col:") && stageField) {
       const stage = over.slice(4);

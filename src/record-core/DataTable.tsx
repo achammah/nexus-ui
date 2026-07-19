@@ -94,14 +94,20 @@ function CellEditor({
   row,
   field,
   onPatch,
+  readOnly,
 }: {
   row: RecordRow;
   field: FieldDef;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
+  readOnly?: boolean;
 }) {
   const initial = String(row[field.key] ?? "");
   const [v, setV] = React.useState(initial);
   React.useEffect(() => setV(String(row[field.key] ?? "")), [row, field.key]);
+  const [editing, setEditing] = React.useState(false);
+  if (readOnly) {
+    return <span data-testid={`cell-${row.id}-${field.key}`}>{formatCell(row[field.key], field.type) || "—"}</span>;
+  }
   const commit = () => {
     if (v !== initial) onPatch(row.id, { [field.key]: field.type === "number" || field.type === "currency" ? Number(v) : v });
   };
@@ -122,7 +128,6 @@ function CellEditor({
       </select>
     );
   }
-  const [editing, setEditing] = React.useState(false);
   // dates read formatted in tables; editing happens on the record page (calendar)
   if (field.type === "date") {
     return <span data-testid={`cell-${row.id}-${field.key}`}>{formatCell(row[field.key], "date") || "—"}</span>;
@@ -167,6 +172,7 @@ export function DataTable({
   onSelectionChange,
   sort,
   onSortChange,
+  readOnly,
 }: {
   config: ObjectConfig;
   rows: RecordRow[];
@@ -178,6 +184,8 @@ export function DataTable({
   /* controlled sorting (optional) — consumers persist it in their saved view */
   sort?: SortingState;
   onSortChange?: (s: SortingState) => void;
+  /* permission-driven: cells render as formatted text, no editors */
+  readOnly?: boolean;
 }) {
   const [internalSorting, setInternalSorting] = React.useState<SortingState>([]);
   const sorting = sort ?? internalSorting;
@@ -233,14 +241,14 @@ export function DataTable({
                 {String(row.original[f.key] ?? "—")}
               </a>
             ) : (
-              <CellEditor row={row.original} field={f} onPatch={onPatch} />
+              <CellEditor row={row.original} field={f} onPatch={onPatch} readOnly={readOnly} />
             ),
         }),
       );
     }
     return defs;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, hiddenFields, selection, onSelectionChange, onPatch]);
+  }, [config, hiddenFields, selection, onSelectionChange, onPatch, readOnly]);
 
   const table = useReactTable({
     data: rows,
