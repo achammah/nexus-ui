@@ -1,0 +1,19 @@
+name: catalog-freshness
+# The generated catalog may never rot: regenerate and fail on any diff
+# (a vendored/wrapper change without `node scripts/gen-docs.mjs` is a defect).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/gen-docs.mjs
+      - run: git diff --exit-code docs/ || (echo "::error::catalog is stale — run node scripts/gen-docs.mjs and commit" && exit 1)

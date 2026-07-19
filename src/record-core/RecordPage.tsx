@@ -1,9 +1,58 @@
 import * as React from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CalendarIcon } from "lucide-react";
 import { Button } from "../primitives/Button";
 import { Badge, Micro, Tabs, TabPanel } from "../primitives/fields";
+import { Calendar } from "../components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { formatCell } from "./DataTable";
 import type { ObjectConfig, RecordRow, TimelineEvent } from "./types";
 import "./record-core.css";
+
+/* Date field editor — calendar popover writing yyyy-mm-dd (the wire format). */
+function DateField({
+  fieldKey,
+  label,
+  value,
+  onPick,
+}: {
+  fieldKey: string;
+  label: string;
+  value: unknown;
+  onPick: (iso: string) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const selected = value ? new Date(String(value)) : undefined;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="nxCellEdit"
+          style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }}
+          aria-label={label}
+          data-testid={`field-${fieldKey}`}
+        >
+          <CalendarIcon size={13} style={{ color: "var(--nx-fg-faint)", flex: "none" }} />
+          <span data-testid={`field-${fieldKey}-value`}>{value ? formatCell(value, "date") : "Pick a date"}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" style={{ width: "auto", padding: 0 }}>
+        <Calendar
+          mode="single"
+          selected={selected && !Number.isNaN(selected.getTime()) ? selected : undefined}
+          defaultMonth={selected && !Number.isNaN(selected.getTime()) ? selected : undefined}
+          onSelect={(d) => {
+            if (d) {
+              const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+              onPick(iso);
+              setOpen(false);
+            }
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /* RecordPage — header (name + stage) · left fields panel (inline edit) ·
    right tabs (Timeline / Notes). The anatomy is the record-system convention:
@@ -53,7 +102,14 @@ export function RecordPage({
                 <div className="nxFieldRow" key={f.key}>
                   <span className="nxFieldLabel">{f.label}</span>
                   <span className="nxFieldValue">
-                    {f.type === "select" ? (
+                    {f.type === "date" ? (
+                      <DateField
+                        fieldKey={f.key}
+                        label={f.label}
+                        value={row[f.key]}
+                        onPick={(iso) => onPatch(row.id, { [f.key]: iso })}
+                      />
+                    ) : f.type === "select" ? (
                       <select
                         className="nxCellEdit"
                         value={String(row[f.key] ?? "")}

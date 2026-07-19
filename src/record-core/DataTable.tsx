@@ -17,8 +17,15 @@ import "./record-core.css";
    inline-editable text/select cells (edit commits on blur/Enter via onPatch). */
 
 const num = new Intl.NumberFormat("en-US");
-export const formatCell = (v: unknown, type: string) =>
-  (type === "number" || type === "currency") && typeof v === "number" ? num.format(v) : String(v ?? "");
+const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+export const formatCell = (v: unknown, type: string) => {
+  if ((type === "number" || type === "currency") && typeof v === "number") return num.format(v);
+  if (type === "date" && v) {
+    const d = new Date(String(v));
+    return Number.isNaN(d.getTime()) ? String(v) : dateFmt.format(d);
+  }
+  return String(v ?? "");
+};
 
 function RelationCell({ row, field }: { row: RecordRow; field: FieldDef }) {
   const value = String(row[field.key] ?? "");
@@ -72,6 +79,10 @@ function CellEditor({
     );
   }
   const [editing, setEditing] = React.useState(false);
+  // dates read formatted in tables; editing happens on the record page (calendar)
+  if (field.type === "date") {
+    return <span data-testid={`cell-${row.id}-${field.key}`}>{formatCell(row[field.key], "date") || "—"}</span>;
+  }
   if (!editing && (field.type === "number" || field.type === "currency")) {
     return (
       <span
@@ -110,6 +121,8 @@ export function DataTable({
   hiddenFields = [],
   selection,
   onSelectionChange,
+  sort,
+  onSortChange,
 }: {
   config: ObjectConfig;
   rows: RecordRow[];
@@ -118,8 +131,16 @@ export function DataTable({
   hiddenFields?: string[];
   selection?: Record<string, boolean>;
   onSelectionChange?: (sel: Record<string, boolean>) => void;
+  /* controlled sorting (optional) — consumers persist it in their saved view */
+  sort?: SortingState;
+  onSortChange?: (s: SortingState) => void;
 }) {
-  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [internalSorting, setInternalSorting] = React.useState<SortingState>([]);
+  const sorting = sort ?? internalSorting;
+  const setSorting: React.Dispatch<React.SetStateAction<SortingState>> = (updater) => {
+    const next = typeof updater === "function" ? updater(sorting) : updater;
+    onSortChange ? onSortChange(next) : setInternalSorting(next);
+  };
   const col = createColumnHelper<RecordRow>();
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
 
