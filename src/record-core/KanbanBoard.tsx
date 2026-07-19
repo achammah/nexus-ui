@@ -47,25 +47,47 @@ function Card({ row, config, onOpen, groupKey }: { row: RecordRow; config: Objec
   );
 }
 
+const AGG_FNS = {
+  sum: (xs: number[]) => xs.reduce((a, b) => a + b, 0),
+  avg: (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0),
+  min: (xs: number[]) => (xs.length ? Math.min(...xs) : 0),
+  max: (xs: number[]) => (xs.length ? Math.max(...xs) : 0),
+};
+
 function Column({
   stage,
   rows,
   config,
   onOpen,
   groupKey,
+  aggregate,
 }: {
   stage: string;
   rows: RecordRow[];
   config: ObjectConfig;
   onOpen: (id: string) => void;
   groupKey?: string;
+  aggregate?: { fn: keyof typeof AGG_FNS; field: string };
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col:${stage}` });
+  const aggValue = aggregate
+    ? AGG_FNS[aggregate.fn](rows.map((r) => (typeof r[aggregate.field] === "number" ? (r[aggregate.field] as number) : 0)))
+    : null;
   return (
     <div ref={setNodeRef} className={`nxKCol ${isOver ? "nxKCol--over" : ""}`} data-testid={`col-${stage}`}>
       <div className="nxKColHead">
         <OptionChip field={config.fields.find((f) => f.key === (groupKey ?? config.stageField))} value={stage} />
         <Badge>{rows.length}</Badge>
+        {aggValue !== null && (
+          <span
+            className="nxCount"
+            data-testid={`agg-${stage}`}
+            data-value={Math.round(aggValue)}
+            style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}
+          >
+            {aggregate!.fn === "avg" ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(aggValue) : new Intl.NumberFormat("en-US").format(aggValue)}
+          </span>
+        )}
       </div>
       <div className="nxKCards">
         {rows.map((r) => (
@@ -84,6 +106,7 @@ export function KanbanBoard({
   groupField,
   groupOptions,
   readOnly,
+  aggregate,
 }: {
   config: ObjectConfig;
   rows: RecordRow[];
@@ -95,6 +118,8 @@ export function KanbanBoard({
   groupOptions?: string[];
   /* permission-driven: cards stay clickable, dragging is off */
   readOnly?: boolean;
+  /* per-column rollup shown in every column head: fn over a numeric field */
+  aggregate?: { fn: "sum" | "avg" | "min" | "max"; field: string };
 }) {
   const groupKey = groupField ?? config.stageField;
   const stageField = config.fields.find((f) => f.key === groupKey);
@@ -120,7 +145,7 @@ export function KanbanBoard({
     <DndContext sensors={sensors} onDragStart={(e) => setActiveId(String(e.active.id))} onDragEnd={onDragEnd}>
       <div className="nxKanban" data-testid={`kanban-${config.key}`}>
         {stages.map((s) => (
-          <Column key={s} stage={s} config={config} onOpen={onOpen} groupKey={groupKey} rows={rows.filter((r) => r[stageField.key] === s)} />
+          <Column key={s} stage={s} config={config} onOpen={onOpen} groupKey={groupKey} aggregate={aggregate} rows={rows.filter((r) => r[stageField.key] === s)} />
         ))}
       </div>
       <DragOverlay>{active && <div className="nxKCard"><div className="nxKTitle">{String(active[(config.fields.find((f) => f.primary) ?? config.fields[0]).key] ?? "")}</div></div>}</DragOverlay>

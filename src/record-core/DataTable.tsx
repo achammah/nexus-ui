@@ -297,6 +297,9 @@ export function DataTable({
     columns,
     state: { sorting },
     onSortingChange: setSorting,
+    // shift-click a second header for tie-breaker (multi-level) sorting
+    enableMultiSort: true,
+    isMultiSortEvent: (e) => (e as MouseEvent).shiftKey,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
