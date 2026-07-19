@@ -21,7 +21,7 @@
       "name": "alert-dialog",
       "kind": "vendored",
       "import": "src/components/ui/alert-dialog.tsx",
-      "when": "REVIEW SURFACE before an irreversible action (delete/send) — names the target, confirm/cancel (ux-canon: bulk mutate needs this)",
+      "when": "REVIEW SURFACE before an irreversible action (delete/send) — names the target, confirm/cancel; required before any bulk mutation",
       "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
     },
     {
@@ -210,7 +210,7 @@
       "name": "progress",
       "kind": "vendored",
       "import": "src/components/ui/progress.tsx",
-      "when": "determinate progress bar; pair with async-run surfaces (dev-loop async rules)",
+      "when": "determinate progress bar; pair with async-run surfaces",
       "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
     },
     {
@@ -231,7 +231,7 @@
       "name": "scroll-area",
       "kind": "vendored",
       "import": "src/components/ui/scroll-area.tsx",
-      "when": "styled scroll container for bounded internal scroll (ux-canon card rule)",
+      "when": "styled scroll container for bounded internal scroll",
       "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
     },
     {
@@ -406,7 +406,7 @@
       "name": "--nx-* custom properties",
       "kind": "tokens",
       "import": "src/tokens/tokens.css",
-      "when": "the blank Nexus canvas: palette/type/geometry/motion; light+dark first-class; the P0.5 design lock edits THIS",
+      "when": "the blank canvas: palette/type/geometry/motion; light+dark first-class; an app's design lock edits THIS",
       "source": "ours"
     },
     {

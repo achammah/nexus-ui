@@ -101,3 +101,13 @@
 /* Field value row hosts an editor + optional enrich affordance side by side */
 .nxFieldValue { display: flex; align-items: center; gap: 4px; }
 .nxFieldValue > :first-child { flex: 1; min-width: 0; }
+
+/* Chart view (bars per group option) */
+.nxChartCard { padding: 18px 20px 14px; }
+.nxChartTitle { font: var(--nx-text-meta); font-weight: 600; color: var(--nx-fg-muted); margin-bottom: 16px; }
+.nxChart { display: flex; align-items: flex-end; gap: 18px; overflow-x: auto; padding-bottom: 4px; }
+.nxChartCol { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 56px; flex: 1; }
+.nxChartValue { font: var(--nx-text-meta); font-weight: 700; font-variant-numeric: tabular-nums; }
+.nxBar { width: 100%; max-width: 72px; background: var(--nx-accent); border-radius: 6px 6px 2px 2px; opacity: 0.85; transition: height 200ms ease; }
+.nxChartCol:hover .nxBar { opacity: 1; }
+.nxChartLabel { font: var(--nx-text-meta); color: var(--nx-fg-muted); max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

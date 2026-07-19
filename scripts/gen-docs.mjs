@@ -17,7 +17,7 @@ mkdirSync(DOCS, { recursive: true });
 const WHEN = {
   accordion: "collapsible Q&A / grouped detail sections; one or many open",
   alert: "inline callout (info/destructive) inside a page — not a toast, not a dialog",
-  "alert-dialog": "REVIEW SURFACE before an irreversible action (delete/send) — names the target, confirm/cancel (ux-canon: bulk mutate needs this)",
+  "alert-dialog": "REVIEW SURFACE before an irreversible action (delete/send) — names the target, confirm/cancel; required before any bulk mutation",
   "aspect-ratio": "media/embed boxes that must keep a ratio while resizing",
   avatar: "person/org identity dot with image + initials fallback",
   badge: "status chip; prefer the primitives Badge wrapper for Nexus tones (ok/warn/danger/accent)",
@@ -43,10 +43,10 @@ const WHEN = {
   "navigation-menu": "marketing/site-style top navigation with panels",
   pagination: "page-by-page navigation for long lists (record-core tables usually filter instead)",
   popover: "small anchored panel (filter builder, emoji picker); not a menu, not a dialog",
-  progress: "determinate progress bar; pair with async-run surfaces (dev-loop async rules)",
+  progress: "determinate progress bar; pair with async-run surfaces",
   "radio-group": "single choice among few visible options",
   resizable: "split panes with draggable handles (react-resizable-panels)",
-  "scroll-area": "styled scroll container for bounded internal scroll (ux-canon card rule)",
+  "scroll-area": "styled scroll container for bounded internal scroll",
   select: "single choice among many options (composed listbox); raw <select class=nxInput> stays fine for tiny enum cells",
   separator: "hairline divider",
   sheet: "side panel over content (record peek, filters) — the ZOOM step without leaving the list",
@@ -78,7 +78,7 @@ const OURS = [
   ["record-core/KanbanBoard.tsx", "record-core", "KanbanBoard", "config-driven board over the object's stageField; drag or stage-select moves cards"],
   ["record-core/RecordPage.tsx", "record-core", "RecordPage", "record anatomy: header + fields panel (inline edit) + Timeline/Notes tabs"],
   ["record-core/types.ts", "record-core", "ObjectConfig · FieldDef · RecordRow · ViewDef · TimelineEvent", "the config-driven object model — the schema every record surface renders from"],
-  ["tokens/tokens.css", "tokens", "--nx-* custom properties", "the blank Nexus canvas: palette/type/geometry/motion; light+dark first-class; the P0.5 design lock edits THIS"],
+  ["tokens/tokens.css", "tokens", "--nx-* custom properties", "the blank canvas: palette/type/geometry/motion; light+dark first-class; an app's design lock edits THIS"],
   ["styles/shadcn.css", "tokens", "shadcn semantic bridge", "maps shadcn variables onto --nx-* + Tailwind v4 @theme; import AFTER tokens.css"],
   ["lib/utils.ts", "lib", "cn()", "class merge (clsx + tailwind-merge) — the shadcn contract"],
 ];
@@ -135,7 +135,7 @@ ${rows}
 ## Rules of the road
 - **Never edit \`src/components/ui/*\`** — vendored verbatim; re-vendoring overwrites. House opinions live in \`src/primitives/\` wrappers.
 - Styling changes go through **tokens** (\`src/tokens/tokens.css\`) — the shadcn bridge derives from them; a design lock restyles the whole kit by editing tokens only.
-- A control missing here is added to THIS library (extend \`scripts/vendor-shadcn.mjs\` COMPONENTS or write a wrapper), never hand-built in one app (ux-canon component-inventory rule).
+- A control missing here is added to THIS library (extend \`scripts/vendor-shadcn.mjs\` COMPONENTS or write a wrapper), never hand-built in one app.
 `,
 );
 console.log(`catalog: ${items.length} entries → docs/INDEX.md + docs/catalog.json${missing.length ? " (WITH GAPS)" : ""}`);
