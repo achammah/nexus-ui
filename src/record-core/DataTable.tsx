@@ -11,6 +11,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Checkbox } from "../primitives/fields";
 import type { FieldDef, ObjectConfig, RecordRow } from "./types";
+import { optionValues } from "./types";
+import { OptionChip, activeFields } from "./options";
 import "./record-core.css";
 
 /* DataTable — the record-core grid. Config-driven columns, sortable, selectable,
@@ -18,13 +20,22 @@ import "./record-core.css";
 
 const num = new Intl.NumberFormat("en-US");
 const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const dateTimeFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 export const formatCell = (v: unknown, type: string) => {
   if ((type === "number" || type === "currency") && typeof v === "number") return num.format(v);
   if (type === "date" && v) {
     const d = new Date(String(v));
     return Number.isNaN(d.getTime()) ? String(v) : dateFmt.format(d);
   }
-  if (type === "multiselect") return Array.isArray(v) ? v.join(" · ") : String(v ?? "");
+  if (type === "dateTime" && v) {
+    const d = new Date(String(v));
+    return Number.isNaN(d.getTime()) ? String(v) : dateTimeFmt.format(d);
+  }
+  if (type === "boolean") return v === true ? "Yes" : v === false ? "No" : "—";
+  if (type === "rating") return typeof v === "number" ? "★".repeat(v) + "☆".repeat(Math.max(0, 5 - v)) : "—";
+  if (type === "array" || type === "multiselect") return Array.isArray(v) ? v.join(" · ") : String(v ?? "");
+  if (type === "json") return v == null ? "—" : JSON.stringify(v).slice(0, 60);
+  if (type === "longText") { const s = String(v ?? ""); return s.length > 80 ? s.slice(0, 77) + "…" : s; }
   return String(v ?? "");
 };
 
@@ -49,24 +60,33 @@ function UserCell({ value }: { value: unknown }) {
   );
 }
 
-function TagsCell({ value }: { value: unknown }) {
+function TagsCell({ value, field }: { value: unknown; field?: FieldDef }) {
   const tags = Array.isArray(value) ? value.map(String) : [];
   if (!tags.length) return <span>—</span>;
   return (
     <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
       {tags.slice(0, 2).map((t) => (
-        <span
-          key={t}
-          style={{
-            font: "var(--nx-text-meta)", fontWeight: 600, borderRadius: 999,
-            padding: "1px 8px", background: "var(--nx-bg-sunken)",
-            border: "1px solid var(--nx-border)", color: "var(--nx-fg-muted)",
-          }}
-        >
-          {t}
-        </span>
+        <OptionChip key={t} field={field} value={t} />
       ))}
       {tags.length > 2 && <span className="nxCount">+{tags.length - 2}</span>}
+    </span>
+  );
+}
+
+function RatingCell({ row, field, onPatch, readOnly }: { row: RecordRow; field: FieldDef; onPatch: (id: string, p: Record<string, unknown>) => void; readOnly?: boolean }) {
+  const scale = field.scale ?? 5;
+  const val = typeof row[field.key] === "number" ? (row[field.key] as number) : 0;
+  return (
+    <span data-testid={`cell-${row.id}-${field.key}`} style={{ letterSpacing: 2, cursor: readOnly ? "default" : "pointer", color: "var(--nx-warn)" }}>
+      {Array.from({ length: scale }, (_, i) => (
+        <span
+          key={i}
+          data-testid={`rate-${row.id}-${field.key}-${i + 1}`}
+          onClick={() => !readOnly && onPatch(row.id, { [field.key]: i + 1 === val ? 0 : i + 1 })}
+        >
+          {i < val ? "★" : "☆"}
+        </span>
+      ))}
     </span>
   );
 }
@@ -112,9 +132,11 @@ function CellEditor({
     if (v !== initial) onPatch(row.id, { [field.key]: field.type === "number" || field.type === "currency" ? Number(v) : v });
   };
   if (field.type === "select") {
-    return (
+    const colored = (field.options ?? []).some((o) => typeof o !== "string" && o.color);
+    const picker = (
       <select
         className="nxCellEdit"
+        style={colored ? { position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%" } : undefined}
         value={v}
         onChange={(e) => {
           setV(e.target.value);
@@ -122,10 +144,19 @@ function CellEditor({
         }}
         aria-label={field.label}
       >
-        {(field.options ?? []).map((o) => (
+        {optionValues(field.options).map((o) => (
           <option key={o} value={o}>{o}</option>
         ))}
       </select>
+    );
+    if (!colored) return picker;
+    // colored options render as the chip; the invisible native select on top keeps
+    // one-click editing (chip look, dropdown behavior)
+    return (
+      <span style={{ position: "relative", display: "inline-flex" }}>
+        <OptionChip field={field} value={v} testid={`cell-${row.id}-${field.key}`} />
+        {picker}
+      </span>
     );
   }
   // dates read formatted in tables; editing happens on the record page (calendar)
@@ -214,7 +245,7 @@ export function DataTable({
         }),
       );
     }
-    for (const f of config.fields) {
+    for (const f of activeFields(config.fields)) {
       if (hiddenFields.includes(f.key)) continue;
       defs.push(
         col.accessor((r) => r[f.key], {
@@ -227,7 +258,18 @@ export function DataTable({
             ) : f.type === "user" ? (
               <UserCell value={row.original[f.key]} />
             ) : f.type === "multiselect" ? (
-              <TagsCell value={row.original[f.key]} />
+              <TagsCell value={row.original[f.key]} field={f} />
+            ) : f.type === "boolean" ? (
+              <Checkbox
+                aria-label={f.label}
+                checked={row.original[f.key] === true}
+                data-testid={`cell-${row.original.id}-${f.key}`}
+                onCheckedChange={readOnly ? () => {} : (v) => onPatch(row.original.id, { [f.key]: v })}
+              />
+            ) : f.type === "rating" ? (
+              <RatingCell row={row.original} field={f} onPatch={onPatch} readOnly={readOnly} />
+            ) : ["dateTime", "json", "longText", "array"].includes(f.type) ? (
+              <span data-testid={`cell-${row.original.id}-${f.key}`}>{formatCell(row.original[f.key], f.type) || "—"}</span>
             ) : f.primary ? (
               <a
                 className="nxRowLink"

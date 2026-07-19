@@ -17,8 +17,14 @@ interface ObjectConfig {
 interface FieldDef {
   key: string; label: string;
   type: "text" | "number" | "select" | "date" | "currency" | "email" | "url"
-      | "relation" | "user" | "multiselect";
-  options?: string[];     // select | multiselect: the stages/choices
+      | "relation" | "user" | "multiselect"
+      | "boolean" | "longText" | "dateTime" | "rating" | "array" | "json";
+  options?: SelectOption[]; // select | multiselect — a string, or {value, label?, color?}
+                            // (colors: gray/blue/green/yellow/orange/red/purple/pink/teal —
+                            // chips render the color on every surface via OptionChip)
+  unique?: boolean;         // 409 on duplicate values (server-enforced)
+  isActive?: boolean;       // false → hidden from every surface + write-protected, data preserved
+  scale?: number;           // rating scale (default 5)
   relation?: string;      // relation: target object key
   width?: number;         // table column px
   primary?: boolean;      // the display-name field (renders as the open-record link)
@@ -28,7 +34,7 @@ interface FieldDef {
 }
 ```
 
-Field-type behaviors (all built-in): `select` renders as text-that-edits in tables (no per-row chrome) and a real select on record pages; `number`/`currency` format with grouping + right-align (tabular numerals); `relation` renders as an accent LINK that navigates to the target object's list, pre-filtered to the value (the consumer passes the pending filter via `sessionStorage["nx-pending-q"]` — see the starter's ObjectView); `user` renders an avatar-initials chip in tables and a directory combobox (over the consumer's `users` list) on record pages; `multiselect` renders tag chips (+N overflow) in tables and a checkbox popover on record pages, filtering contains-any.
+Field-type behaviors (all built-in): `select` renders as text-that-edits in tables (no per-row chrome) and a real select on record pages; `number`/`currency` format with grouping + right-align (tabular numerals); `relation` renders as an accent LINK that navigates to the target object's list, pre-filtered to the value (the consumer passes the pending filter via `sessionStorage["nx-pending-q"]` — see the starter's ObjectView); `user` renders an avatar-initials chip in tables and a directory combobox (over the consumer's `users` list) on record pages; `multiselect` renders tag chips (+N overflow) in tables and a checkbox popover on record pages, filtering contains-any; `boolean` is an inline checkbox everywhere; `rating` renders clickable stars (click the current value to clear); `dateTime` edits via a datetime-local input on the record page; `array` is free-form tags (no fixed vocabulary — type + Enter adds); `longText` truncates in tables and edits as a textarea; `json` is a validated raw editor; a select whose options carry colors renders as a COLORED CHIP in tables with an invisible native select on top (chip look, dropdown behavior).
 
 ## Components
 

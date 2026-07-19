@@ -130,3 +130,22 @@ body {
   /* interactive accent ramp */
   --nx-accent-hover: color-mix(in oklab, var(--nx-accent) 88%, #000);
 }
+
+/* ---- option colors (select/multiselect chips, kanban badges) ---- */
+:root {
+  --nx-opt-gray: #6b7280; --nx-opt-blue: #2563eb; --nx-opt-green: #16a34a;
+  --nx-opt-yellow: #ca8a04; --nx-opt-orange: #ea580c; --nx-opt-red: #dc2626;
+  --nx-opt-purple: #9333ea; --nx-opt-pink: #db2777; --nx-opt-teal: #0d9488;
+}
+:root[data-theme="dark"] {
+  --nx-opt-gray: #9ca3af; --nx-opt-blue: #60a5fa; --nx-opt-green: #4ade80;
+  --nx-opt-yellow: #facc15; --nx-opt-orange: #fb923c; --nx-opt-red: #f87171;
+  --nx-opt-purple: #c084fc; --nx-opt-pink: #f472b6; --nx-opt-teal: #2dd4bf;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --nx-opt-gray: #9ca3af; --nx-opt-blue: #60a5fa; --nx-opt-green: #4ade80;
+    --nx-opt-yellow: #facc15; --nx-opt-orange: #fb923c; --nx-opt-red: #f87171;
+    --nx-opt-purple: #c084fc; --nx-opt-pink: #f472b6; --nx-opt-teal: #2dd4bf;
+  }
+}

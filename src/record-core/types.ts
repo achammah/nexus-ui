@@ -4,16 +4,36 @@
 
 export type FieldType =
   | "text" | "number" | "select" | "date" | "currency" | "email" | "url"
-  | "relation" | "user" | "multiselect";
+  | "relation" | "user" | "multiselect"
+  | "boolean" | "longText" | "dateTime" | "rating" | "array" | "json";
+
+/* Select/multiselect options: plain strings stay valid; the object form adds a
+   COLOR that renders consistently on every chip/badge/kanban surface. */
+export type SelectOption = string | { value: string; label?: string; color?: OptionColor };
+export type OptionColor =
+  | "gray" | "blue" | "green" | "yellow" | "orange" | "red" | "purple" | "pink" | "teal";
+
+export const normalizeOption = (o: SelectOption): { value: string; label: string; color?: OptionColor } =>
+  typeof o === "string" ? { value: o, label: o } : { value: o.value, label: o.label ?? o.value, color: o.color };
+
+export const optionValues = (options?: SelectOption[]): string[] =>
+  (options ?? []).map((o) => normalizeOption(o).value);
 
 export interface FieldDef {
   key: string;
   label: string;
   type: FieldType;
-  options?: string[];        // select | multiselect
+  options?: SelectOption[];  // select | multiselect (string or {value,label,color})
   relation?: string;         // relation → object key
   width?: number;            // table col width px
   primary?: boolean;         // the record's display name field
+  /* value must be unique across the object's records (409 on conflict) */
+  unique?: boolean;
+  /* false → hidden from every surface and write-protected, data preserved
+     (deactivate-and-restore is the lifecycle lever, not deletion) */
+  isActive?: boolean;
+  /* rating scale (default 5) */
+  scale?: number;
   /* AI-enrichment seam: the platform primitive that computes this field on demand
      (the UI shows a per-row Run affordance; the consumer wires the call). */
   primitive?: { kind: "task" | "workflow"; id?: string; label?: string };

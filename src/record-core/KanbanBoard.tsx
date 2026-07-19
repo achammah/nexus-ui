@@ -11,6 +11,8 @@ import {
 } from "@dnd-kit/core";
 import { Badge } from "../primitives/fields";
 import type { ObjectConfig, RecordRow } from "./types";
+import { optionValues } from "./types";
+import { OptionChip } from "./options";
 import "./record-core.css";
 
 /* KanbanBoard — columns from the config's stageField options; drag commits a PATCH
@@ -62,7 +64,7 @@ function Column({
   return (
     <div ref={setNodeRef} className={`nxKCol ${isOver ? "nxKCol--over" : ""}`} data-testid={`col-${stage}`}>
       <div className="nxKColHead">
-        <span style={{ fontWeight: 600 }}>{stage}</span>
+        <OptionChip field={config.fields.find((f) => f.key === (groupKey ?? config.stageField))} value={stage} />
         <Badge>{rows.length}</Badge>
       </div>
       <div className="nxKCards">
@@ -96,7 +98,7 @@ export function KanbanBoard({
 }) {
   const groupKey = groupField ?? config.stageField;
   const stageField = config.fields.find((f) => f.key === groupKey);
-  const stages = groupOptions ?? stageField?.options ?? [];
+  const stages = groupOptions ?? optionValues(stageField?.options);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const active = rows.find((r) => r.id === activeId) ?? null;

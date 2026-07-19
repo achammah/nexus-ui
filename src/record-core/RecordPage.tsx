@@ -17,6 +17,8 @@ import {
 } from "../components/ui/command";
 import { formatCell } from "./DataTable";
 import type { FileMeta, ObjectConfig, RecordRow, TimelineEvent } from "./types";
+import { normalizeOption, optionValues } from "./types";
+import { OptionChip, activeFields } from "./options";
 import "./record-core.css";
 
 /* Timeline icon per event kind (activity subkind wins). */
@@ -110,10 +112,11 @@ function MultiSelectField({
   fieldKey: string;
   label: string;
   value: unknown;
-  options: string[];
+  options: import("./types").SelectOption[];
   onChange: (vals: string[]) => void;
 }) {
   const vals = Array.isArray(value) ? value.map(String) : [];
+  const meta = new Map(options.map((o) => { const n = normalizeOption(o); return [n.value, n] as const; }));
   const [open, setOpen] = React.useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -127,15 +130,8 @@ function MultiSelectField({
         >
           {vals.length === 0 && <span style={{ color: "var(--nx-fg-faint)" }}>Pick…</span>}
           {vals.map((t) => (
-            <span
-              key={t}
-              data-testid={`field-${fieldKey}-chip-${t.replaceAll(/\W+/g, "-").toLowerCase()}`}
-              style={{
-                font: "var(--nx-text-meta)", fontWeight: 600, borderRadius: 999,
-                padding: "1px 8px", background: "var(--nx-accent-soft)", color: "var(--nx-accent)",
-              }}
-            >
-              {t}
+            <span key={t} data-testid={`field-${fieldKey}-chip-${t.replaceAll(/\W+/g, "-").toLowerCase()}`}>
+              <OptionChip field={{ key: fieldKey, label, type: "multiselect", options } as never} value={t} />
             </span>
           ))}
           <ChevronsUpDown size={12} style={{ color: "var(--nx-fg-faint)", marginLeft: "auto", flex: "none" }} />
@@ -145,17 +141,18 @@ function MultiSelectField({
         <Command>
           <CommandList>
             <CommandGroup>
-              {options.map((o) => {
-                const on = vals.includes(o);
+              {options.map((raw) => {
+                const o = normalizeOption(raw);
+                const on = vals.includes(o.value);
                 return (
                   <CommandItem
-                    key={o}
-                    value={o}
-                    data-testid={`field-${fieldKey}-opt-${o.replaceAll(/\W+/g, "-").toLowerCase()}`}
-                    onSelect={() => onChange(on ? vals.filter((x) => x !== o) : [...vals, o])}
+                    key={o.value}
+                    value={o.value}
+                    data-testid={`field-${fieldKey}-opt-${o.value.replaceAll(/\W+/g, "-").toLowerCase()}`}
+                    onSelect={() => onChange(on ? vals.filter((x) => x !== o.value) : [...vals, o.value])}
                   >
                     <span style={{ width: 14, textAlign: "center" }}>{on ? "✓" : ""}</span>
-                    {o}
+                    {o.label}
                   </CommandItem>
                 );
               })}
@@ -164,6 +161,39 @@ function MultiSelectField({
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/* Array editor — free-form tags: type + Enter adds, × removes (no fixed vocabulary). */
+function ArrayField({ fieldKey, label, value, onChange }: { fieldKey: string; label: string; value: unknown; onChange: (vals: string[]) => void }) {
+  const vals = Array.isArray(value) ? value.map(String) : [];
+  const [draft, setDraft] = React.useState("");
+  return (
+    <span style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }} data-testid={`field-${fieldKey}`}>
+      {vals.map((v) => (
+        <span key={v} className="nxOptChip" style={{ background: "var(--nx-bg-sunken)", border: "1px solid var(--nx-border)", color: "var(--nx-fg-muted)" }}>
+          {v}
+          <button type="button" aria-label={`Remove ${v}`} data-testid={`field-${fieldKey}-rm-${v.replaceAll(/\W+/g, "-").toLowerCase()}`}
+            style={{ border: 0, background: "none", cursor: "pointer", color: "inherit", padding: 0 }}
+            onClick={() => onChange(vals.filter((x) => x !== v))}>×</button>
+        </span>
+      ))}
+      <input
+        className="nxCellEdit"
+        style={{ minWidth: 80, flex: 1 }}
+        placeholder="Add…"
+        value={draft}
+        aria-label={label}
+        data-testid={`field-${fieldKey}-input`}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && draft.trim()) {
+            if (!vals.includes(draft.trim())) onChange([...vals, draft.trim()]);
+            setDraft("");
+          }
+        }}
+      />
+    </span>
   );
 }
 
@@ -343,9 +373,9 @@ export function RecordPage({
         <Button variant="ghost" size="sm" icon={<ArrowLeft size={14} />} onClick={onBack} aria-label="Back" />
         <h1 className="nxRecordName" data-testid="record-name">{String(row[primary.key] ?? "—")}</h1>
         {stageField && (
-          <Badge tone="accent" dot>
-            <span data-testid="record-stage">{String(row[stageField.key] ?? "—")}</span>
-          </Badge>
+          <span data-testid="record-stage">
+            <OptionChip field={stageField} value={row[stageField.key]} />
+          </span>
         )}
         <Micro>{config.labelOne}</Micro>
         {watch && (
@@ -369,7 +399,7 @@ export function RecordPage({
               <Micro>Details</Micro>
             </div>
             <div className="nxFieldList">
-              {config.fields.map((f) => (
+              {activeFields(config.fields).map((f) => (
                 <div className="nxFieldRow" key={f.key}>
                   <span className="nxFieldLabel">{f.label}</span>
                   <span className="nxFieldValue">
@@ -411,6 +441,66 @@ export function RecordPage({
                         value={row[f.key]}
                         onPick={(iso) => onPatch(row.id, { [f.key]: iso })}
                       />
+                    ) : f.type === "boolean" ? (
+                      <label style={{ display: "inline-flex", gap: 8, alignItems: "center", padding: "4px 0" }}>
+                        <input
+                          type="checkbox"
+                          checked={row[f.key] === true}
+                          data-testid={`field-${f.key}`}
+                          onChange={(e) => onPatch(row.id, { [f.key]: e.target.checked })}
+                        />
+                        <span style={{ font: "var(--nx-text-meta)", color: "var(--nx-fg-muted)" }}>{row[f.key] === true ? "Yes" : "No"}</span>
+                      </label>
+                    ) : f.type === "rating" ? (
+                      <span data-testid={`field-${f.key}`} style={{ letterSpacing: 2, cursor: "pointer", color: "var(--nx-warn)", fontSize: 15 }}>
+                        {Array.from({ length: f.scale ?? 5 }, (_, i) => (
+                          <span key={i} data-testid={`field-${f.key}-star-${i + 1}`}
+                            onClick={() => onPatch(row.id, { [f.key]: i + 1 === row[f.key] ? 0 : i + 1 })}>
+                            {i < (typeof row[f.key] === "number" ? (row[f.key] as number) : 0) ? "★" : "☆"}
+                          </span>
+                        ))}
+                      </span>
+                    ) : f.type === "dateTime" ? (
+                      <input
+                        className="nxCellEdit"
+                        type="datetime-local"
+                        key={`${f.key}:${String(row[f.key] ?? "")}`}
+                        defaultValue={row[f.key] ? new Date(String(row[f.key])).toISOString().slice(0, 16) : ""}
+                        aria-label={f.label}
+                        data-testid={`field-${f.key}`}
+                        onBlur={(e) => {
+                          const v = e.target.value ? new Date(e.target.value).toISOString() : "";
+                          if (v !== row[f.key]) onPatch(row.id, { [f.key]: v });
+                        }}
+                      />
+                    ) : f.type === "longText" ? (
+                      <textarea
+                        className="nxCellEdit"
+                        rows={3}
+                        key={`${f.key}:${String(row[f.key] ?? "")}`}
+                        defaultValue={String(row[f.key] ?? "")}
+                        aria-label={f.label}
+                        data-testid={`field-${f.key}`}
+                        style={{ resize: "vertical", font: "var(--nx-text-body)" }}
+                        onBlur={(e) => { if (e.target.value !== row[f.key]) onPatch(row.id, { [f.key]: e.target.value }); }}
+                      />
+                    ) : f.type === "array" ? (
+                      <ArrayField fieldKey={f.key} label={f.label} value={row[f.key]} onChange={(vals) => onPatch(row.id, { [f.key]: vals })} />
+                    ) : f.type === "json" ? (
+                      <textarea
+                        className="nxCellEdit"
+                        rows={3}
+                        key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
+                        defaultValue={row[f.key] == null ? "" : JSON.stringify(row[f.key], null, 2)}
+                        aria-label={f.label}
+                        data-testid={`field-${f.key}`}
+                        style={{ resize: "vertical", font: "12px/1.5 var(--nx-font-mono)" }}
+                        onBlur={(e) => {
+                          if (!e.target.value.trim()) return onPatch(row.id, { [f.key]: null });
+                          try { onPatch(row.id, { [f.key]: JSON.parse(e.target.value) }); }
+                          catch { e.target.value = row[f.key] == null ? "" : JSON.stringify(row[f.key], null, 2); }
+                        }}
+                      />
                     ) : f.type === "select" ? (
                       <select
                         className="nxCellEdit"
@@ -419,7 +509,7 @@ export function RecordPage({
                         data-testid={`field-${f.key}`}
                         onChange={(e) => onPatch(row.id, { [f.key]: e.target.value })}
                       >
-                        {(f.options ?? []).map((o) => (
+                        {optionValues(f.options).map((o) => (
                           <option key={o} value={o}>{o}</option>
                         ))}
                       </select>

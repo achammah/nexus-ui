@@ -1,5 +1,6 @@
 import * as React from "react";
 import type { ObjectConfig, RecordRow } from "./types";
+import { optionValues } from "./types";
 import "./record-core.css";
 
 /* ChartView — the third view family: one bar per group option, measuring Count
@@ -25,7 +26,7 @@ export function ChartView({
 }) {
   const groupKey = groupField ?? config.stageField;
   const field = config.fields.find((f) => f.key === groupKey);
-  const groups = groupOptions ?? field?.options ?? [];
+  const groups = groupOptions ?? optionValues(field?.options);
   const measureField = measure === "count" ? undefined : config.fields.find((f) => f.key === measure);
 
   if (!field || groups.length === 0)
