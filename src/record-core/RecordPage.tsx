@@ -1,6 +1,6 @@
 import * as React from "react";
 import {
-  ArrowLeft, CalendarIcon, CalendarClock, ChevronsUpDown, ExternalLink,
+  ArrowLeft, CalendarIcon, CalendarClock, ChevronsUpDown, ExternalLink, Eye, EyeOff,
   Flag, Mail, MessageSquare, Paperclip, Pencil, Phone, Plus, Sparkles, Upload,
 } from "lucide-react";
 import { Button } from "../primitives/Button";
@@ -297,6 +297,8 @@ export function RecordPage({
   onLogActivity,
   onEnrich,
   readOnly,
+  watch,
+  mentionOptions = [],
 }: {
   config: ObjectConfig;
   row: RecordRow;
@@ -322,6 +324,10 @@ export function RecordPage({
   onEnrich?: (fieldKey: string) => void;
   /* permission-driven: fields render as text; composers/upload/enrich hidden */
   readOnly?: boolean;
+  /* record subscription (needs an identity): current state + toggle */
+  watch?: { on: boolean; count: number; onToggle: (next: boolean) => void };
+  /* names offered by the @-autocomplete in the note composer */
+  mentionOptions?: string[];
 }) {
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
   const stageField = config.fields.find((f) => f.key === config.stageField);
@@ -342,6 +348,18 @@ export function RecordPage({
           </Badge>
         )}
         <Micro>{config.labelOne}</Micro>
+        {watch && (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={watch.on ? <Eye size={13} /> : <EyeOff size={13} />}
+            data-testid="watch-toggle"
+            aria-label={watch.on ? "Stop watching" : "Watch this record"}
+            onClick={() => watch.onToggle(!watch.on)}
+          >
+            {watch.on ? `Watching${watch.count > 1 ? ` · ${watch.count}` : ""}` : "Watch"}
+          </Button>
+        )}
       </div>
 
       <div className="nxRecord">
@@ -585,7 +603,7 @@ export function RecordPage({
               <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
                 <input
                   className="nxInput"
-                  placeholder="Add a note…"
+                  placeholder="Add a note… (@ mentions notify)"
                   value={note}
                   data-testid="note-input"
                   onChange={(e) => setNote(e.target.value)}
@@ -610,6 +628,29 @@ export function RecordPage({
                 </Button>
               </div>
               )}
+              {!readOnly && (() => {
+                const m = note.match(/@([\w]*)$/);
+                if (!m) return null;
+                const frag = m[1].toLowerCase();
+                const hits = mentionOptions.filter((n) => n.toLowerCase().startsWith(frag)).slice(0, 5);
+                if (hits.length === 0) return null;
+                return (
+                  <div style={{ display: "flex", gap: 6, margin: "-6px 0 10px", flexWrap: "wrap" }} data-testid="mention-suggest">
+                    {hits.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className="nxSegBtn"
+                        style={{ border: "1px solid var(--nx-border)", borderRadius: 999 }}
+                        data-testid={`mention-${n.replaceAll(/\W+/g, "-").toLowerCase()}`}
+                        onClick={() => setNote(note.replace(/@[\w]*$/, `@${n} `))}
+                      >
+                        @{n}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
               <div className="nxTimeline" data-testid="notes-list">
                 {timeline.filter((t) => t.kind === "note").map((ev) => (
                   <div className="nxTlItem" key={ev.id}>

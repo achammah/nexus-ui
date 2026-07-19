@@ -84,13 +84,14 @@ export function Checkbox({
   checked,
   onCheckedChange,
   "aria-label": ariaLabel,
+  ...rest
 }: {
   checked: boolean;
   onCheckedChange: (v: boolean) => void;
   "aria-label"?: string;
-}) {
+} & Omit<React.ComponentProps<typeof UICheckbox>, "checked" | "onCheckedChange">) {
   return (
-    <UICheckbox checked={checked} onCheckedChange={(v) => onCheckedChange(v === true)} aria-label={ariaLabel} />
+    <UICheckbox checked={checked} onCheckedChange={(v) => onCheckedChange(v === true)} aria-label={ariaLabel} {...rest} />
   );
 }
 
