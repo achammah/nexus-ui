@@ -411,10 +411,10 @@ function TypeTag({ item }: { item: RelationItem }) {
   );
 }
 
-const relOptTestid = (fieldKey: string, o: { id?: string; label: string }, identityMode: boolean) =>
-  identityMode
-    ? `field-${fieldKey}-opt-${o.id}`
-    : `field-${fieldKey}-opt-${o.label.replaceAll(/\W+/g, "-").toLowerCase()}`;
+/* option testids keep their historical LABEL-slug shape (journeys select on
+   them); identity mode adds data-rel-id so same-labeled rows stay selectable */
+const relOptTestid = (fieldKey: string, o: { label: string }) =>
+  `field-${fieldKey}-opt-${o.label.replaceAll(/\W+/g, "-").toLowerCase()}`;
 
 /* Relation picker — combobox over the target object's records. Two modes:
    ITEMS (identity-aware: rows are {id,label,type?}, the pick hands back the
@@ -513,7 +513,8 @@ function RelationPicker({
                   <CommandItem
                     key={identityMode ? `${o.type ?? ""}:${o.id}` : `${o.label}-${i}`}
                     value={`${o.label} ${identityMode ? o.id : ""}`.trim()}
-                    data-testid={relOptTestid(fieldKey, o, identityMode)}
+                    data-testid={relOptTestid(fieldKey, o)}
+                    {...(identityMode ? { "data-rel-id": o.id } : {})}
                     onSelect={() => pick(o)}
                   >
                     {o.label}

@@ -51,6 +51,7 @@ export const csvCell = (v: unknown, type: string): string => {
   if (v === null || v === undefined) return "";
   if (type === "money" && isMoneyValue(v)) return `${v.amount} ${v.code ?? ""}`.trim();
   if ((type === "emails" || type === "phones" || type === "links") && Array.isArray(v)) return v.join("; ");
+  if (type === "relation" && Array.isArray(v)) return v.join("; "); // many-relation labels
   if (type === "address") return addressLine(v, true);
   if (type === "fullName") return joinName(v);
   return String(v);
