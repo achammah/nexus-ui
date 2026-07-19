@@ -1,12 +1,96 @@
 import * as React from "react";
-import { ArrowLeft, CalendarIcon } from "lucide-react";
+import { ArrowLeft, CalendarIcon, ChevronsUpDown, ExternalLink } from "lucide-react";
 import { Button } from "../primitives/Button";
 import { Badge, Micro, Tabs, TabPanel } from "../primitives/fields";
 import { Calendar } from "../components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "../components/ui/command";
 import { formatCell } from "./DataTable";
 import type { ObjectConfig, RecordRow, TimelineEvent } from "./types";
 import "./record-core.css";
+
+/* A related list rendered under Details — the reverse side of a relation
+   (consumer computes rows; see the starter's RecordView). */
+export interface RelatedList {
+  key: string;
+  label: string;
+  rows: RecordRow[];
+  primaryKey: string;
+  metaKey?: string;
+  onOpen: (id: string) => void;
+}
+
+/* Relation picker — combobox over the target object's primary values. */
+function RelationPicker({
+  fieldKey,
+  label,
+  value,
+  options,
+  onPick,
+  onJump,
+}: {
+  fieldKey: string;
+  label: string;
+  value: unknown;
+  options: string[];
+  onPick: (v: string) => void;
+  onJump?: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="nxCellEdit"
+            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left", flex: 1 }}
+            aria-label={label}
+            data-testid={`field-${fieldKey}`}
+          >
+            <span data-testid={`field-${fieldKey}-value`} style={{ flex: 1 }}>
+              {String(value ?? "") || "Pick…"}
+            </span>
+            <ChevronsUpDown size={12} style={{ color: "var(--nx-fg-faint)", flex: "none" }} />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" style={{ width: 260, padding: 0 }}>
+          <Command>
+            <CommandInput placeholder={`Search ${label.toLowerCase()}…`} data-testid={`field-${fieldKey}-search`} />
+            <CommandList>
+              <CommandEmpty>No match.</CommandEmpty>
+              <CommandGroup>
+                {options.map((o) => (
+                  <CommandItem
+                    key={o}
+                    value={o}
+                    data-testid={`field-${fieldKey}-opt-${o.replaceAll(/\W+/g, "-").toLowerCase()}`}
+                    onSelect={() => {
+                      onPick(o);
+                      setOpen(false);
+                    }}
+                  >
+                    {o}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {onJump && String(value ?? "") && (
+        <Button variant="ghost" size="sm" icon={<ExternalLink size={12} />} aria-label={`Open ${label}`} data-testid={`field-${fieldKey}-jump`} onClick={onJump} />
+      )}
+    </span>
+  );
+}
 
 /* Date field editor — calendar popover writing yyyy-mm-dd (the wire format). */
 function DateField({
@@ -65,6 +149,9 @@ export function RecordPage({
   onPatch,
   onBack,
   onAddNote,
+  relationOptions = {},
+  onOpenRelation,
+  related = [],
 }: {
   config: ObjectConfig;
   row: RecordRow;
@@ -72,6 +159,10 @@ export function RecordPage({
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   onBack: () => void;
   onAddNote: (text: string) => void;
+  /* relation fieldKey → the target object's primary values (consumer-fetched) */
+  relationOptions?: Record<string, string[]>;
+  onOpenRelation?: (targetObject: string, value: string) => void;
+  related?: RelatedList[];
 }) {
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
   const stageField = config.fields.find((f) => f.key === config.stageField);
@@ -102,7 +193,20 @@ export function RecordPage({
                 <div className="nxFieldRow" key={f.key}>
                   <span className="nxFieldLabel">{f.label}</span>
                   <span className="nxFieldValue">
-                    {f.type === "date" ? (
+                    {f.type === "relation" ? (
+                      <RelationPicker
+                        fieldKey={f.key}
+                        label={f.label}
+                        value={row[f.key]}
+                        options={relationOptions[f.key] ?? []}
+                        onPick={(v) => onPatch(row.id, { [f.key]: v })}
+                        onJump={
+                          onOpenRelation && f.relation
+                            ? () => onOpenRelation(f.relation!, String(row[f.key] ?? ""))
+                            : undefined
+                        }
+                      />
+                    ) : f.type === "date" ? (
                       <DateField
                         fieldKey={f.key}
                         label={f.label}
@@ -138,6 +242,33 @@ export function RecordPage({
               ))}
             </div>
           </div>
+
+          {related.map((rl) => (
+            <div className="nxCard" key={rl.key} data-testid={`related-${rl.key}`}>
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--nx-border)", display: "flex", justifyContent: "space-between" }}>
+                <Micro>{rl.label}</Micro>
+                <span className="nxCount">{rl.rows.length}</span>
+              </div>
+              <div className="nxFieldList">
+                {rl.rows.length === 0 && (
+                  <div style={{ padding: "10px 12px", color: "var(--nx-fg-faint)", font: "var(--nx-text-meta)" }}>None yet.</div>
+                )}
+                {rl.rows.slice(0, 6).map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    className="nxFieldRow"
+                    data-testid={`related-${rl.key}-${r.id}`}
+                    style={{ background: "none", border: 0, cursor: "pointer", width: "100%", gridTemplateColumns: "1fr auto" }}
+                    onClick={() => rl.onOpen(r.id)}
+                  >
+                    <span className="nxRowLink" style={{ textAlign: "left" }}>{String(r[rl.primaryKey] ?? r.id)}</span>
+                    {rl.metaKey && <span className="nxFieldLabel">{String(r[rl.metaKey] ?? "")}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="nxCard" style={{ padding: "8px 16px 16px" }}>

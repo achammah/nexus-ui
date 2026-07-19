@@ -1,6 +1,6 @@
 # Provenance — nexus-ui
 
-License intent: MIT once publication is decided (repo is PRIVATE-first by decision D11; no LICENSE file until then). Every path carries an origin tag here; `derived` entries carry their license + notice (see `NOTICE.md`) and are publication-compatible (MIT) — copyleft never enters this repo.
+License: **MIT, PUBLIC** since 2026-07-19 (see the Publication note below; the earlier private-first posture is superseded). Every path carries an origin tag here; `derived` entries carry their license + notice (see `NOTICE.md`) and are publication-compatible (MIT) — copyleft never enters this repo.
 
 Origin tags: `ours` = authored from scratch · `rebuilt` = clean-room reauthored from written specs/ideas (spec cited) · `derived` = third-party source vendored verbatim (license + notice required).
 
@@ -17,3 +17,5 @@ Origin tags: `ours` = authored from scratch · `rebuilt` = clean-room reauthored
 Dependencies (package.json) are ordinary MIT/ISC packages (radix-ui, cmdk, TanStack, dnd-kit, lucide, cva, clsx, tailwind-merge, tw-animate-css, Tailwind).
 
 Carry-scan record (2026-07-19): the prior fork workstream's own-authored adapter package was reviewed and deliberately NOT carried — the starter's mock backend serves a generic record contract; record-system DESIGN carried as written specs only. No copyleft-derived file exists at any commit.
+
+**Publication (2026-07-19):** licensed MIT and made PUBLIC on the user's decision — provenance verified publication-clean at flip time (no copyleft-derived file has ever entered this repo; shadcn/ui source is MIT with notices in NOTICE.md).

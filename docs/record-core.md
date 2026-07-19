@@ -36,6 +36,8 @@ Field-type behaviors (all built-in): `select` renders as text-that-edits in tabl
 
 `DataTable` sorting is optionally CONTROLLED (`sort` + `onSortChange`) so consumers persist it in their saved view; `hiddenFields` pairs with a consumer-owned column-visibility menu (the starter persists both per object in `nx-view-<obj>`). `date` cells render formatted (`14 Aug 2026`); editing dates lives on the record page.
 
+`RecordPage` relation fields render a **picker** (command combobox over `relationOptions[fieldKey]` — the target object's primary values, consumer-fetched) with an optional jump button (`onOpenRelation`); pass `related: RelatedList[]` to render **related lists** (the reverse side of relations — the starter derives them from config: every object pointing at this one, filtered to this record). This pair is what makes an ATS/CRM-class app read as one.
+
 Every interactive element carries a `data-testid` (`row-<id>`, `card-<id>`, `col-<stage>`, `field-<key>`, `record-name`, `record-stage`, `note-input`, `rel-<id>-<key>`) — journeys assert on these, never on CSS classes.
 
 ## Contracts the consumer honors
