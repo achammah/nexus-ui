@@ -27,6 +27,74 @@ export interface RelatedList {
   onOpen: (id: string) => void;
 }
 
+/* Multiselect editor — chips + a checkbox popover writing string[]. */
+function MultiSelectField({
+  fieldKey,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  fieldKey: string;
+  label: string;
+  value: unknown;
+  options: string[];
+  onChange: (vals: string[]) => void;
+}) {
+  const vals = Array.isArray(value) ? value.map(String) : [];
+  const [open, setOpen] = React.useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="nxCellEdit"
+          style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", flexWrap: "wrap", textAlign: "left" }}
+          aria-label={label}
+          data-testid={`field-${fieldKey}`}
+        >
+          {vals.length === 0 && <span style={{ color: "var(--nx-fg-faint)" }}>Pick…</span>}
+          {vals.map((t) => (
+            <span
+              key={t}
+              data-testid={`field-${fieldKey}-chip-${t.replaceAll(/\W+/g, "-").toLowerCase()}`}
+              style={{
+                font: "var(--nx-text-meta)", fontWeight: 600, borderRadius: 999,
+                padding: "1px 8px", background: "var(--nx-accent-soft)", color: "var(--nx-accent)",
+              }}
+            >
+              {t}
+            </span>
+          ))}
+          <ChevronsUpDown size={12} style={{ color: "var(--nx-fg-faint)", marginLeft: "auto", flex: "none" }} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" style={{ width: 240, padding: 0 }}>
+        <Command>
+          <CommandList>
+            <CommandGroup>
+              {options.map((o) => {
+                const on = vals.includes(o);
+                return (
+                  <CommandItem
+                    key={o}
+                    value={o}
+                    data-testid={`field-${fieldKey}-opt-${o.replaceAll(/\W+/g, "-").toLowerCase()}`}
+                    onSelect={() => onChange(on ? vals.filter((x) => x !== o) : [...vals, o])}
+                  >
+                    <span style={{ width: 14, textAlign: "center" }}>{on ? "✓" : ""}</span>
+                    {o}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /* Relation picker — combobox over the target object's primary values. */
 function RelationPicker({
   fieldKey,
@@ -152,6 +220,7 @@ export function RecordPage({
   relationOptions = {},
   onOpenRelation,
   related = [],
+  userOptions = [],
 }: {
   config: ObjectConfig;
   row: RecordRow;
@@ -163,6 +232,8 @@ export function RecordPage({
   relationOptions?: Record<string, string[]>;
   onOpenRelation?: (targetObject: string, value: string) => void;
   related?: RelatedList[];
+  /* the app's people directory — `user` fields pick from it */
+  userOptions?: string[];
 }) {
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
   const stageField = config.fields.find((f) => f.key === config.stageField);
@@ -193,7 +264,23 @@ export function RecordPage({
                 <div className="nxFieldRow" key={f.key}>
                   <span className="nxFieldLabel">{f.label}</span>
                   <span className="nxFieldValue">
-                    {f.type === "relation" ? (
+                    {f.type === "user" ? (
+                      <RelationPicker
+                        fieldKey={f.key}
+                        label={f.label}
+                        value={row[f.key]}
+                        options={userOptions}
+                        onPick={(v) => onPatch(row.id, { [f.key]: v })}
+                      />
+                    ) : f.type === "multiselect" ? (
+                      <MultiSelectField
+                        fieldKey={f.key}
+                        label={f.label}
+                        value={row[f.key]}
+                        options={f.options ?? []}
+                        onChange={(vals) => onPatch(row.id, { [f.key]: vals })}
+                      />
+                    ) : f.type === "relation" ? (
                       <RelationPicker
                         fieldKey={f.key}
                         label={f.label}

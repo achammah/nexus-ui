@@ -2,16 +2,21 @@
    app manages is an ObjectConfig row; tables/kanban/record pages render FROM config,
    so a new entity is a config entry, never a fork of a surface. */
 
-export type FieldType = "text" | "number" | "select" | "date" | "currency" | "email" | "url" | "relation";
+export type FieldType =
+  | "text" | "number" | "select" | "date" | "currency" | "email" | "url"
+  | "relation" | "user" | "multiselect";
 
 export interface FieldDef {
   key: string;
   label: string;
   type: FieldType;
-  options?: string[];        // select
+  options?: string[];        // select | multiselect
   relation?: string;         // relation → object key
   width?: number;            // table col width px
   primary?: boolean;         // the record's display name field
+  /* AI-enrichment seam: the platform primitive that computes this field on demand
+     (the UI shows a per-row Run affordance; the consumer wires the call). */
+  primitive?: { kind: "task" | "workflow"; id?: string; label?: string };
 }
 
 export interface ObjectConfig {

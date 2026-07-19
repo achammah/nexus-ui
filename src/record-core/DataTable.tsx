@@ -24,8 +24,52 @@ export const formatCell = (v: unknown, type: string) => {
     const d = new Date(String(v));
     return Number.isNaN(d.getTime()) ? String(v) : dateFmt.format(d);
   }
+  if (type === "multiselect") return Array.isArray(v) ? v.join(" · ") : String(v ?? "");
   return String(v ?? "");
 };
+
+/* read-only typed table cells (editing lives on the record page) */
+function UserCell({ value }: { value: unknown }) {
+  const name = String(value ?? "");
+  if (!name) return <span>—</span>;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span
+        aria-hidden
+        style={{
+          width: 18, height: 18, borderRadius: "50%", flex: "none",
+          background: "var(--nx-accent-soft)", color: "var(--nx-accent)",
+          display: "grid", placeItems: "center", font: "700 9px/1 var(--nx-font-sans)",
+        }}
+      >
+        {name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+      </span>
+      {name}
+    </span>
+  );
+}
+
+function TagsCell({ value }: { value: unknown }) {
+  const tags = Array.isArray(value) ? value.map(String) : [];
+  if (!tags.length) return <span>—</span>;
+  return (
+    <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+      {tags.slice(0, 2).map((t) => (
+        <span
+          key={t}
+          style={{
+            font: "var(--nx-text-meta)", fontWeight: 600, borderRadius: 999,
+            padding: "1px 8px", background: "var(--nx-bg-sunken)",
+            border: "1px solid var(--nx-border)", color: "var(--nx-fg-muted)",
+          }}
+        >
+          {t}
+        </span>
+      ))}
+      {tags.length > 2 && <span className="nxCount">+{tags.length - 2}</span>}
+    </span>
+  );
+}
 
 function RelationCell({ row, field }: { row: RecordRow; field: FieldDef }) {
   const value = String(row[field.key] ?? "");
@@ -172,6 +216,10 @@ export function DataTable({
           cell: ({ row }) =>
             f.type === "relation" ? (
               <RelationCell row={row.original} field={f} />
+            ) : f.type === "user" ? (
+              <UserCell value={row.original[f.key]} />
+            ) : f.type === "multiselect" ? (
+              <TagsCell value={row.original[f.key]} />
             ) : f.primary ? (
               <a
                 className="nxRowLink"
