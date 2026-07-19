@@ -27,6 +27,9 @@ interface FieldDef {
   isActive?: boolean;       // false → hidden from every surface + write-protected, data preserved
   scale?: number;           // rating scale (default 5)
   relation?: string;      // relation: target object key
+  multiple?: boolean;     // relation holds MANY targets (value: id[]) — checkbox picker, ONE commit on close
+  relationTargets?: string[]; // POLYMORPHIC relation (value: {object,id}) — replaces `relation`
+  inverseLabel?: string;  // names the reverse related-list section on the target
   width?: number;         // table column px
   primary?: boolean;      // the display-name field (renders as the open-record link)
   primitive?: {           // AI-enrichment seam: the platform primitive computing this field
@@ -51,6 +54,8 @@ Shaped (composite) types carry structured values and edit on the record page as 
 `DataTable` ships the keyboard grid: three focus levels (row → cell → editing) with vim alternates (j/k), `x` selection, Cmd/Ctrl+A, type-to-edit (the keystroke seeds the editor), Enter save-and-advance-down, Tab lateral, a laddered Escape, and `onPeek` for Cmd/Ctrl+Enter. Editability follows the cell renderer structurally: any type the generic inline input renders is keyboard-editable; special-cased types (select/boolean/rating/relation/user/date/… and the shaped types money/emails/phones/links/address/fullName) get type-appropriate keys (Enter toggles booleans, digits set ratings, Enter focuses selects). Backspace clears a shaped cell to its empty form — lists to `[]`, money/address/fullName to `null`. Focus states surface as `tr[data-row-focus]` / `td[data-cell-focus]`.
 
 `RecordPage`'s `RelationPicker` accepts `onCreate(title)` — when a search has no match it offers a "Create …" row (`field-<key>-create`) plus Enter-to-create, for born-with-a-title + attach flows.
+
+**Relations are identity-linked: rows store target IDS, reads project LABELS.** The consumer's API decorates each row with `_refs` (raw ids per relation field: id · id[] · `{object,id}`) while the field itself carries the projected label — `rowRefs(row)` reads the decoration. Pickers run in **items mode** by passing `relationItems: Record<fieldKey, RelationItem[]>` (`{id, label, type?, typeLabel?}` — build labels from the target's primary via `formatCell`, so fullName-primary targets list joined); a pick patches the ID (`{object,id}` for polymorphic fields), never the label. Option rows keep their historical label-slug testids and add `data-rel-id` for same-labeled disambiguation; when a poly picker's items span more than one type, each row grows a type tag (`rel-type-<object>`). A `multiple` relation renders attached chips (grouped per type for poly fields, `field-<key>-group-<type>`) with per-chip detach, and its checkbox picker holds a LOCAL pending set — the accumulated diff commits as ONE patch when the dropdown closes, never a write per click. Writes to the consumer's store may also be plain label strings: unique → normalized to the id, ambiguous → 400, unmatched → kept verbatim as a dangling label (renders as-is, carries no ref). Renames need no sweep — labels re-project from the id on every read.
 
 `DataTable` sorting is optionally CONTROLLED (`sort` + `onSortChange`) so consumers persist it in their saved view; `hiddenFields` pairs with a consumer-owned column-visibility menu (the starter persists both per object in `nx-view-<obj>`). `date` cells render formatted (`14 Aug 2026`); editing dates lives on the record page.
 

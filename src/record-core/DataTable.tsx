@@ -11,7 +11,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Checkbox } from "../primitives/fields";
 import type { FieldDef, ObjectConfig, RecordRow } from "./types";
-import { addressLine, formatMoney, hostLabel, isMoneyValue, joinName, optionValues } from "./types";
+import { addressLine, formatMoney, hostLabel, isMoneyValue, joinName, optionValues, rowRefs } from "./types";
 import { OptionChip, activeFields } from "./options";
 import "./record-core.css";
 
@@ -51,6 +51,7 @@ export const csvCell = (v: unknown, type: string): string => {
   if (v === null || v === undefined) return "";
   if (type === "money" && isMoneyValue(v)) return `${v.amount} ${v.code ?? ""}`.trim();
   if ((type === "emails" || type === "phones" || type === "links") && Array.isArray(v)) return v.join("; ");
+  if (type === "relation" && Array.isArray(v)) return v.join("; "); // many-relation labels
   if (type === "address") return addressLine(v, true);
   if (type === "fullName") return joinName(v);
   return String(v);
@@ -151,13 +152,32 @@ function RatingCell({ row, field, onPatch, readOnly }: { row: RecordRow; field: 
 }
 
 function RelationCell({ row, field }: { row: RecordRow; field: FieldDef }) {
+  // MANY-relation: projected labels render as chips (first two + overflow)
+  if (field.multiple) {
+    const labels = Array.isArray(row[field.key]) ? (row[field.key] as unknown[]).map(String) : [];
+    if (!labels.length) return <span data-testid={`rel-${row.id}-${field.key}`}>—</span>;
+    return (
+      <span data-testid={`rel-${row.id}-${field.key}`} style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+        {labels.slice(0, 2).map((t, i) => (
+          <span key={`${t}-${i}`} className="nxOptChip" style={{ background: "var(--nx-bg-sunken)", border: "1px solid var(--nx-border)", color: "var(--nx-fg-muted)" }}>
+            {t}
+          </span>
+        ))}
+        {labels.length > 2 && <span className="nxCount">+{labels.length - 2}</span>}
+      </span>
+    );
+  }
   const value = String(row[field.key] ?? "");
   if (!value) return <span>—</span>;
+  // POLY: the link's destination comes from the row's ref (field has no single target)
+  const ref = rowRefs(row)[field.key];
+  const targetObj = field.relation ?? (typeof ref === "object" && !Array.isArray(ref) ? ref.object : undefined);
+  if (!targetObj) return <span data-testid={`rel-${row.id}-${field.key}`}>{value}</span>;
   return (
     <a
       className="nxRowLink"
       style={{ color: "var(--nx-accent)" }}
-      href={`#/o/${field.relation}`}
+      href={`#/o/${targetObj}`}
       data-testid={`rel-${row.id}-${field.key}`}
       onClick={() => {
         // hand the target name to the destination list as a pending filter
@@ -351,11 +371,13 @@ export function DataTable({
   const canKbEdit = (type: string) => !SPECIAL.includes(type);
   const CLEARABLE: Record<string, unknown> = {
     number: null, currency: null, boolean: false,
-    multiselect: [], array: [], relation: "", user: "", rating: 0,
+    multiselect: [], array: [], user: "", rating: 0,
     emails: [], phones: [], links: [],
     money: null, address: null, fullName: null,
   };
-  const clearValue = (type: string) => (type in CLEARABLE ? CLEARABLE[type] : canKbEdit(type) ? "" : undefined);
+  // field-aware: a MANY relation clears to [], any other relation to null
+  const clearValue = (f: FieldDef) =>
+    f.type === "relation" ? (f.multiple ? [] : null) : f.type in CLEARABLE ? CLEARABLE[f.type] : canKbEdit(f.type) ? "" : undefined;
 
 
   const col = createColumnHelper<RecordRow>();
@@ -530,7 +552,7 @@ export function DataTable({
         return;
       }
       if ((e.key === "Backspace" || e.key === "Delete") && !f.primary) {
-        const cleared = clearValue(f.type);
+        const cleared = clearValue(f);
         if (cleared !== undefined) { onPatch(rowRec.id, { [f.key]: cleared }); return handled(); }
         return;
       }

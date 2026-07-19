@@ -78,6 +78,13 @@ export interface FieldDef {
   type: FieldType;
   options?: SelectOption[];  // select | multiselect (string or {value,label,color})
   relation?: string;         // relation → object key
+  /* relation holds MANY targets (value: id[]) — checkbox picker, one committed diff */
+  multiple?: boolean;
+  /* POLYMORPHIC relation: may point at any of these object keys (value: {object,id});
+     replaces `relation`. Search spans every eligible type. */
+  relationTargets?: string[];
+  /* names the reverse related-list section on the target object */
+  inverseLabel?: string;
   width?: number;            // table col width px
   primary?: boolean;         // the record's display name field
   /* value must be unique across the object's records (409 on conflict) */
@@ -112,6 +119,22 @@ export interface RecordRow {
   id: string;
   [key: string]: unknown;
 }
+
+/* Relation picker option — identity-aware (relations store target IDS; labels are
+   projection). `type` = the target OBJECT KEY (poly pickers span several);
+   `typeLabel` is its display name for the type tag. */
+export interface RelationItem {
+  id: string;
+  label: string;
+  type?: string;
+  typeLabel?: string;
+}
+
+/* a row's raw relation refs as decorated by the API (`_refs`):
+   single = id string · multiple = id[] · polymorphic = {object,id} */
+export type RelationRef = string | string[] | { object: string; id: string };
+export const rowRefs = (row: RecordRow): Record<string, RelationRef> =>
+  (row._refs as Record<string, RelationRef> | undefined) ?? {};
 
 export interface ViewDef {
   id: string;

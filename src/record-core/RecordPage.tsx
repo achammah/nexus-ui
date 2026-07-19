@@ -16,8 +16,8 @@ import {
   CommandList,
 } from "../components/ui/command";
 import { formatCell } from "./DataTable";
-import type { AddressValue, FileMeta, FullNameValue, MoneyValue, ObjectConfig, RecordRow, TimelineEvent } from "./types";
-import { isMoneyValue, normalizeOption, optionValues } from "./types";
+import type { AddressValue, FieldDef, FileMeta, FullNameValue, MoneyValue, ObjectConfig, RecordRow, RelationItem, TimelineEvent } from "./types";
+import { isMoneyValue, normalizeOption, optionValues, rowRefs } from "./types";
 import { OptionChip, activeFields } from "./options";
 import "./record-core.css";
 
@@ -204,7 +204,7 @@ const fieldErrStyle: React.CSSProperties = { color: "var(--nx-danger)", font: "v
 const leftGroup = (e: React.FocusEvent<HTMLElement>) => !e.currentTarget.contains(e.relatedTarget as Node | null);
 
 /* Money — amount + ISO 4217 code inputs, one {amount, code} patch (code stored uppercase). */
-function MoneyField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: MoneyValue | null) => void }) {
+export function MoneyField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: MoneyValue | null) => void }) {
   const cur = isMoneyValue(value) ? value : null;
   const [amount, setAmount] = React.useState(cur ? String(cur.amount) : "");
   const [code, setCode] = React.useState(cur?.code ?? "");
@@ -253,7 +253,7 @@ function MoneyField({ fieldKey, label, value, onSave }: { fieldKey: string; labe
 
 /* List editor (emails/phones/links) — entry rows with remove, add-on-Enter,
    per-entry validation surfacing an inline error that NAMES the field. */
-function ListField({
+export function ListField({
   fieldKey,
   label,
   value,
@@ -315,7 +315,7 @@ function ListField({
 const ADDRESS_PARTS = ["street", "city", "postcode", "country"] as const;
 
 /* Address — inline group of 4 labeled inputs saving as ONE patch. */
-function AddressField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: AddressValue | null) => void }) {
+export function AddressField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: AddressValue | null) => void }) {
   const cur: AddressValue = typeof value === "object" && value !== null && !Array.isArray(value) ? (value as AddressValue) : {};
   const [d, setD] = React.useState<Record<string, string>>(
     Object.fromEntries(ADDRESS_PARTS.map((p) => [p, cur[p] ?? ""])),
@@ -350,7 +350,7 @@ function AddressField({ fieldKey, label, value, onSave }: { fieldKey: string; la
 }
 
 /* Full name — first/last inputs saving as ONE patch. */
-function FullNameField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: FullNameValue | null) => void }) {
+export function FullNameField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: FullNameValue | null) => void }) {
   const cur: FullNameValue = typeof value === "object" && value !== null && !Array.isArray(value) ? (value as FullNameValue) : {};
   const [first, setFirst] = React.useState(cur.first ?? "");
   const [last, setLast] = React.useState(cur.last ?? "");
@@ -389,7 +389,7 @@ function FullNameField({ fieldKey, label, value, onSave }: { fieldKey: string; l
 }
 
 /* per-entry validators for the list types — messages NAME the field */
-const listValidators: Record<string, (label: string) => (entry: string) => string | null> = {
+export const listValidators: Record<string, (label: string) => (entry: string) => string | null> = {
   emails: (label) => (v) => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : `${label}: "${v}" is not a valid email address`),
   phones: (label) => (v) => (/^[0-9+()\-\s.]{3,}$/.test(v) ? null : `${label}: "${v}" is not a valid phone number`),
   links: (label) => (v) =>
@@ -398,27 +398,61 @@ const listValidators: Record<string, (label: string) => (entry: string) => strin
       : `${label}: "${v}" is not a valid URL or domain`,
 };
 
-/* Relation picker — combobox over the target object's primary values. */
+/* type tag rendered after a picker row's label when results span object types */
+function TypeTag({ item }: { item: RelationItem }) {
+  return (
+    <span
+      className="nxCount"
+      style={{ marginLeft: "auto", flex: "none", textTransform: "capitalize" }}
+      data-testid={`rel-type-${item.type}`}
+    >
+      {item.typeLabel ?? item.type}
+    </span>
+  );
+}
+
+/* option testids keep their historical LABEL-slug shape (journeys select on
+   them); identity mode adds data-rel-id so same-labeled rows stay selectable */
+const relOptTestid = (fieldKey: string, o: { label: string }) =>
+  `field-${fieldKey}-opt-${o.label.replaceAll(/\W+/g, "-").toLowerCase()}`;
+
+/* Relation picker — combobox over the target object's records. Two modes:
+   ITEMS (identity-aware: rows are {id,label,type?}, the pick hands back the
+   item so relations save by ID; option testids use the id) and legacy OPTIONS
+   (plain label strings). Poly items spanning >1 type grow a type tag per row. */
 function RelationPicker({
   fieldKey,
   label,
   value,
   options,
+  items,
   onPick,
+  onPickItem,
   onJump,
   onCreate,
 }: {
   fieldKey: string;
   label: string;
   value: unknown;
-  options: string[];
-  onPick: (v: string) => void;
+  options?: string[];
+  /* identity mode — supersedes `options` when present */
+  items?: RelationItem[];
+  onPick?: (v: string) => void;
+  onPickItem?: (item: RelationItem) => void;
   onJump?: () => void;
   /* "the thing I want doesn't exist yet": create-with-title + attach in one step */
   onCreate?: (title: string) => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
+  const rows: RelationItem[] = items ?? (options ?? []).map((o) => ({ id: o, label: o }));
+  const identityMode = !!items;
+  const mixedTypes = identityMode && new Set(rows.map((r) => r.type).filter(Boolean)).size > 1;
+  const pick = (row: RelationItem) => {
+    if (identityMode) onPickItem?.(row);
+    else onPick?.(row.label);
+    setOpen(false);
+  };
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <Popover open={open} onOpenChange={setOpen}>
@@ -447,7 +481,7 @@ function RelationPicker({
                 // keyboard path for "no match → create": Enter with zero hits
                 if (e.key !== "Enter" || !onCreate) return;
                 const needle = q.trim().toLowerCase();
-                if (!needle || options.some((o) => o.toLowerCase().includes(needle))) return;
+                if (!needle || rows.some((o) => o.label.toLowerCase().includes(needle))) return;
                 e.preventDefault();
                 onCreate(q.trim());
                 setQ("");
@@ -475,17 +509,16 @@ function RelationPicker({
                 )}
               </CommandEmpty>
               <CommandGroup>
-                {options.map((o) => (
+                {rows.map((o, i) => (
                   <CommandItem
-                    key={o}
-                    value={o}
-                    data-testid={`field-${fieldKey}-opt-${o.replaceAll(/\W+/g, "-").toLowerCase()}`}
-                    onSelect={() => {
-                      onPick(o);
-                      setOpen(false);
-                    }}
+                    key={identityMode ? `${o.type ?? ""}:${o.id}` : `${o.label}-${i}`}
+                    value={`${o.label} ${identityMode ? o.id : ""}`.trim()}
+                    data-testid={relOptTestid(fieldKey, o)}
+                    {...(identityMode ? { "data-rel-id": o.id } : {})}
+                    onSelect={() => pick(o)}
                   >
-                    {o}
+                    {o.label}
+                    {mixedTypes && o.type && <TypeTag item={o} />}
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -496,6 +529,124 @@ function RelationPicker({
       {onJump && String(value ?? "") && (
         <Button variant="ghost" size="sm" icon={<ExternalLink size={12} />} aria-label={`Open ${label}`} data-testid={`field-${fieldKey}-jump`} onClick={onJump} />
       )}
+    </span>
+  );
+}
+
+/* Many-relation editor — attached chips (grouped by type for poly fields) with
+   per-chip detach, plus a checkbox picker holding a LOCAL pending set: toggles
+   never fire network calls; the accumulated diff commits as ONE operation when
+   the dropdown closes (Escape / click-outside). */
+function MultiRelationField({
+  fieldKey,
+  label,
+  attached,
+  items,
+  grouped,
+  onCommit,
+  onCreate,
+}: {
+  fieldKey: string;
+  label: string;
+  /* currently linked records, in stored order (ids + projected labels) */
+  attached: RelationItem[];
+  items: RelationItem[];
+  /* poly: cluster the attached chips by target type */
+  grouped?: boolean;
+  onCommit: (ids: RelationItem[]) => void;
+  onCreate?: (title: string) => void;
+}) {
+  const [open, setOpenRaw] = React.useState(false);
+  const [pending, setPending] = React.useState<Map<string, RelationItem>>(new Map());
+  const keyOf = (r: RelationItem) => `${r.type ?? ""}:${r.id}`;
+  const mixedTypes = new Set(items.map((r) => r.type).filter(Boolean)).size > 1;
+  const setOpen = (next: boolean) => {
+    if (next) {
+      setPending(new Map(attached.map((a) => [keyOf(a), a])));
+    } else {
+      const before = attached.map(keyOf).join("|");
+      const after = [...pending.keys()].join("|");
+      if (before !== after) onCommit([...pending.values()]);
+    }
+    setOpenRaw(next);
+  };
+  const groups: [string, RelationItem[]][] = grouped
+    ? [...new Set(attached.map((a) => a.type ?? ""))].map((t) => [t, attached.filter((a) => (a.type ?? "") === t)])
+    : [["", attached]];
+  return (
+    <span style={{ display: "flex", flexDirection: "column", gap: 4 }} data-testid={`field-${fieldKey}`}>
+      {attached.length > 0 &&
+        groups.map(([t, list]) => (
+          <span key={t || "all"} data-testid={t ? `field-${fieldKey}-group-${t}` : undefined} style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+            {grouped && t && (
+              <Micro>{list[0]?.typeLabel ?? t}</Micro>
+            )}
+            {list.map((a) => (
+              <span key={keyOf(a)} className="nxOptChip" data-testid={`field-${fieldKey}-chip-${a.id}`}
+                style={{ background: "var(--nx-bg-sunken)", border: "1px solid var(--nx-border)", color: "var(--nx-fg-muted)" }}>
+                {a.label}
+                <button
+                  type="button"
+                  aria-label={`Detach ${a.label}`}
+                  data-testid={`field-${fieldKey}-rm-${a.id}`}
+                  style={{ border: 0, background: "none", cursor: "pointer", color: "inherit", padding: 0 }}
+                  onClick={() => onCommit(attached.filter((x) => keyOf(x) !== keyOf(a)))}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </span>
+        ))}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="nxCellEdit"
+            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }}
+            aria-label={label}
+            data-testid={`field-${fieldKey}-open`}
+          >
+            <span style={{ color: "var(--nx-fg-faint)" }}>{attached.length ? "Edit links…" : "Pick…"}</span>
+            <ChevronsUpDown size={12} style={{ color: "var(--nx-fg-faint)", marginLeft: "auto", flex: "none" }} />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" style={{ width: 260, padding: 0 }}>
+          <Command>
+            <CommandInput placeholder={`Search ${label.toLowerCase()}…`} data-testid={`field-${fieldKey}-search`} />
+            <CommandList>
+              <CommandEmpty>
+                {onCreate ? "No match — type in the field's picker to create." : "No match."}
+              </CommandEmpty>
+              <CommandGroup>
+                {items.map((o) => {
+                  const on = pending.has(keyOf(o));
+                  return (
+                    <CommandItem
+                      key={keyOf(o)}
+                      value={`${o.label} ${o.id}`}
+                      data-testid={`field-${fieldKey}-opt-${o.id}`}
+                      onSelect={() => {
+                        // local toggle only — the diff commits once, on close
+                        setPending((m) => {
+                          const next = new Map(m);
+                          if (next.has(keyOf(o))) next.delete(keyOf(o));
+                          else next.set(keyOf(o), o);
+                          return next;
+                        });
+                      }}
+                    >
+                      <span style={{ width: 14, textAlign: "center" }}>{on ? "✓" : ""}</span>
+                      {o.label}
+                      {mixedTypes && o.type && <TypeTag item={o} />}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     </span>
   );
 }
@@ -558,6 +709,7 @@ export function RecordPage({
   onBack,
   onAddNote,
   relationOptions = {},
+  relationItems,
   onOpenRelation,
   onCreateRelation,
   related = [],
@@ -578,6 +730,9 @@ export function RecordPage({
   onAddNote: (text: string) => void;
   /* relation fieldKey → the target object's primary values (consumer-fetched) */
   relationOptions?: Record<string, string[]>;
+  /* identity-aware picker options ({id,label,type?}) — supersedes relationOptions
+     for the fields present; REQUIRED for multiple/polymorphic relation fields */
+  relationItems?: Record<string, RelationItem[]>;
   onOpenRelation?: (targetObject: string, value: string) => void;
   /* picker "Create …" row: create the target with just a title, attach it, and
      (host's choice) open it for progressive completion */
@@ -606,6 +761,19 @@ export function RecordPage({
 }) {
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
   const stageField = config.fields.find((f) => f.key === config.stageField);
+  // zip a many-relation field's raw refs (row._refs) with its projected labels
+  const attachedItems = (f: FieldDef): RelationItem[] => {
+    const refs = rowRefs(row)[f.key];
+    const labels = Array.isArray(row[f.key]) ? (row[f.key] as unknown[]).map(String) : [];
+    if (!Array.isArray(refs)) return [];
+    const pool = relationItems?.[f.key] ?? [];
+    return (refs as unknown[]).map((r, i) => {
+      const isObj = typeof r === "object" && r !== null;
+      const id = isObj ? (r as { id: string }).id : String(r);
+      const type = isObj ? (r as { object: string }).object : f.relation;
+      return { id, label: labels[i] ?? id, type, typeLabel: pool.find((p) => p.type === type)?.typeLabel };
+    });
+  };
   const [tab, setTab] = React.useState("timeline");
   const [note, setNote] = React.useState("");
   const [actKind, setActKind] = React.useState<"call" | "email" | "meeting">("call");
@@ -677,6 +845,35 @@ export function RecordPage({
                         value={row[f.key]}
                         options={f.options ?? []}
                         onChange={(vals) => onPatch(row.id, { [f.key]: vals })}
+                      />
+                    ) : f.type === "relation" && f.multiple ? (
+                      <MultiRelationField
+                        fieldKey={f.key}
+                        label={f.label}
+                        attached={attachedItems(f)}
+                        items={relationItems?.[f.key] ?? []}
+                        grouped={!!f.relationTargets}
+                        onCommit={(list) =>
+                          onPatch(row.id, { [f.key]: list.map((x) => (f.relationTargets ? { object: x.type!, id: x.id } : x.id)) })
+                        }
+                      />
+                    ) : f.type === "relation" && relationItems?.[f.key] ? (
+                      <RelationPicker
+                        fieldKey={f.key}
+                        label={f.label}
+                        value={row[f.key]}
+                        items={relationItems[f.key]}
+                        onPickItem={(item) =>
+                          onPatch(row.id, { [f.key]: f.relationTargets ? { object: item.type!, id: item.id } : item.id })
+                        }
+                        onJump={(() => {
+                          const ref = rowRefs(row)[f.key];
+                          const target = f.relation ?? (typeof ref === "object" && !Array.isArray(ref) ? ref.object : undefined);
+                          return onOpenRelation && target && String(row[f.key] ?? "")
+                            ? () => onOpenRelation(target, String(row[f.key] ?? ""))
+                            : undefined;
+                        })()}
+                        onCreate={onCreateRelation && !f.relationTargets ? (title) => onCreateRelation(f.key, title) : undefined}
                       />
                     ) : f.type === "relation" ? (
                       <RelationPicker
