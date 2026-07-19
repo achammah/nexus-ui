@@ -47,7 +47,18 @@ export interface ViewDef {
 export interface TimelineEvent {
   id: string;
   ts: string;                 // ISO
-  kind: "created" | "updated" | "note" | "stage" | "activity";
+  kind: "created" | "updated" | "note" | "stage" | "activity" | "file";
   summary: string;
   actor?: string;
+  /* activity subkind ("call" | "email" | "meeting") — drives the timeline icon */
+  activity?: string;
+}
+
+/* Attachment metadata (content stays server-side; download via href). */
+export interface FileMeta {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;               // bytes
+  ts: string;                 // ISO
 }

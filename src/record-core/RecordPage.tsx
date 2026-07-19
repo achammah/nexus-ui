@@ -1,5 +1,8 @@
 import * as React from "react";
-import { ArrowLeft, CalendarIcon, ChevronsUpDown, ExternalLink } from "lucide-react";
+import {
+  ArrowLeft, CalendarIcon, CalendarClock, ChevronsUpDown, ExternalLink,
+  Flag, Mail, MessageSquare, Paperclip, Pencil, Phone, Plus, Sparkles, Upload,
+} from "lucide-react";
 import { Button } from "../primitives/Button";
 import { Badge, Micro, Tabs, TabPanel } from "../primitives/fields";
 import { Calendar } from "../components/ui/calendar";
@@ -13,8 +16,39 @@ import {
   CommandList,
 } from "../components/ui/command";
 import { formatCell } from "./DataTable";
-import type { ObjectConfig, RecordRow, TimelineEvent } from "./types";
+import type { FileMeta, ObjectConfig, RecordRow, TimelineEvent } from "./types";
 import "./record-core.css";
+
+/* Timeline icon per event kind (activity subkind wins). */
+function evIcon(ev: TimelineEvent): { node: React.ReactNode; tid: string } {
+  if (ev.kind === "activity") {
+    const map: Record<string, React.ReactNode> = {
+      call: <Phone size={11} />, email: <Mail size={11} />, meeting: <CalendarClock size={11} />,
+    };
+    const k = ev.activity ?? "call";
+    return { node: map[k] ?? <MessageSquare size={11} />, tid: `tl-ic-${k}` };
+  }
+  const map: Record<string, [React.ReactNode, string]> = {
+    note: [<MessageSquare size={11} />, "tl-ic-note"],
+    file: [<Paperclip size={11} />, "tl-ic-file"],
+    stage: [<Flag size={11} />, "tl-ic-stage"],
+    created: [<Plus size={11} />, "tl-ic-created"],
+  };
+  const hit = map[ev.kind] ?? [<Pencil size={11} />, "tl-ic-updated"];
+  return { node: hit[0], tid: hit[1] };
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const ACTIVITY_KINDS = [
+  { key: "call", label: "Call", icon: <Phone size={12} /> },
+  { key: "email", label: "Email", icon: <Mail size={12} /> },
+  { key: "meeting", label: "Meeting", icon: <CalendarClock size={12} /> },
+] as const;
 
 /* A related list rendered under Details — the reverse side of a relation
    (consumer computes rows; see the starter's RecordView). */
@@ -221,6 +255,9 @@ export function RecordPage({
   onOpenRelation,
   related = [],
   userOptions = [],
+  files,
+  onLogActivity,
+  onEnrich,
 }: {
   config: ObjectConfig;
   row: RecordRow;
@@ -234,11 +271,24 @@ export function RecordPage({
   related?: RelatedList[];
   /* the app's people directory — `user` fields pick from it */
   userOptions?: string[];
+  /* attachments — pass to enable the Files tab (upload + list + download) */
+  files?: {
+    list: FileMeta[];
+    onUpload: (f: { name: string; mime: string; data: string }) => void;
+    downloadHref: (fileId: string) => string;
+  };
+  /* activity composer (call/email/meeting) in the Timeline tab — pass to enable */
+  onLogActivity?: (kind: "call" | "email" | "meeting", text: string) => void;
+  /* AI-enrichment: fields carrying `primitive` show a Run affordance → this fires */
+  onEnrich?: (fieldKey: string) => void;
 }) {
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
   const stageField = config.fields.find((f) => f.key === config.stageField);
   const [tab, setTab] = React.useState("timeline");
   const [note, setNote] = React.useState("");
+  const [actKind, setActKind] = React.useState<"call" | "email" | "meeting">("call");
+  const [actText, setActText] = React.useState("");
+  const fileInput = React.useRef<HTMLInputElement>(null);
 
   return (
     <div data-testid={`record-${row.id}`}>
@@ -315,6 +365,9 @@ export function RecordPage({
                     ) : (
                       <input
                         className="nxCellEdit"
+                        /* uncontrolled for typing; the key remounts it when the value
+                           changes EXTERNALLY (enrich, another tab) so it re-renders */
+                        key={`${f.key}:${String(row[f.key] ?? "")}`}
                         defaultValue={String(row[f.key] ?? "")}
                         aria-label={f.label}
                         data-testid={`field-${f.key}`}
@@ -322,6 +375,16 @@ export function RecordPage({
                           const v = f.type === "number" || f.type === "currency" ? Number(e.target.value) : e.target.value;
                           if (v !== row[f.key]) onPatch(row.id, { [f.key]: v });
                         }}
+                      />
+                    )}
+                    {f.primitive && onEnrich && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<Sparkles size={12} />}
+                        aria-label={`Enrich ${f.label}${f.primitive.label ? ` via ${f.primitive.label}` : ""}`}
+                        data-testid={`enrich-${f.key}`}
+                        onClick={() => onEnrich(f.key)}
                       />
                     )}
                   </span>
@@ -365,22 +428,116 @@ export function RecordPage({
             tabs={[
               { value: "timeline", label: "Timeline" },
               { value: "notes", label: "Notes" },
+              ...(files ? [{ value: "files", label: `Files${files.list.length ? ` (${files.list.length})` : ""}` }] : []),
             ]}
           >
             <TabPanel value="timeline">
+              {onLogActivity && (
+                <div style={{ display: "flex", gap: 8, margin: "14px 0", alignItems: "center", flexWrap: "wrap" }} data-testid="activity-composer">
+                  <div className="nxSeg">
+                    {ACTIVITY_KINDS.map((k) => (
+                      <button
+                        key={k.key}
+                        type="button"
+                        className="nxSegBtn"
+                        data-active={actKind === k.key}
+                        data-testid={`act-kind-${k.key}`}
+                        onClick={() => setActKind(k.key)}
+                      >
+                        {k.icon} {k.label}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    className="nxInput"
+                    style={{ flex: 1, minWidth: 160 }}
+                    placeholder={`Log a ${actKind}…`}
+                    value={actText}
+                    data-testid="act-input"
+                    onChange={(e) => setActText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && actText.trim()) {
+                        onLogActivity(actKind, actText.trim());
+                        setActText("");
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="primary"
+                    data-testid="act-log"
+                    onClick={() => {
+                      if (actText.trim()) {
+                        onLogActivity(actKind, actText.trim());
+                        setActText("");
+                      }
+                    }}
+                  >
+                    Log
+                  </Button>
+                </div>
+              )}
               <div className="nxTimeline" data-testid="timeline">
                 {timeline.length === 0 && <div style={{ color: "var(--nx-fg-faint)", padding: 16 }}>No activity yet.</div>}
-                {timeline.map((ev) => (
-                  <div className="nxTlItem" key={ev.id}>
-                    <div className="nxTlRail"><span className="nxTlDot" /></div>
-                    <div className="nxTlBody">
-                      <div className="nxTlSummary">{ev.summary}</div>
-                      <div className="nxTlMeta">{new Date(ev.ts).toLocaleString()} {ev.actor ? `· ${ev.actor}` : ""}</div>
+                {timeline.map((ev) => {
+                  const ic = evIcon(ev);
+                  return (
+                    <div className="nxTlItem" key={ev.id}>
+                      <div className="nxTlRail"><span className="nxTlIcon" data-testid={ic.tid}>{ic.node}</span></div>
+                      <div className="nxTlBody">
+                        <div className="nxTlSummary">{ev.summary}</div>
+                        <div className="nxTlMeta">{new Date(ev.ts).toLocaleString()} {ev.actor ? `· ${ev.actor}` : ""}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </TabPanel>
+            {files && (
+              <TabPanel value="files">
+                <div style={{ display: "flex", margin: "14px 0" }}>
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    hidden
+                    data-testid="file-input"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        const data = String(reader.result ?? "").split(",")[1] ?? "";
+                        files.onUpload({ name: f.name, mime: f.type || "application/octet-stream", data });
+                        if (fileInput.current) fileInput.current.value = "";
+                      };
+                      reader.readAsDataURL(f);
+                    }}
+                  />
+                  <Button variant="primary" icon={<Upload size={13} />} data-testid="file-upload" onClick={() => fileInput.current?.click()}>
+                    Upload file
+                  </Button>
+                </div>
+                <div className="nxFieldList" data-testid="files-list">
+                  {files.list.length === 0 && (
+                    <div style={{ padding: 16, color: "var(--nx-fg-faint)" }}>No files yet.</div>
+                  )}
+                  {files.list.map((f) => (
+                    <div className="nxFieldRow" key={f.id} data-testid={`file-row-${f.id}`} style={{ gridTemplateColumns: "auto 1fr auto auto" }}>
+                      <span className="nxTlIcon"><Paperclip size={11} /></span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                      <span className="nxFieldLabel">{formatBytes(f.size)} · {new Date(f.ts).toLocaleDateString()}</span>
+                      <a
+                        className="nxRowLink"
+                        href={files.downloadHref(f.id)}
+                        download={f.name}
+                        data-testid={`file-dl-${f.id}`}
+                      >
+                        Download
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </TabPanel>
+            )}
             <TabPanel value="notes">
               <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
                 <input

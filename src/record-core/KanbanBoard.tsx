@@ -16,10 +16,10 @@ import "./record-core.css";
 /* KanbanBoard — columns from the config's stageField options; drag commits a PATCH
    of the stage field (the VISIBLE outcome journeys assert). */
 
-function Card({ row, config, onOpen }: { row: RecordRow; config: ObjectConfig; onOpen: (id: string) => void }) {
+function Card({ row, config, onOpen, groupKey }: { row: RecordRow; config: ObjectConfig; onOpen: (id: string) => void; groupKey?: string }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: row.id });
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
-  const metaFields = config.fields.filter((f) => !f.primary && f.key !== config.stageField).slice(0, 2);
+  const metaFields = config.fields.filter((f) => !f.primary && f.key !== (groupKey ?? config.stageField)).slice(0, 2);
   const fmt = (f: (typeof metaFields)[number]) => {
     const v = row[f.key];
     return (f.type === "number" || f.type === "currency") && typeof v === "number"
@@ -50,11 +50,13 @@ function Column({
   rows,
   config,
   onOpen,
+  groupKey,
 }: {
   stage: string;
   rows: RecordRow[];
   config: ObjectConfig;
   onOpen: (id: string) => void;
+  groupKey?: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col:${stage}` });
   return (
@@ -65,7 +67,7 @@ function Column({
       </div>
       <div className="nxKCards">
         {rows.map((r) => (
-          <Card key={r.id} row={r} config={config} onOpen={onOpen} />
+          <Card key={r.id} row={r} config={config} onOpen={onOpen} groupKey={groupKey} />
         ))}
       </div>
     </div>
@@ -77,14 +79,21 @@ export function KanbanBoard({
   rows,
   onPatch,
   onOpen,
+  groupField,
+  groupOptions,
 }: {
   config: ObjectConfig;
   rows: RecordRow[];
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   onOpen: (id: string) => void;
+  /* group by ANY select/user field — defaults to the config's stageField */
+  groupField?: string;
+  /* column set override (required for `user` fields — options live in app config) */
+  groupOptions?: string[];
 }) {
-  const stageField = config.fields.find((f) => f.key === config.stageField);
-  const stages = stageField?.options ?? [];
+  const groupKey = groupField ?? config.stageField;
+  const stageField = config.fields.find((f) => f.key === groupKey);
+  const stages = groupOptions ?? stageField?.options ?? [];
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const active = rows.find((r) => r.id === activeId) ?? null;
@@ -99,13 +108,13 @@ export function KanbanBoard({
     }
   };
 
-  if (!stageField) return <div className="nxCard" style={{ padding: 20 }}>This object has no stage field — kanban unavailable.</div>;
+  if (!stageField) return <div className="nxCard" style={{ padding: 20 }}>This object has no groupable field — board unavailable.</div>;
 
   return (
     <DndContext sensors={sensors} onDragStart={(e) => setActiveId(String(e.active.id))} onDragEnd={onDragEnd}>
       <div className="nxKanban" data-testid={`kanban-${config.key}`}>
         {stages.map((s) => (
-          <Column key={s} stage={s} config={config} onOpen={onOpen} rows={rows.filter((r) => r[stageField.key] === s)} />
+          <Column key={s} stage={s} config={config} onOpen={onOpen} groupKey={groupKey} rows={rows.filter((r) => r[stageField.key] === s)} />
         ))}
       </div>
       <DragOverlay>{active && <div className="nxKCard"><div className="nxKTitle">{String(active[(config.fields.find((f) => f.primary) ?? config.fields[0]).key] ?? "")}</div></div>}</DragOverlay>

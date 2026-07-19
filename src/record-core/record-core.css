@@ -79,3 +79,25 @@
   .nxRecord { grid-template-columns: 1fr; }
   .nxKCol { min-width: 84vw; width: 84vw; }
 }
+
+/* Timeline event icon (replaces the plain dot; per-kind glyph) */
+.nxTlIcon {
+  width: 20px; height: 20px; border-radius: 999px; flex: none;
+  display: grid; place-items: center; margin-top: 7px;
+  background: var(--nx-accent-soft); color: var(--nx-accent);
+}
+.nxTlRail .nxTlIcon + * { margin-top: 4px; }
+
+/* Segmented control (activity composer kinds) */
+.nxSeg { display: flex; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s); overflow: hidden; }
+.nxSegBtn {
+  display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px;
+  font: var(--nx-text-meta); font-weight: 600; color: var(--nx-fg-muted);
+  background: none; border: 0; cursor: pointer;
+}
+.nxSegBtn + .nxSegBtn { border-left: 1px solid var(--nx-border); }
+.nxSegBtn[data-active="true"] { background: var(--nx-accent-soft); color: var(--nx-accent); }
+
+/* Field value row hosts an editor + optional enrich affordance side by side */
+.nxFieldValue { display: flex; align-items: center; gap: 4px; }
+.nxFieldValue > :first-child { flex: 1; min-width: 0; }
