@@ -1,8 +1,8 @@
 {
   "name": "@nexus/ui",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Nexus UI — org component library: vendored shadcn/ui (new-york-v4, MIT) bridged to the Nexus token canvas + the record-core (table, kanban, record page). Distributed as SOURCE: consumers vendor src/ and own every pixel.",
+  "description": "Nexus UI \u2014 org component library: vendored shadcn/ui (new-york-v4, MIT) bridged to the Nexus token canvas + the record-core (table, kanban, record page). Distributed as SOURCE: consumers vendor src/ and own every pixel.",
   "type": "module",
   "scripts": {
     "vendor:shadcn": "node scripts/vendor-shadcn.mjs"

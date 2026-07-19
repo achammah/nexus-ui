@@ -193,6 +193,7 @@ function CellEditor({
   const [v, setV] = React.useState(initial);
   React.useEffect(() => setV(String(row[field.key] ?? "")), [row, field.key]);
   const [editing, setEditingRaw] = React.useState(false);
+  const cancelRef = React.useRef(false);
   const setEditing = (on: boolean, seed?: string) => {
     setEditingRaw(on);
     if (on) setV(seed !== undefined ? seed : String(row[field.key] ?? ""));
@@ -264,6 +265,9 @@ function CellEditor({
       aria-label={field.label}
       onChange={(e) => setV(e.target.value)}
       onBlur={() => {
+        // an Escape-cancel moves focus (blur fires before the reverted value
+        // re-renders) — without this guard the CANCELLED text would commit
+        if (cancelRef.current) { cancelRef.current = false; setEditing(false); return; }
         commit();
         setEditing(false);
       }}
@@ -280,6 +284,7 @@ function CellEditor({
           onAdvance?.(e.shiftKey ? "left" : "right");
           e.preventDefault();
         } else if (e.key === "Escape") {
+          cancelRef.current = true;
           setV(initial);
           setEditing(false);
           onAdvance?.("stay");
