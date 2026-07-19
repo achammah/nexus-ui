@@ -50,6 +50,44 @@ const ACTIVITY_KINDS = [
   { key: "meeting", label: "Meeting", icon: <CalendarClock size={12} /> },
 ] as const;
 
+/* Downscale oversized images client-side before upload (canvas, longest edge
+   capped) — cuts payloads for free; non-images and small images pass through. */
+const MAX_IMAGE_EDGE = 1600;
+function prepareUpload(file: File): Promise<{ name: string; mime: string; data: string }> {
+  const toB64 = (blob: Blob) =>
+    new Promise<string>((resolve) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result ?? "").split(",")[1] ?? "");
+      r.readAsDataURL(blob);
+    });
+  if (!file.type.startsWith("image/")) {
+    return toB64(file).then((data) => ({ name: file.name, mime: file.type || "application/octet-stream", data }));
+  }
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    const passthrough = () =>
+      toB64(file).then((data) => resolve({ name: file.name, mime: file.type, data }));
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const edge = Math.max(img.width, img.height);
+      if (edge <= MAX_IMAGE_EDGE) return passthrough();
+      const scale = MAX_IMAGE_EDGE / edge;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => (blob ? toB64(blob).then((data) => resolve({ name: file.name, mime: file.type, data })) : passthrough()),
+        file.type === "image/png" ? "image/png" : "image/jpeg",
+        0.85,
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); passthrough(); };
+    img.src = url;
+  });
+}
+
 /* A related list rendered under Details — the reverse side of a relation
    (consumer computes rows; see the starter's RecordView). */
 export interface RelatedList {
@@ -503,13 +541,10 @@ export function RecordPage({
                     onChange={(e) => {
                       const f = e.target.files?.[0];
                       if (!f) return;
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        const data = String(reader.result ?? "").split(",")[1] ?? "";
-                        files.onUpload({ name: f.name, mime: f.type || "application/octet-stream", data });
+                      prepareUpload(f).then((payload) => {
+                        files.onUpload(payload);
                         if (fileInput.current) fileInput.current.value = "";
-                      };
-                      reader.readAsDataURL(f);
+                      });
                     }}
                   />
                   <Button variant="primary" icon={<Upload size={13} />} data-testid="file-upload" onClick={() => fileInput.current?.click()}>
