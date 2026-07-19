@@ -1,6 +1,6 @@
 import * as React from "react";
 import {
-  ArrowLeft, CalendarIcon, CalendarClock, ChevronsUpDown, ExternalLink, Eye, EyeOff,
+  ArrowLeft, CalendarIcon, CalendarClock, ChevronsUpDown, ExternalLink, Eye, EyeOff, Star,
   Flag, Mail, MessageSquare, Paperclip, Pencil, Phone, Plus, Sparkles, Upload,
 } from "lucide-react";
 import { Button } from "../primitives/Button";
@@ -328,6 +328,7 @@ export function RecordPage({
   onEnrich,
   readOnly,
   watch,
+  pin,
   mentionOptions = [],
 }: {
   config: ObjectConfig;
@@ -356,6 +357,8 @@ export function RecordPage({
   readOnly?: boolean;
   /* record subscription (needs an identity): current state + toggle */
   watch?: { on: boolean; count: number; onToggle: (next: boolean) => void };
+  /* personal pin (favorites shelf) — presentation only; the host owns storage */
+  pin?: { on: boolean; onToggle: (next: boolean) => void };
   /* names offered by the @-autocomplete in the note composer */
   mentionOptions?: string[];
 }) {
@@ -378,6 +381,18 @@ export function RecordPage({
           </span>
         )}
         <Micro>{config.labelOne}</Micro>
+        {pin && (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Star size={13} fill={pin.on ? "currentColor" : "none"} />}
+            data-testid="fav-toggle"
+            aria-label={pin.on ? "Remove from favorites" : "Add to favorites"}
+            onClick={() => pin.onToggle(!pin.on)}
+          >
+            {pin.on ? "Favorited" : "Favorite"}
+          </Button>
+        )}
         {watch && (
           <Button
             variant="ghost"
