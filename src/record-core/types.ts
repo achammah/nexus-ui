@@ -27,6 +27,10 @@ export interface ObjectConfig {
   fields: FieldDef[];
   stageField?: string;       // select field key driving the kanban
   defaultView: "table" | "kanban";
+  /* rows belong to a team: visibility + roles resolve per the caller's active team */
+  teamScoped?: boolean;
+  /* role → allowed actions (view/create/edit/delete/export + editOwn/deleteOwn) */
+  permissions?: Record<string, string[]>;
 }
 
 export interface RecordRow {
