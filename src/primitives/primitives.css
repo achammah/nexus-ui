@@ -1,24 +1,17 @@
-/* nexus-ui primitives — one stylesheet, token-driven only. */
+/* nexus-ui local extras — the FEW classes not covered by vendored shadcn components.
+   (Buttons/inputs/badges/tabs/dialogs/menus/tooltips/checkboxes are shadcn now —
+   styled via the token bridge in styles/shadcn.css.) */
 
-/* Button */
-.nxBtn {
-  display: inline-flex; align-items: center; gap: 6px;
-  font: var(--nx-text-body); font-weight: 500;
-  border-radius: var(--nx-radius-s); border: 1px solid transparent;
-  cursor: pointer; user-select: none;
-  transition: background var(--nx-t-fast) var(--nx-ease), border-color var(--nx-t-fast) var(--nx-ease), transform var(--nx-t-fast) var(--nx-ease);
+/* micro eyebrow label */
+.nxMicro { font: var(--nx-text-micro); letter-spacing: var(--nx-tracking-micro); text-transform: uppercase; color: var(--nx-fg-faint); }
+
+/* card */
+.nxCard {
+  background: var(--nx-bg-raised); border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m); box-shadow: var(--nx-shadow-1);
 }
-.nxBtn:active:not(:disabled) { transform: translateY(0.5px); }
-.nxBtn:disabled { opacity: 0.55; cursor: default; }
-.nxBtn--md { padding: 6px 12px; }
-.nxBtn--sm { padding: 3px 8px; font-size: 12px; }
-.nxBtn--primary { background: var(--nx-accent); color: var(--nx-accent-fg); }
-.nxBtn--primary:hover:not(:disabled) { filter: brightness(1.06); }
-.nxBtn--secondary { background: var(--nx-bg-raised); color: var(--nx-fg); border-color: var(--nx-border-strong); }
-.nxBtn--secondary:hover:not(:disabled) { border-color: var(--nx-fg-faint); background: var(--nx-bg-sunken); }
-.nxBtn--ghost { background: transparent; color: var(--nx-fg-muted); }
-.nxBtn--ghost:hover:not(:disabled) { background: var(--nx-bg-sunken); color: var(--nx-fg); }
-.nxBtn--danger { background: var(--nx-danger); color: #fff; }
+
+/* busy spinner (Button wrapper) */
 .nxSpin {
   width: 12px; height: 12px; border-radius: 50%;
   border: 2px solid currentColor; border-top-color: transparent;
@@ -26,7 +19,12 @@
 }
 @keyframes nxspin { to { transform: rotate(360deg); } }
 
-/* Input */
+/* status dot (Badge wrapper) */
+.nxDot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* plain-select styling for the few RAW <select class="nxInput"> uses (create dialog,
+   record fields) — full shadcn Select is available in components/ui when a surface
+   wants the composed version */
 .nxInput {
   font: var(--nx-text-body); color: var(--nx-fg);
   background: var(--nx-bg-raised); border: 1px solid var(--nx-border-strong);
@@ -35,74 +33,3 @@
 }
 .nxInput::placeholder { color: var(--nx-fg-faint); }
 .nxInput:focus { border-color: var(--nx-accent); outline: none; }
-.nxInput--invalid { border-color: var(--nx-danger); }
-
-/* Badge / status chip */
-.nxBadge {
-  display: inline-flex; align-items: center; gap: 5px;
-  font: var(--nx-text-meta); font-weight: 600;
-  border-radius: 999px; padding: 2px 9px;
-  background: var(--nx-bg-sunken); color: var(--nx-fg-muted);
-  border: 1px solid var(--nx-border);
-}
-.nxBadge--ok { background: var(--nx-ok-soft); color: var(--nx-ok); border-color: transparent; }
-.nxBadge--warn { background: var(--nx-warn-soft); color: var(--nx-warn); border-color: transparent; }
-.nxBadge--danger { background: var(--nx-danger-soft); color: var(--nx-danger); border-color: transparent; }
-.nxBadge--accent { background: var(--nx-accent-soft); color: var(--nx-accent); border-color: transparent; }
-.nxDot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-
-/* Micro label (uppercase eyebrow) */
-.nxMicro { font: var(--nx-text-micro); letter-spacing: var(--nx-tracking-micro); text-transform: uppercase; color: var(--nx-fg-faint); }
-
-/* Card */
-.nxCard {
-  background: var(--nx-bg-raised); border: 1px solid var(--nx-border);
-  border-radius: var(--nx-radius-m); box-shadow: var(--nx-shadow-1);
-}
-
-/* Radix dialog/popover/dropdown shells */
-.nxOverlay { position: fixed; inset: 0; background: rgb(10 10 9 / 0.45); animation: nxfade var(--nx-t-med) var(--nx-ease); }
-.nxDialog {
-  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  background: var(--nx-bg-raised); border: 1px solid var(--nx-border);
-  border-radius: var(--nx-radius-l); box-shadow: var(--nx-shadow-2);
-  padding: var(--nx-gap-5); width: min(520px, calc(100vw - 32px));
-  max-height: 85vh; overflow: auto;
-}
-.nxMenu {
-  min-width: 180px; background: var(--nx-bg-raised); border: 1px solid var(--nx-border);
-  border-radius: var(--nx-radius-m); box-shadow: var(--nx-shadow-2); padding: 4px;
-  animation: nxpop var(--nx-t-fast) var(--nx-ease);
-}
-.nxMenuItem {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  font: var(--nx-text-body); color: var(--nx-fg);
-  padding: 6px 9px; border-radius: var(--nx-radius-s); cursor: pointer; border: 0; background: none; text-align: left;
-}
-.nxMenuItem[data-highlighted], .nxMenuItem:hover { background: var(--nx-bg-sunken); outline: none; }
-.nxMenuItem--danger { color: var(--nx-danger); }
-.nxTooltip {
-  font: var(--nx-text-meta); background: var(--nx-fg); color: var(--nx-bg);
-  padding: 4px 8px; border-radius: var(--nx-radius-s); box-shadow: var(--nx-shadow-2);
-}
-
-/* Tabs */
-.nxTabs { display: flex; gap: 2px; border-bottom: 1px solid var(--nx-border); }
-.nxTab {
-  font: var(--nx-text-body); font-weight: 500; color: var(--nx-fg-muted);
-  background: none; border: 0; cursor: pointer; padding: 8px 12px;
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
-}
-.nxTab[data-state="active"] { color: var(--nx-fg); border-bottom-color: var(--nx-accent); }
-.nxTab:hover { color: var(--nx-fg); }
-
-/* Checkbox */
-.nxCheck {
-  width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--nx-border-strong);
-  background: var(--nx-bg-raised); display: inline-flex; align-items: center; justify-content: center;
-  transition: background var(--nx-t-fast) var(--nx-ease);
-}
-.nxCheck[data-state="checked"] { background: var(--nx-accent); border-color: var(--nx-accent); color: var(--nx-accent-fg); }
-
-@keyframes nxfade { from { opacity: 0; } }
-@keyframes nxpop { from { opacity: 0; transform: scale(0.97); } }

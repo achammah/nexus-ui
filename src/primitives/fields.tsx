@@ -1,46 +1,52 @@
 import * as React from "react";
-import * as CheckboxP from "@radix-ui/react-checkbox";
-import * as TabsP from "@radix-ui/react-tabs";
-import * as TooltipP from "@radix-ui/react-tooltip";
-import { Check } from "lucide-react";
+import { Input as UIInput } from "../components/ui/input";
+import { Badge as UIBadge } from "../components/ui/badge";
+import { Checkbox as UICheckbox } from "../components/ui/checkbox";
+import { Tabs as UITabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/ui/tooltip";
+import { cn } from "../lib/utils";
 import "./primitives.css";
 
-/* Input ------------------------------------------------------------------ */
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+/* Wrappers over vendored shadcn components — stable API for record-core/apps;
+   Nexus-specific tones ride token-bound classes, never edits to components/ui. */
+
+export interface InputProps extends React.ComponentProps<"input"> {
   invalid?: boolean;
 }
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ invalid, className = "", ...rest }, ref) => (
-    <input ref={ref} className={`nxInput ${invalid ? "nxInput--invalid" : ""} ${className}`} {...rest} />
-  ),
+  ({ invalid, ...rest }, ref) => <UIInput ref={ref} aria-invalid={invalid || undefined} {...rest} />,
 );
 Input.displayName = "Input";
 
-/* Badge ------------------------------------------------------------------ */
+const TONE = {
+  neutral: "",
+  ok: "border-transparent bg-[var(--nx-ok-soft)] text-[var(--nx-ok)]",
+  warn: "border-transparent bg-[var(--nx-warn-soft)] text-[var(--nx-warn)]",
+  danger: "border-transparent bg-[var(--nx-danger-soft)] text-[var(--nx-danger)]",
+  accent: "border-transparent bg-[var(--nx-accent-soft)] text-[var(--nx-accent)]",
+} as const;
+
 export function Badge({
   tone = "neutral",
   dot,
   children,
 }: {
-  tone?: "neutral" | "ok" | "warn" | "danger" | "accent";
+  tone?: keyof typeof TONE;
   dot?: boolean;
   children: React.ReactNode;
 }) {
-  const cls = tone === "neutral" ? "" : ` nxBadge--${tone}`;
   return (
-    <span className={`nxBadge${cls}`}>
+    <UIBadge variant={tone === "neutral" ? "secondary" : "outline"} className={cn(TONE[tone])}>
       {dot && <span className="nxDot" aria-hidden />}
       {children}
-    </span>
+    </UIBadge>
   );
 }
 
-/* Micro eyebrow label ------------------------------------------------------ */
 export function Micro({ children }: { children: React.ReactNode }) {
   return <span className="nxMicro">{children}</span>;
 }
 
-/* Tabs --------------------------------------------------------------------- */
 export function Tabs({
   tabs,
   value,
@@ -53,21 +59,27 @@ export function Tabs({
   children?: React.ReactNode;
 }) {
   return (
-    <TabsP.Root value={value} onValueChange={onValueChange}>
-      <TabsP.List className="nxTabs">
+    <UITabs value={value} onValueChange={onValueChange}>
+      <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0 h-auto">
         {tabs.map((t) => (
-          <TabsP.Trigger key={t.value} value={t.value} className="nxTab">
+          <TabsTrigger
+            key={t.value}
+            value={t.value}
+            className={cn(
+              "nxTab rounded-none border-0 border-b-2 border-transparent bg-transparent px-3 py-2",
+              "data-[state=active]:border-[var(--nx-accent)] data-[state=active]:bg-transparent data-[state=active]:shadow-none",
+            )}
+          >
             {t.label}
-          </TabsP.Trigger>
+          </TabsTrigger>
         ))}
-      </TabsP.List>
+      </TabsList>
       {children}
-    </TabsP.Root>
+    </UITabs>
   );
 }
-export const TabPanel = TabsP.Content;
+export const TabPanel = TabsContent;
 
-/* Checkbox ------------------------------------------------------------------ */
 export function Checkbox({
   checked,
   onCheckedChange,
@@ -78,26 +90,17 @@ export function Checkbox({
   "aria-label"?: string;
 }) {
   return (
-    <CheckboxP.Root className="nxCheck" checked={checked} onCheckedChange={(v) => onCheckedChange(v === true)} aria-label={ariaLabel}>
-      <CheckboxP.Indicator>
-        <Check size={11} strokeWidth={3} />
-      </CheckboxP.Indicator>
-    </CheckboxP.Root>
+    <UICheckbox checked={checked} onCheckedChange={(v) => onCheckedChange(v === true)} aria-label={ariaLabel} />
   );
 }
 
-/* Tooltip ------------------------------------------------------------------- */
 export function Tip({ label, children }: { label: string; children: React.ReactElement }) {
   return (
-    <TooltipP.Provider delayDuration={350}>
-      <TooltipP.Root>
-        <TooltipP.Trigger asChild>{children}</TooltipP.Trigger>
-        <TooltipP.Portal>
-          <TooltipP.Content className="nxTooltip" sideOffset={6}>
-            {label}
-          </TooltipP.Content>
-        </TooltipP.Portal>
-      </TooltipP.Root>
-    </TooltipP.Provider>
+    <TooltipProvider delayDuration={350}>
+      <Tooltip>
+        <TooltipTrigger asChild>{children}</TooltipTrigger>
+        <TooltipContent sideOffset={6}>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

@@ -1,0 +1,107 @@
+{
+  "style": "new-york-v4",
+  "fetchedAt": "2026-07-19T14:39:18.801Z",
+  "source": "https://ui.shadcn.com/r",
+  "components": {
+    "button": {
+      "file": "button.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "badge": {
+      "file": "badge.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "input": {
+      "file": "input.tsx",
+      "deps": []
+    },
+    "label": {
+      "file": "label.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "textarea": {
+      "file": "textarea.tsx",
+      "deps": []
+    },
+    "checkbox": {
+      "file": "checkbox.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "select": {
+      "file": "select.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "tabs": {
+      "file": "tabs.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "dialog": {
+      "file": "dialog.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "dropdown-menu": {
+      "file": "dropdown-menu.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "tooltip": {
+      "file": "tooltip.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "popover": {
+      "file": "popover.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "command": {
+      "file": "command.tsx",
+      "deps": [
+        "cmdk"
+      ]
+    },
+    "table": {
+      "file": "table.tsx",
+      "deps": []
+    },
+    "separator": {
+      "file": "separator.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "scroll-area": {
+      "file": "scroll-area.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "avatar": {
+      "file": "avatar.tsx",
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "skeleton": {
+      "file": "skeleton.tsx",
+      "deps": []
+    }
+  }
+}

@@ -1,11 +1,22 @@
 import * as React from "react";
-import * as DialogP from "@radix-ui/react-dialog";
-import * as MenuP from "@radix-ui/react-dropdown-menu";
-import { X } from "lucide-react";
-import { Button } from "./Button";
-import "./primitives.css";
+import {
+  Dialog as UIDialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import { cn } from "../lib/utils";
 
-/* Dialog -------------------------------------------------------------------- */
+/* Wrappers over vendored shadcn overlays — stable API (Dialog title/footer; Menu
+   trigger/items) for record-core/apps. */
+
 export function Dialog({
   open,
   onOpenChange,
@@ -20,25 +31,18 @@ export function Dialog({
   footer?: React.ReactNode;
 }) {
   return (
-    <DialogP.Root open={open} onOpenChange={onOpenChange}>
-      <DialogP.Portal>
-        <DialogP.Overlay className="nxOverlay" />
-        <DialogP.Content className="nxDialog">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <DialogP.Title style={{ font: "var(--nx-text-title)", margin: 0 }}>{title}</DialogP.Title>
-            <DialogP.Close asChild>
-              <Button variant="ghost" size="sm" icon={<X size={14} />} aria-label="Close" />
-            </DialogP.Close>
-          </div>
-          {children}
-          {footer && <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 20 }}>{footer}</div>}
-        </DialogP.Content>
-      </DialogP.Portal>
-    </DialogP.Root>
+    <UIDialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        {children}
+        {footer && <DialogFooter>{footer}</DialogFooter>}
+      </DialogContent>
+    </UIDialog>
   );
 }
 
-/* Dropdown menu --------------------------------------------------------------- */
 export function Menu({
   trigger,
   items,
@@ -47,21 +51,20 @@ export function Menu({
   items: { key: string; label: React.ReactNode; danger?: boolean; onSelect: () => void }[];
 }) {
   return (
-    <MenuP.Root>
-      <MenuP.Trigger asChild>{trigger}</MenuP.Trigger>
-      <MenuP.Portal>
-        <MenuP.Content className="nxMenu" sideOffset={5} align="end">
-          {items.map((it) => (
-            <MenuP.Item
-              key={it.key}
-              className={`nxMenuItem ${it.danger ? "nxMenuItem--danger" : ""}`}
-              onSelect={it.onSelect}
-            >
-              {it.label}
-            </MenuP.Item>
-          ))}
-        </MenuP.Content>
-      </MenuP.Portal>
-    </MenuP.Root>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={5}>
+        {items.map((it) => (
+          <DropdownMenuItem
+            key={it.key}
+            variant={it.danger ? "destructive" : "default"}
+            className={cn(it.danger && "text-[var(--nx-danger)]")}
+            onSelect={it.onSelect}
+          >
+            {it.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
