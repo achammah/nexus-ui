@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 60,
+  "count": 63,
   "items": [
     {
       "name": "accordion",
@@ -392,21 +392,42 @@
       "name": "RecordPage",
       "kind": "record-core",
       "import": "src/record-core/RecordPage.tsx",
-      "when": "record anatomy: header + fields panel (inline edit) + Timeline/Notes tabs",
+      "when": "record anatomy: header + fields panel (inline edit, enrich affordance) + Timeline (activity composer, per-kind icons) / Notes / Files tabs",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
-      "name": "ObjectConfig · FieldDef · RecordRow · ViewDef · TimelineEvent",
+      "name": "ChartView",
+      "kind": "record-core",
+      "import": "src/record-core/ChartView.tsx",
+      "when": "config-driven chart: one bar per group option, Count or Σ numeric measure — the third view family beside table/board",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "ObjectConfig · FieldDef · RecordRow · ViewDef · TimelineEvent · FileMeta",
       "kind": "record-core",
       "import": "src/record-core/types.ts",
       "when": "the config-driven object model — the schema every record surface renders from",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
+      "name": "Skin · skinToCss() · applySkin()",
+      "kind": "skins",
+      "import": "src/skins/skin.ts",
+      "when": "brand-as-data: a small JSON in, the full --nx-* set out (accent ramp, chrome, radius, fonts, labels, density, shadows, dark derivation, raw overrides) — see docs/THEMING.md",
+      "source": "ours"
+    },
+    {
+      "name": "skinPresets (nexus · ember)",
+      "kind": "skins",
+      "import": "src/skins/presets.ts",
+      "when": "built-in skins: the house identity + a full-range org example (dark chrome, sharp corners, own palette/type)",
+      "source": "ours"
+    },
+    {
       "name": "--nx-* custom properties",
       "kind": "tokens",
       "import": "src/tokens/tokens.css",
-      "when": "the blank canvas: palette/type/geometry/motion; light+dark first-class; an app's design lock edits THIS",
+      "when": "the blank canvas: palette/type/geometry/motion + chrome/label tokens; light+dark first-class; skins WRITE this at runtime, an app's design lock edits it statically",
       "source": "ours"
     },
     {

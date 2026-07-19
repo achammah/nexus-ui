@@ -111,3 +111,22 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* ---- chrome (the app shell region: sidebar/nav) — aliases by default, so a skin
+   can flip the chrome dark/brand without touching content surfaces ---- */
+:root {
+  --nx-chrome-bg: var(--nx-bg-sunken);
+  --nx-chrome-fg: var(--nx-fg);
+  --nx-chrome-fg-muted: var(--nx-fg-muted);
+  --nx-chrome-fg-faint: var(--nx-fg-faint);
+  --nx-chrome-border: var(--nx-border);
+  --nx-chrome-active-bg: var(--nx-bg-raised);
+  --nx-chrome-accent: var(--nx-accent);
+
+  /* label treatment (uppercase micro-labels vs sentence case) */
+  --nx-label-transform: uppercase;
+  --nx-label-tracking: var(--nx-tracking-micro);
+
+  /* interactive accent ramp */
+  --nx-accent-hover: color-mix(in oklab, var(--nx-accent) 88%, #000);
+}

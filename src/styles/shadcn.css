@@ -11,7 +11,8 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 :root {
-  --radius: 0.5625rem;
+  /* radius + fonts follow the token canvas so a skin restyles the vendored kit too */
+  --radius: var(--nx-radius-m);
 
   --background: var(--nx-bg);
   --foreground: var(--nx-fg);
@@ -50,10 +51,12 @@
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: max(calc(var(--radius) - 4px), 0px);
+  --radius-md: max(calc(var(--radius) - 2px), 0px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--nx-font-sans);
+  --font-mono: var(--nx-font-mono);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);

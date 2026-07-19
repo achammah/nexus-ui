@@ -3,7 +3,7 @@
    styled via the token bridge in styles/shadcn.css.) */
 
 /* micro eyebrow label */
-.nxMicro { font: var(--nx-text-micro); letter-spacing: var(--nx-tracking-micro); text-transform: uppercase; color: var(--nx-fg-faint); }
+.nxMicro { font: var(--nx-text-micro); letter-spacing: var(--nx-label-tracking); text-transform: var(--nx-label-transform); color: var(--nx-fg-faint); }
 
 /* card */
 .nxCard {
