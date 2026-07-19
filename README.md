@@ -1,6 +1,8 @@
 # nexus-ui
 
-The org component library for ANY product: **vendored shadcn/ui** (real registry source, `new-york-v4`, MIT — 18 components and counting) bridged to the Nexus token canvas, plus the **record-core** (data table · kanban · record page) for record-system app classes (CRM/ATS/ticketing…).
+The org component library for ANY product: **vendored shadcn/ui** (real registry source, `new-york-v4`, MIT — the full useful set: 47 items incl. form+zod, chart, sidebar, sheet/drawer, calendar, command…) bridged to the Nexus token canvas, plus the **record-core** (data table · kanban · record page) for record-system app classes (CRM/ATS/ticketing…).
+
+**Navigate:** `AGENTS.md` (agent entry: invariants + tasks) · `docs/INDEX.md` (generated catalog: every component, kind, import, WHEN to use) · `docs/catalog.json` (machine-readable twin) · `docs/record-core.md` (the config-driven record system).
 
 - **shadcn is the base, vendored verbatim:** `npm run vendor:shadcn` pulls component SOURCE from the registry into `src/components/ui/` (add names to the script's list for the long tail); local opinions live in `src/primitives/` wrappers, never in vendored files; upstream tracked via the fork `github.com/achammah/ui`.
 - **Distribution = SOURCE** (the shadcn model): consumers vendor `src/` (the starter ships a synced copy under `src/ui/`) and own every pixel. There is no build step here.

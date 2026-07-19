@@ -1,0 +1,406 @@
+{
+  "generatedAt": "2026-07-19T15:13:14.774Z",
+  "style": "new-york-v4",
+  "count": 57,
+  "items": [
+    {
+      "name": "accordion",
+      "kind": "vendored",
+      "import": "src/components/ui/accordion.tsx",
+      "when": "collapsible Q&A / grouped detail sections; one or many open",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "alert",
+      "kind": "vendored",
+      "import": "src/components/ui/alert.tsx",
+      "when": "inline callout (info/destructive) inside a page — not a toast, not a dialog",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "alert-dialog",
+      "kind": "vendored",
+      "import": "src/components/ui/alert-dialog.tsx",
+      "when": "REVIEW SURFACE before an irreversible action (delete/send) — names the target, confirm/cancel (ux-canon: bulk mutate needs this)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "aspect-ratio",
+      "kind": "vendored",
+      "import": "src/components/ui/aspect-ratio.tsx",
+      "when": "media/embed boxes that must keep a ratio while resizing",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "avatar",
+      "kind": "vendored",
+      "import": "src/components/ui/avatar.tsx",
+      "when": "person/org identity dot with image + initials fallback",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "badge",
+      "kind": "vendored",
+      "import": "src/components/ui/badge.tsx",
+      "when": "status chip; prefer the primitives Badge wrapper for Nexus tones (ok/warn/danger/accent)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "breadcrumb",
+      "kind": "vendored",
+      "import": "src/components/ui/breadcrumb.tsx",
+      "when": "hierarchical location trail (Settings / Team / Member)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "button",
+      "kind": "vendored",
+      "import": "src/components/ui/button.tsx",
+      "when": "every action; prefer the primitives Button wrapper (variant/size/busy/icon API)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "calendar",
+      "kind": "vendored",
+      "import": "src/components/ui/calendar.tsx",
+      "when": "date picking (react-day-picker); pairs with popover for a date-picker field",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "card",
+      "kind": "vendored",
+      "import": "src/components/ui/card.tsx",
+      "when": "raised content container with header/footer slots; .nxCard is the lighter token twin",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "carousel",
+      "kind": "vendored",
+      "import": "src/components/ui/carousel.tsx",
+      "when": "horizontally swiped media/item strip (embla)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "chart",
+      "kind": "vendored",
+      "import": "src/components/ui/chart.tsx",
+      "when": "recharts wrapper bound to the token palette (--chart-1..5); dashboards + trend blocks",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "checkbox",
+      "kind": "vendored",
+      "import": "src/components/ui/checkbox.tsx",
+      "when": "boolean field / row selection; wrapper Checkbox gives the simple checked/onChange API",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "collapsible",
+      "kind": "vendored",
+      "import": "src/components/ui/collapsible.tsx",
+      "when": "show-more region without accordion semantics",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "command",
+      "kind": "vendored",
+      "import": "src/components/ui/command.tsx",
+      "when": "typeahead lists + the ⌘K palette (cmdk); the starter wires CommandPalette on it",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "context-menu",
+      "kind": "vendored",
+      "import": "src/components/ui/context-menu.tsx",
+      "when": "right-click menus on rows/cards",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "dialog",
+      "kind": "vendored",
+      "import": "src/components/ui/dialog.tsx",
+      "when": "modal for a focused task (create/edit form); wrapper Dialog gives title/footer API",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "drawer",
+      "kind": "vendored",
+      "import": "src/components/ui/drawer.tsx",
+      "when": "bottom sheet on mobile-ish flows (vaul)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "dropdown-menu",
+      "kind": "vendored",
+      "import": "src/components/ui/dropdown-menu.tsx",
+      "when": "kebab/row action menus; wrapper Menu gives trigger+items API",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "form",
+      "kind": "vendored",
+      "import": "src/components/ui/form.tsx",
+      "when": "react-hook-form + zod field wiring (FormField/FormItem/FormMessage) for validated forms",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "hover-card",
+      "kind": "vendored",
+      "import": "src/components/ui/hover-card.tsx",
+      "when": "rich preview on hover (person card over a mention)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "input",
+      "kind": "vendored",
+      "import": "src/components/ui/input.tsx",
+      "when": "single-line text entry; wrapper Input adds invalid→aria-invalid",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "input-otp",
+      "kind": "vendored",
+      "import": "src/components/ui/input-otp.tsx",
+      "when": "segmented one-time-code entry",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "label",
+      "kind": "vendored",
+      "import": "src/components/ui/label.tsx",
+      "when": "accessible field labels tied to inputs",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "menubar",
+      "kind": "vendored",
+      "import": "src/components/ui/menubar.tsx",
+      "when": "app-level horizontal menu (File/Edit style)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "navigation-menu",
+      "kind": "vendored",
+      "import": "src/components/ui/navigation-menu.tsx",
+      "when": "marketing/site-style top navigation with panels",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "pagination",
+      "kind": "vendored",
+      "import": "src/components/ui/pagination.tsx",
+      "when": "page-by-page navigation for long lists (record-core tables usually filter instead)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "popover",
+      "kind": "vendored",
+      "import": "src/components/ui/popover.tsx",
+      "when": "small anchored panel (filter builder, emoji picker); not a menu, not a dialog",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "progress",
+      "kind": "vendored",
+      "import": "src/components/ui/progress.tsx",
+      "when": "determinate progress bar; pair with async-run surfaces (dev-loop async rules)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "radio-group",
+      "kind": "vendored",
+      "import": "src/components/ui/radio-group.tsx",
+      "when": "single choice among few visible options",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "resizable",
+      "kind": "vendored",
+      "import": "src/components/ui/resizable.tsx",
+      "when": "split panes with draggable handles (react-resizable-panels)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "scroll-area",
+      "kind": "vendored",
+      "import": "src/components/ui/scroll-area.tsx",
+      "when": "styled scroll container for bounded internal scroll (ux-canon card rule)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "select",
+      "kind": "vendored",
+      "import": "src/components/ui/select.tsx",
+      "when": "single choice among many options (composed listbox); raw <select class=nxInput> stays fine for tiny enum cells",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "separator",
+      "kind": "vendored",
+      "import": "src/components/ui/separator.tsx",
+      "when": "hairline divider",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "sheet",
+      "kind": "vendored",
+      "import": "src/components/ui/sheet.tsx",
+      "when": "side panel over content (record peek, filters) — the ZOOM step without leaving the list",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "sidebar",
+      "kind": "vendored",
+      "import": "src/components/ui/sidebar.tsx",
+      "when": "full app-shell sidebar system (collapsible groups, mobile behavior); the starter shell is a lighter hand-rolled twin — adopt this when an app outgrows it",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "skeleton",
+      "kind": "vendored",
+      "import": "src/components/ui/skeleton.tsx",
+      "when": "loading placeholders shaped like the content",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "slider",
+      "kind": "vendored",
+      "import": "src/components/ui/slider.tsx",
+      "when": "numeric range input",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "sonner",
+      "kind": "vendored",
+      "import": "src/components/ui/sonner.tsx",
+      "when": "toast system (Toaster + toast()); the starter ships its own minimal toast — pick ONE per app",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "switch",
+      "kind": "vendored",
+      "import": "src/components/ui/switch.tsx",
+      "when": "on/off setting with immediate effect",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "table",
+      "kind": "vendored",
+      "import": "src/components/ui/table.tsx",
+      "when": "styled table primitives; record-core DataTable is the batteries-included grid on top",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "tabs",
+      "kind": "vendored",
+      "import": "src/components/ui/tabs.tsx",
+      "when": "in-page view switching; wrapper Tabs gives the {tabs,value,onValueChange} API",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "textarea",
+      "kind": "vendored",
+      "import": "src/components/ui/textarea.tsx",
+      "when": "multi-line text entry",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "toggle",
+      "kind": "vendored",
+      "import": "src/components/ui/toggle.tsx",
+      "when": "pressed/unpressed tool button",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "toggle-group",
+      "kind": "vendored",
+      "import": "src/components/ui/toggle-group.tsx",
+      "when": "exclusive or multi toggle row (view switches)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "tooltip",
+      "kind": "vendored",
+      "import": "src/components/ui/tooltip.tsx",
+      "when": "hover hint; wrapper Tip gives label+child API",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "use-mobile",
+      "kind": "vendored-hook",
+      "import": "src/hooks/use-mobile.ts",
+      "when": "hook: viewport-below-768 boolean (sidebar dependency)",
+      "source": "shadcn/ui new-york-v4 (MIT — NOTICE.md)"
+    },
+    {
+      "name": "Button",
+      "kind": "wrapper",
+      "import": "src/primitives/Button.tsx",
+      "when": "the house button API (variant primary/secondary/ghost/danger · size sm/md · busy · icon) over vendored button",
+      "source": "ours"
+    },
+    {
+      "name": "Input · Badge · Micro · Tabs/TabPanel · Checkbox · Tip",
+      "kind": "wrapper",
+      "import": "src/primitives/fields.tsx",
+      "when": "house APIs over vendored input/badge/tabs/checkbox/tooltip + the Micro eyebrow",
+      "source": "ours"
+    },
+    {
+      "name": "Dialog · Menu",
+      "kind": "wrapper",
+      "import": "src/primitives/overlays.tsx",
+      "when": "house APIs over vendored dialog/dropdown-menu (title+footer / trigger+items)",
+      "source": "ours"
+    },
+    {
+      "name": "DataTable",
+      "kind": "record-core",
+      "import": "src/record-core/DataTable.tsx",
+      "when": "config-driven grid: sort, selection, inline edit, relation link cells, numeric alignment — see docs/record-core.md",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "KanbanBoard",
+      "kind": "record-core",
+      "import": "src/record-core/KanbanBoard.tsx",
+      "when": "config-driven board over the object's stageField; drag or stage-select moves cards",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "RecordPage",
+      "kind": "record-core",
+      "import": "src/record-core/RecordPage.tsx",
+      "when": "record anatomy: header + fields panel (inline edit) + Timeline/Notes tabs",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "ObjectConfig · FieldDef · RecordRow · ViewDef · TimelineEvent",
+      "kind": "record-core",
+      "import": "src/record-core/types.ts",
+      "when": "the config-driven object model — the schema every record surface renders from",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "--nx-* custom properties",
+      "kind": "tokens",
+      "import": "src/tokens/tokens.css",
+      "when": "the blank Nexus canvas: palette/type/geometry/motion; light+dark first-class; the P0.5 design lock edits THIS",
+      "source": "ours"
+    },
+    {
+      "name": "shadcn semantic bridge",
+      "kind": "tokens",
+      "import": "src/styles/shadcn.css",
+      "when": "maps shadcn variables onto --nx-* + Tailwind v4 @theme; import AFTER tokens.css",
+      "source": "ours"
+    },
+    {
+      "name": "cn()",
+      "kind": "lib",
+      "import": "src/lib/utils.ts",
+      "when": "class merge (clsx + tailwind-merge) — the shadcn contract",
+      "source": "ours"
+    }
+  ]
+}

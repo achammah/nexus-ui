@@ -19,6 +19,25 @@ const num = new Intl.NumberFormat("en-US");
 export const formatCell = (v: unknown, type: string) =>
   (type === "number" || type === "currency") && typeof v === "number" ? num.format(v) : String(v ?? "");
 
+function RelationCell({ row, field }: { row: RecordRow; field: FieldDef }) {
+  const value = String(row[field.key] ?? "");
+  if (!value) return <span>—</span>;
+  return (
+    <a
+      className="nxRowLink"
+      style={{ color: "var(--nx-accent)" }}
+      href={`#/o/${field.relation}`}
+      data-testid={`rel-${row.id}-${field.key}`}
+      onClick={() => {
+        // hand the target name to the destination list as a pending filter
+        sessionStorage.setItem("nx-pending-q", value);
+      }}
+    >
+      {value}
+    </a>
+  );
+}
+
 function CellEditor({
   row,
   field,
@@ -129,7 +148,9 @@ export function DataTable({
           size: f.width ?? 160,
           header: () => f.label,
           cell: ({ row }) =>
-            f.primary ? (
+            f.type === "relation" ? (
+              <RelationCell row={row.original} field={f} />
+            ) : f.primary ? (
               <a
                 className="nxRowLink"
                 href={`#/o/${config.key}/r/${row.original.id}`}

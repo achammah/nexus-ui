@@ -1,106 +1,374 @@
 {
   "style": "new-york-v4",
-  "fetchedAt": "2026-07-19T14:39:18.801Z",
+  "fetchedAt": "2026-07-19T15:04:14.037Z",
   "source": "https://ui.shadcn.com/r",
   "components": {
     "button": {
-      "file": "button.tsx",
+      "files": [
+        "components/ui/button.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
     "badge": {
-      "file": "badge.tsx",
+      "files": [
+        "components/ui/badge.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
     "input": {
-      "file": "input.tsx",
+      "files": [
+        "components/ui/input.tsx"
+      ],
       "deps": []
     },
     "label": {
-      "file": "label.tsx",
+      "files": [
+        "components/ui/label.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
     "textarea": {
-      "file": "textarea.tsx",
+      "files": [
+        "components/ui/textarea.tsx"
+      ],
       "deps": []
     },
     "checkbox": {
-      "file": "checkbox.tsx",
+      "files": [
+        "components/ui/checkbox.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
     "select": {
-      "file": "select.tsx",
+      "files": [
+        "components/ui/select.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
     "tabs": {
-      "file": "tabs.tsx",
+      "files": [
+        "components/ui/tabs.tsx"
+      ],
       "deps": [
         "radix-ui"
+      ]
+    },
+    "radio-group": {
+      "files": [
+        "components/ui/radio-group.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "slider": {
+      "files": [
+        "components/ui/slider.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "switch": {
+      "files": [
+        "components/ui/switch.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "toggle": {
+      "files": [
+        "components/ui/toggle.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "toggle-group": {
+      "files": [
+        "components/ui/toggle-group.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "input-otp": {
+      "files": [
+        "components/ui/input-otp.tsx"
+      ],
+      "deps": [
+        "input-otp"
       ]
     },
     "dialog": {
-      "file": "dialog.tsx",
+      "files": [
+        "components/ui/dialog.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
+    "alert-dialog": {
+      "files": [
+        "components/ui/alert-dialog.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "sheet": {
+      "files": [
+        "components/ui/sheet.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "drawer": {
+      "files": [
+        "components/ui/drawer.tsx"
+      ],
+      "deps": [
+        "vaul"
+      ]
+    },
     "dropdown-menu": {
-      "file": "dropdown-menu.tsx",
+      "files": [
+        "components/ui/dropdown-menu.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "context-menu": {
+      "files": [
+        "components/ui/context-menu.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "menubar": {
+      "files": [
+        "components/ui/menubar.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "navigation-menu": {
+      "files": [
+        "components/ui/navigation-menu.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "hover-card": {
+      "files": [
+        "components/ui/hover-card.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
     "tooltip": {
-      "file": "tooltip.tsx",
+      "files": [
+        "components/ui/tooltip.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
     "popover": {
-      "file": "popover.tsx",
+      "files": [
+        "components/ui/popover.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
     "command": {
-      "file": "command.tsx",
+      "files": [
+        "components/ui/command.tsx"
+      ],
       "deps": [
         "cmdk"
       ]
     },
+    "breadcrumb": {
+      "files": [
+        "components/ui/breadcrumb.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "pagination": {
+      "files": [
+        "components/ui/pagination.tsx"
+      ],
+      "deps": []
+    },
+    "sidebar": {
+      "files": [
+        "components/ui/sidebar.tsx"
+      ],
+      "deps": [
+        "radix-ui",
+        "class-variance-authority",
+        "lucide-react"
+      ]
+    },
     "table": {
-      "file": "table.tsx",
+      "files": [
+        "components/ui/table.tsx"
+      ],
       "deps": []
     },
     "separator": {
-      "file": "separator.tsx",
+      "files": [
+        "components/ui/separator.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
     "scroll-area": {
-      "file": "scroll-area.tsx",
+      "files": [
+        "components/ui/scroll-area.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
     "avatar": {
-      "file": "avatar.tsx",
+      "files": [
+        "components/ui/avatar.tsx"
+      ],
       "deps": [
         "radix-ui"
       ]
     },
     "skeleton": {
-      "file": "skeleton.tsx",
+      "files": [
+        "components/ui/skeleton.tsx"
+      ],
+      "deps": []
+    },
+    "card": {
+      "files": [
+        "components/ui/card.tsx"
+      ],
+      "deps": []
+    },
+    "alert": {
+      "files": [
+        "components/ui/alert.tsx"
+      ],
+      "deps": []
+    },
+    "accordion": {
+      "files": [
+        "components/ui/accordion.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "collapsible": {
+      "files": [
+        "components/ui/collapsible.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "aspect-ratio": {
+      "files": [
+        "components/ui/aspect-ratio.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "carousel": {
+      "files": [
+        "components/ui/carousel.tsx"
+      ],
+      "deps": [
+        "embla-carousel-react"
+      ]
+    },
+    "resizable": {
+      "files": [
+        "components/ui/resizable.tsx"
+      ],
+      "deps": [
+        "react-resizable-panels@^4"
+      ]
+    },
+    "progress": {
+      "files": [
+        "components/ui/progress.tsx"
+      ],
+      "deps": [
+        "radix-ui"
+      ]
+    },
+    "form": {
+      "files": [
+        "components/ui/form.tsx"
+      ],
+      "deps": [
+        "radix-ui",
+        "@hookform/resolvers",
+        "zod",
+        "react-hook-form"
+      ]
+    },
+    "calendar": {
+      "files": [
+        "components/ui/calendar.tsx"
+      ],
+      "deps": [
+        "react-day-picker@latest",
+        "date-fns"
+      ]
+    },
+    "chart": {
+      "files": [
+        "components/ui/chart.tsx"
+      ],
+      "deps": [
+        "recharts@3.8.0",
+        "lucide-react"
+      ]
+    },
+    "sonner": {
+      "files": [
+        "components/ui/sonner.tsx"
+      ],
+      "deps": [
+        "sonner",
+        "next-themes"
+      ]
+    },
+    "use-mobile": {
+      "files": [
+        "hooks/use-mobile.ts"
+      ],
       "deps": []
     }
   }
