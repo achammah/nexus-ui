@@ -11,7 +11,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Checkbox } from "../primitives/fields";
 import type { FieldDef, ObjectConfig, RecordRow } from "./types";
-import { optionValues } from "./types";
+import { addressLine, formatMoney, hostLabel, isMoneyValue, joinName, optionValues } from "./types";
 import { OptionChip, activeFields } from "./options";
 import "./record-core.css";
 
@@ -36,8 +36,67 @@ export const formatCell = (v: unknown, type: string) => {
   if (type === "array" || type === "multiselect") return Array.isArray(v) ? v.join(" · ") : String(v ?? "");
   if (type === "json") return v == null ? "—" : JSON.stringify(v).slice(0, 60);
   if (type === "longText") { const s = String(v ?? ""); return s.length > 80 ? s.slice(0, 77) + "…" : s; }
+  if (type === "money" && isMoneyValue(v)) return formatMoney(v);
+  if ((type === "emails" || type === "phones") && Array.isArray(v)) return v.join(" · ");
+  if (type === "links" && Array.isArray(v)) return v.map((u) => hostLabel(String(u))).join(" · ");
+  if (type === "address") return addressLine(v);
+  if (type === "fullName") return joinName(v);
   return String(v ?? "");
 };
+
+/* CSV-safe flat text for a cell value (consumers pipe it through their own
+   quoting): money → "12500 EUR" · lists → "a; b" · address/fullName → joined.
+   Non-shaped types keep their raw String() so existing exports don't shift. */
+export const csvCell = (v: unknown, type: string): string => {
+  if (v === null || v === undefined) return "";
+  if (type === "money" && isMoneyValue(v)) return `${v.amount} ${v.code ?? ""}`.trim();
+  if ((type === "emails" || type === "phones" || type === "links") && Array.isArray(v)) return v.join("; ");
+  if (type === "address") return addressLine(v, true);
+  if (type === "fullName") return joinName(v);
+  return String(v);
+};
+
+/* list cells (emails/phones): first entry + "+N" — the full list edits on the record page */
+function ListChipsCell({ row, field }: { row: RecordRow; field: FieldDef }) {
+  const vals = Array.isArray(row[field.key]) ? (row[field.key] as unknown[]).map(String) : [];
+  if (!vals.length) return <span data-testid={`cell-${row.id}-${field.key}`}>—</span>;
+  return (
+    <span data-testid={`cell-${row.id}-${field.key}`} style={{ display: "inline-flex", gap: 4, alignItems: "center", minWidth: 0 }}>
+      <span
+        className="nxOptChip"
+        style={{ background: "var(--nx-bg-sunken)", border: "1px solid var(--nx-border)", color: "var(--nx-fg-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+      >
+        {vals[0]}
+      </span>
+      {vals.length > 1 && <span className="nxCount">+{vals.length - 1}</span>}
+    </span>
+  );
+}
+
+function LinksCell({ row, field }: { row: RecordRow; field: FieldDef }) {
+  const vals = Array.isArray(row[field.key]) ? (row[field.key] as unknown[]).map(String) : [];
+  if (!vals.length) return <span data-testid={`cell-${row.id}-${field.key}`}>—</span>;
+  const href = (u: string) => (/^[a-z][a-z0-9+.-]*:\/\//i.test(u) ? u : `https://${u}`);
+  return (
+    <span data-testid={`cell-${row.id}-${field.key}`} style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+      {vals.slice(0, 2).map((u, i) => (
+        <a
+          key={`${u}-${i}`}
+          className="nxRowLink"
+          style={{ color: "var(--nx-accent)" }}
+          href={href(u)}
+          target="_blank"
+          rel="noreferrer"
+          data-testid={`cell-${row.id}-${field.key}-link-${i}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {hostLabel(u)}
+        </a>
+      ))}
+      {vals.length > 2 && <span className="nxCount">+{vals.length - 2}</span>}
+    </span>
+  );
+}
 
 /* read-only typed table cells (editing lives on the record page) */
 function UserCell({ value }: { value: unknown }) {
@@ -280,11 +339,16 @@ export function DataTable({
   // keyboard-editable = whatever falls to the generic inline input below
   // (text, url, email, number, currency, custom types…) — the same rule the
   // cell renderer uses, so the two can't drift
-  const SPECIAL = ["relation", "user", "multiselect", "boolean", "rating", "dateTime", "json", "longText", "array", "select", "date"];
+  const SPECIAL = [
+    "relation", "user", "multiselect", "boolean", "rating", "dateTime", "json", "longText", "array", "select", "date",
+    "money", "emails", "phones", "links", "address", "fullName",
+  ];
   const canKbEdit = (type: string) => !SPECIAL.includes(type);
   const CLEARABLE: Record<string, unknown> = {
     number: null, currency: null, boolean: false,
     multiselect: [], array: [], relation: "", user: "", rating: 0,
+    emails: [], phones: [], links: [],
+    money: null, address: null, fullName: null,
   };
   const clearValue = (type: string) => (type in CLEARABLE ? CLEARABLE[type] : canKbEdit(type) ? "" : undefined);
 
@@ -335,6 +399,12 @@ export function DataTable({
               <RatingCell row={row.original} field={f} onPatch={onPatch} readOnly={readOnly} />
             ) : ["dateTime", "json", "longText", "array"].includes(f.type) ? (
               <span data-testid={`cell-${row.original.id}-${f.key}`}>{formatCell(row.original[f.key], f.type) || "—"}</span>
+            ) : f.type === "emails" || f.type === "phones" ? (
+              <ListChipsCell row={row.original} field={f} />
+            ) : f.type === "links" ? (
+              <LinksCell row={row.original} field={f} />
+            ) : ["money", "address", "fullName"].includes(f.type) && !f.primary ? (
+              <span data-testid={`cell-${row.original.id}-${f.key}`}>{formatCell(row.original[f.key], f.type) || "—"}</span>
             ) : f.primary ? (
               <a
                 className="nxRowLink"
@@ -347,7 +417,7 @@ export function DataTable({
                 }}
                 data-journey={`open-${config.key}`}
               >
-                {String(row.original[f.key] ?? "—")}
+                {formatCell(row.original[f.key], f.type) || "—"}
               </a>
             ) : (
               <CellEditor
@@ -517,7 +587,7 @@ export function DataTable({
             <tr key={hg.id}>
               {hg.headers.map((h) => {
                 const f = config.fields.find((x) => x.key === h.id);
-                const numCls = f && (f.type === "number" || f.type === "currency") ? "nxNum" : "";
+                const numCls = f && (f.type === "number" || f.type === "currency" || f.type === "money") ? "nxNum" : "";
                 return (
                   <th key={h.id} className={numCls} style={{ width: h.getSize() }} onClick={h.column.getToggleSortingHandler()}>
                     {flexRender(h.column.columnDef.header, h.getContext())}
@@ -547,7 +617,7 @@ export function DataTable({
             >
               {r.getVisibleCells().map((c) => {
                 const f = config.fields.find((x) => x.key === c.column.id);
-                const numCls = f && (f.type === "number" || f.type === "currency") ? "nxNum" : "";
+                const numCls = f && (f.type === "number" || f.type === "currency" || f.type === "money") ? "nxNum" : "";
                 const cellFocused = rowFocused && focus?.col === c.column.id;
                 return (
                   <td key={c.id} className={numCls} {...(cellFocused ? { "data-cell-focus": "" } : {})}>

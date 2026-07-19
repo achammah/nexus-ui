@@ -16,8 +16,8 @@ import {
   CommandList,
 } from "../components/ui/command";
 import { formatCell } from "./DataTable";
-import type { FileMeta, ObjectConfig, RecordRow, TimelineEvent } from "./types";
-import { normalizeOption, optionValues } from "./types";
+import type { AddressValue, FileMeta, FullNameValue, MoneyValue, ObjectConfig, RecordRow, TimelineEvent } from "./types";
+import { isMoneyValue, normalizeOption, optionValues } from "./types";
 import { OptionChip, activeFields } from "./options";
 import "./record-core.css";
 
@@ -196,6 +196,207 @@ function ArrayField({ fieldKey, label, value, onChange }: { fieldKey: string; la
     </span>
   );
 }
+
+/* ---- shaped (composite) field editors — each saves ONE patch of the whole value ---- */
+
+const fieldErrStyle: React.CSSProperties = { color: "var(--nx-danger)", font: "var(--nx-text-meta)" };
+/* group editors commit when focus leaves the WHOLE group, not between its inputs */
+const leftGroup = (e: React.FocusEvent<HTMLElement>) => !e.currentTarget.contains(e.relatedTarget as Node | null);
+
+/* Money — amount + ISO 4217 code inputs, one {amount, code} patch (code stored uppercase). */
+function MoneyField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: MoneyValue | null) => void }) {
+  const cur = isMoneyValue(value) ? value : null;
+  const [amount, setAmount] = React.useState(cur ? String(cur.amount) : "");
+  const [code, setCode] = React.useState(cur?.code ?? "");
+  const [err, setErr] = React.useState<string | null>(null);
+  const commit = () => {
+    const a = amount.trim();
+    if (!a) {
+      if (cur) onSave(null);
+      return;
+    }
+    const n = Number(a);
+    const c = code.trim().toUpperCase();
+    if (Number.isNaN(n)) return setErr(`${label}: amount must be a number`);
+    if (c && !/^[A-Z]{3}$/.test(c)) return setErr(`${label}: code must be a 3-letter currency code`);
+    setErr(null);
+    if (!cur || cur.amount !== n || (cur.code ?? "") !== c) onSave({ amount: n, code: c });
+  };
+  return (
+    <span style={{ display: "flex", flexDirection: "column", gap: 4 }} data-testid={`field-${fieldKey}`} onBlur={(e) => leftGroup(e) && commit()}>
+      <span style={{ display: "flex", gap: 6 }}>
+        <input
+          className="nxCellEdit"
+          type="number"
+          style={{ flex: 1 }}
+          value={amount}
+          placeholder="Amount"
+          aria-label={`${label} amount`}
+          data-testid={`field-${fieldKey}-amount`}
+          onChange={(e) => { setAmount(e.target.value); if (err) setErr(null); }}
+        />
+        <input
+          className="nxCellEdit"
+          style={{ width: 52, textTransform: "uppercase" }}
+          value={code}
+          placeholder="EUR"
+          maxLength={3}
+          aria-label={`${label} currency code`}
+          data-testid={`field-${fieldKey}-code`}
+          onChange={(e) => { setCode(e.target.value); if (err) setErr(null); }}
+        />
+      </span>
+      {err && <span data-testid={`field-${fieldKey}-err`} style={fieldErrStyle}>{err}</span>}
+    </span>
+  );
+}
+
+/* List editor (emails/phones/links) — entry rows with remove, add-on-Enter,
+   per-entry validation surfacing an inline error that NAMES the field. */
+function ListField({
+  fieldKey,
+  label,
+  value,
+  placeholder,
+  validate,
+  onSave,
+}: {
+  fieldKey: string;
+  label: string;
+  value: unknown;
+  placeholder: string;
+  /* error message (naming the field) or null when the entry is valid */
+  validate: (entry: string) => string | null;
+  onSave: (vals: string[]) => void;
+}) {
+  const vals = Array.isArray(value) ? (value as unknown[]).map(String) : [];
+  const [draft, setDraft] = React.useState("");
+  const [err, setErr] = React.useState<string | null>(null);
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    const e = validate(v);
+    if (e) return setErr(e);
+    setErr(null);
+    if (!vals.includes(v)) onSave([...vals, v]);
+    setDraft("");
+  };
+  return (
+    <span style={{ display: "flex", flexDirection: "column", gap: 4 }} data-testid={`field-${fieldKey}`}>
+      {vals.map((v, i) => (
+        <span key={`${v}-${i}`} data-testid={`field-${fieldKey}-row-${i}`} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", font: "var(--nx-text-body)" }}>{v}</span>
+          <button
+            type="button"
+            aria-label={`Remove ${v}`}
+            data-testid={`field-${fieldKey}-rm-${i}`}
+            style={{ border: 0, background: "none", cursor: "pointer", color: "var(--nx-fg-faint)", padding: 0 }}
+            onClick={() => onSave(vals.filter((_, j) => j !== i))}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+      <input
+        className="nxCellEdit"
+        placeholder={placeholder}
+        value={draft}
+        aria-label={label}
+        data-testid={`field-${fieldKey}-input`}
+        onChange={(e) => { setDraft(e.target.value); if (err) setErr(null); }}
+        onKeyDown={(e) => { if (e.key === "Enter") add(); }}
+        onBlur={() => { if (draft.trim()) add(); }}
+      />
+      {err && <span data-testid={`field-${fieldKey}-err`} style={fieldErrStyle}>{err}</span>}
+    </span>
+  );
+}
+
+const ADDRESS_PARTS = ["street", "city", "postcode", "country"] as const;
+
+/* Address — inline group of 4 labeled inputs saving as ONE patch. */
+function AddressField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: AddressValue | null) => void }) {
+  const cur: AddressValue = typeof value === "object" && value !== null && !Array.isArray(value) ? (value as AddressValue) : {};
+  const [d, setD] = React.useState<Record<string, string>>(
+    Object.fromEntries(ADDRESS_PARTS.map((p) => [p, cur[p] ?? ""])),
+  );
+  const commit = () => {
+    const next: AddressValue = {};
+    for (const p of ADDRESS_PARTS) if (d[p].trim()) next[p] = d[p].trim();
+    const changed = ADDRESS_PARTS.some((p) => (cur[p] ?? "") !== (next[p] ?? ""));
+    if (changed) onSave(Object.keys(next).length ? next : null);
+  };
+  return (
+    <span
+      style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}
+      data-testid={`field-${fieldKey}`}
+      aria-label={label}
+      onBlur={(e) => leftGroup(e) && commit()}
+    >
+      {ADDRESS_PARTS.map((p) => (
+        <label key={p} style={{ display: "flex", flexDirection: "column", gap: 2, ...(p === "street" ? { gridColumn: "1 / -1" } : {}) }}>
+          <span style={{ font: "var(--nx-text-meta)", color: "var(--nx-fg-faint)", textTransform: "capitalize" }}>{p}</span>
+          <input
+            className="nxCellEdit"
+            value={d[p]}
+            aria-label={`${label} ${p}`}
+            data-testid={`field-${fieldKey}-${p}`}
+            onChange={(e) => setD((m) => ({ ...m, [p]: e.target.value }))}
+          />
+        </label>
+      ))}
+    </span>
+  );
+}
+
+/* Full name — first/last inputs saving as ONE patch. */
+function FullNameField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: FullNameValue | null) => void }) {
+  const cur: FullNameValue = typeof value === "object" && value !== null && !Array.isArray(value) ? (value as FullNameValue) : {};
+  const [first, setFirst] = React.useState(cur.first ?? "");
+  const [last, setLast] = React.useState(cur.last ?? "");
+  const commit = () => {
+    const f = first.trim();
+    const l = last.trim();
+    if ((cur.first ?? "") === f && (cur.last ?? "") === l) return;
+    if (!f && !l) return onSave(null);
+    const next: FullNameValue = {};
+    if (f) next.first = f;
+    if (l) next.last = l;
+    onSave(next);
+  };
+  return (
+    <span style={{ display: "flex", gap: 6 }} data-testid={`field-${fieldKey}`} onBlur={(e) => leftGroup(e) && commit()}>
+      <input
+        className="nxCellEdit"
+        style={{ flex: 1 }}
+        value={first}
+        placeholder="First"
+        aria-label={`${label} first name`}
+        data-testid={`field-${fieldKey}-first`}
+        onChange={(e) => setFirst(e.target.value)}
+      />
+      <input
+        className="nxCellEdit"
+        style={{ flex: 1 }}
+        value={last}
+        placeholder="Last"
+        aria-label={`${label} last name`}
+        data-testid={`field-${fieldKey}-last`}
+        onChange={(e) => setLast(e.target.value)}
+      />
+    </span>
+  );
+}
+
+/* per-entry validators for the list types — messages NAME the field */
+const listValidators: Record<string, (label: string) => (entry: string) => string | null> = {
+  emails: (label) => (v) => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : `${label}: "${v}" is not a valid email address`),
+  phones: (label) => (v) => (/^[0-9+()\-\s.]{3,}$/.test(v) ? null : `${label}: "${v}" is not a valid phone number`),
+  links: (label) => (v) =>
+    [v, `https://${v}`].some((u) => { try { new URL(u); return u.includes("."); } catch { return false; } })
+      ? null
+      : `${label}: "${v}" is not a valid URL or domain`,
+};
 
 /* Relation picker — combobox over the target object's primary values. */
 function RelationPicker({
@@ -415,7 +616,7 @@ export function RecordPage({
     <div data-testid={`record-${row.id}`}>
       <div className="nxRecordHead">
         <Button variant="ghost" size="sm" icon={<ArrowLeft size={14} />} onClick={onBack} aria-label="Back" />
-        <h1 className="nxRecordName" data-testid="record-name">{String(row[primary.key] ?? "—")}</h1>
+        <h1 className="nxRecordName" data-testid="record-name">{formatCell(row[primary.key], primary.type) || "—"}</h1>
         {stageField && (
           <span data-testid="record-stage">
             <OptionChip field={stageField} value={row[stageField.key]} />
@@ -570,6 +771,39 @@ export function RecordPage({
                           <option key={o} value={o}>{o}</option>
                         ))}
                       </select>
+                    ) : f.type === "money" ? (
+                      <MoneyField
+                        key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
+                        fieldKey={f.key}
+                        label={f.label}
+                        value={row[f.key]}
+                        onSave={(v) => onPatch(row.id, { [f.key]: v })}
+                      />
+                    ) : f.type === "emails" || f.type === "phones" || f.type === "links" ? (
+                      <ListField
+                        fieldKey={f.key}
+                        label={f.label}
+                        value={row[f.key]}
+                        placeholder={f.type === "emails" ? "Add an email…" : f.type === "phones" ? "Add a phone…" : "Add a URL…"}
+                        validate={listValidators[f.type](f.label)}
+                        onSave={(vals) => onPatch(row.id, { [f.key]: vals })}
+                      />
+                    ) : f.type === "address" ? (
+                      <AddressField
+                        key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
+                        fieldKey={f.key}
+                        label={f.label}
+                        value={row[f.key]}
+                        onSave={(v) => onPatch(row.id, { [f.key]: v })}
+                      />
+                    ) : f.type === "fullName" ? (
+                      <FullNameField
+                        key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
+                        fieldKey={f.key}
+                        label={f.label}
+                        value={row[f.key]}
+                        onSave={(v) => onPatch(row.id, { [f.key]: v })}
+                      />
                     ) : (
                       <input
                         className="nxCellEdit"

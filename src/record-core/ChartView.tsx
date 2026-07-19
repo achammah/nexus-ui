@@ -1,6 +1,6 @@
 import * as React from "react";
 import type { ObjectConfig, RecordRow } from "./types";
-import { optionValues } from "./types";
+import { measurableValue, optionValues } from "./types";
 import "./record-core.css";
 
 /* ChartView — the third view family: one bar per group option, measuring Count
@@ -21,7 +21,7 @@ export function ChartView({
   groupField?: string;
   /* column set override (required for `user` fields — options live in app config) */
   groupOptions?: string[];
-  /* "count" or a number/currency field key to SUM per group */
+  /* "count" or a number/currency/money field key to SUM per group (money sums its amount) */
   measure?: string;
 }) {
   const groupKey = groupField ?? config.stageField;
@@ -35,7 +35,7 @@ export function ChartView({
   const value = (group: string) => {
     const bucket = rows.filter((r) => r[field.key] === group);
     if (!measureField) return bucket.length;
-    return bucket.reduce((acc, r) => acc + (typeof r[measureField.key] === "number" ? (r[measureField.key] as number) : 0), 0);
+    return bucket.reduce((acc, r) => acc + measurableValue(r[measureField.key]), 0);
   };
   const data = groups.map((g) => ({ group: g, value: value(g) }));
   const max = Math.max(...data.map((d) => d.value), 1);

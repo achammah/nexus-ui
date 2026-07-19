@@ -5,7 +5,60 @@
 export type FieldType =
   | "text" | "number" | "select" | "date" | "currency" | "email" | "url"
   | "relation" | "user" | "multiselect"
-  | "boolean" | "longText" | "dateTime" | "rating" | "array" | "json";
+  | "boolean" | "longText" | "dateTime" | "rating" | "array" | "json"
+  | "money" | "emails" | "phones" | "links" | "address" | "fullName";
+
+/* Shaped (composite) field values — CRM-grade structured values. Lists
+   (emails/phones/links) are plain string[]. `currency` (a bare number) stays
+   untouched; `money` is the shaped alternative carrying its ISO 4217 code. */
+export interface MoneyValue { amount: number; code: string }
+export interface AddressValue { street?: string; city?: string; postcode?: string; country?: string }
+export interface FullNameValue { first?: string; last?: string }
+
+export const isMoneyValue = (v: unknown): v is MoneyValue =>
+  typeof v === "object" && v !== null && !Array.isArray(v) && typeof (v as MoneyValue).amount === "number";
+
+/* fields whose value can feed chart measures / kanban rollups */
+export const isMeasurable = (f: FieldDef): boolean =>
+  f.type === "number" || f.type === "currency" || f.type === "money";
+
+/* the numeric side of a measurable value (money aggregates by its amount) */
+export const measurableValue = (v: unknown): number =>
+  typeof v === "number" ? v : isMoneyValue(v) ? v.amount : 0;
+
+export const formatMoney = (v: MoneyValue): string => {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency", currency: v.code, minimumFractionDigits: 0, maximumFractionDigits: 2,
+    }).format(v.amount);
+  } catch {
+    // unknown/absent code — still render the amount, never throw mid-table
+    return `${new Intl.NumberFormat("en-US").format(v.amount)} ${v.code ?? ""}`.trim();
+  }
+};
+
+export const joinName = (v: unknown): string => {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return "";
+  const n = v as FullNameValue;
+  return [n.first, n.last].filter(Boolean).join(" ");
+};
+
+/* cell summary = "street, city"; full = all four parts (CSV, timelines) */
+export const addressLine = (v: unknown, full = false): string => {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return "";
+  const a = v as AddressValue;
+  const parts = full ? [a.street, a.city, a.postcode, a.country] : [a.street, a.city];
+  return parts.filter(Boolean).join(", ");
+};
+
+/* bare host label for link anchors ("https://www.acme.example/x" → "acme.example") */
+export const hostLabel = (url: string): string => {
+  try {
+    return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+};
 
 /* Select/multiselect options: plain strings stay valid; the object form adds a
    COLOR that renders consistently on every chip/badge/kanban surface. */

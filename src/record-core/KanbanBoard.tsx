@@ -11,7 +11,8 @@ import {
 } from "@dnd-kit/core";
 import { Badge } from "../primitives/fields";
 import type { ObjectConfig, RecordRow } from "./types";
-import { optionValues } from "./types";
+import { measurableValue, optionValues } from "./types";
+import { formatCell } from "./DataTable";
 import { OptionChip } from "./options";
 import "./record-core.css";
 
@@ -24,6 +25,7 @@ function Card({ row, config, onOpen, groupKey }: { row: RecordRow; config: Objec
   const metaFields = config.fields.filter((f) => !f.primary && f.key !== (groupKey ?? config.stageField)).slice(0, 2);
   const fmt = (f: (typeof metaFields)[number]) => {
     const v = row[f.key];
+    if (["money", "emails", "phones", "links", "address", "fullName"].includes(f.type)) return formatCell(v, f.type);
     return (f.type === "number" || f.type === "currency") && typeof v === "number"
       ? new Intl.NumberFormat("en-US").format(v)
       : String(v ?? "");
@@ -37,7 +39,7 @@ function Card({ row, config, onOpen, groupKey }: { row: RecordRow; config: Objec
       {...listeners}
       onClick={() => onOpen(row.id)}
     >
-      <div className="nxKTitle">{String(row[primary.key] ?? "—")}</div>
+      <div className="nxKTitle">{formatCell(row[primary.key], primary.type) || "—"}</div>
       <div className="nxKMeta">
         {metaFields.map((f) => (
           <span key={f.key}>{fmt(f)}</span>
@@ -71,7 +73,7 @@ function Column({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col:${stage}` });
   const aggValue = aggregate
-    ? AGG_FNS[aggregate.fn](rows.map((r) => (typeof r[aggregate.field] === "number" ? (r[aggregate.field] as number) : 0)))
+    ? AGG_FNS[aggregate.fn](rows.map((r) => measurableValue(r[aggregate.field])))
     : null;
   return (
     <div ref={setNodeRef} className={`nxKCol ${isOver ? "nxKCol--over" : ""}`} data-testid={`col-${stage}`}>
@@ -148,7 +150,7 @@ export function KanbanBoard({
           <Column key={s} stage={s} config={config} onOpen={onOpen} groupKey={groupKey} aggregate={aggregate} rows={rows.filter((r) => r[stageField.key] === s)} />
         ))}
       </div>
-      <DragOverlay>{active && <div className="nxKCard"><div className="nxKTitle">{String(active[(config.fields.find((f) => f.primary) ?? config.fields[0]).key] ?? "")}</div></div>}</DragOverlay>
+      <DragOverlay>{active && (() => { const p = config.fields.find((f) => f.primary) ?? config.fields[0]; return <div className="nxKCard"><div className="nxKTitle">{formatCell(active[p.key], p.type)}</div></div>; })()}</DragOverlay>
     </DndContext>
   );
 }
