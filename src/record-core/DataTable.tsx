@@ -115,16 +115,36 @@ function CellEditor({
   field,
   onPatch,
   readOnly,
+  kbSeed,
+  kbEdit,
+  onEditState,
+  onAdvance,
 }: {
   row: RecordRow;
   field: FieldDef;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
   readOnly?: boolean;
+  /* keyboard grid: begin editing seeded with the typed character */
+  kbSeed?: string | null;
+  kbEdit?: boolean;
+  onEditState?: (editing: boolean) => void;
+  onAdvance?: (dir: "down" | "right" | "left" | "stay") => void;
 }) {
   const initial = String(row[field.key] ?? "");
   const [v, setV] = React.useState(initial);
   React.useEffect(() => setV(String(row[field.key] ?? "")), [row, field.key]);
-  const [editing, setEditing] = React.useState(false);
+  const [editing, setEditingRaw] = React.useState(false);
+  const setEditing = (on: boolean, seed?: string) => {
+    setEditingRaw(on);
+    if (on) setV(seed !== undefined ? seed : String(row[field.key] ?? ""));
+    onEditState?.(on);
+  };
+  // the grid model can force this cell into edit mode (Enter / type-to-edit)
+  React.useEffect(() => {
+    if (kbEdit && !editing) setEditing(true, kbSeed ?? undefined);
+    if (!kbEdit && editing) setEditingRaw(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kbEdit, kbSeed]);
   if (readOnly) {
     return <span data-testid={`cell-${row.id}-${field.key}`}>{formatCell(row[field.key], field.type) || "—"}</span>;
   }
@@ -163,17 +183,17 @@ function CellEditor({
   if (field.type === "date") {
     return <span data-testid={`cell-${row.id}-${field.key}`}>{formatCell(row[field.key], "date") || "—"}</span>;
   }
-  if (!editing && (field.type === "number" || field.type === "currency")) {
+  // closed state: formatted text, one click (or Enter / type-to-edit) opens the editor
+  if (!editing) {
     return (
       <span
         className="nxCellEdit"
-        style={{ display: "block", cursor: "text" }}
-        tabIndex={0}
+        style={{ display: "block", cursor: "text", minHeight: 18 }}
+        data-testid={`cell-${row.id}-${field.key}`}
         aria-label={field.label}
-        onFocus={() => setEditing(true)}
         onClick={() => setEditing(true)}
       >
-        {formatCell(row[field.key], field.type)}
+        {formatCell(row[field.key], field.type) || "\u00a0"}
       </span>
     );
   }
@@ -181,14 +201,32 @@ function CellEditor({
     <input
       className="nxCellEdit"
       value={v}
-      autoFocus={editing}
+      autoFocus
       aria-label={field.label}
       onChange={(e) => setV(e.target.value)}
       onBlur={() => {
         commit();
         setEditing(false);
       }}
-      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+      onKeyDown={(e) => {
+        // spreadsheet advance: Enter saves + moves down; Tab lateral; Escape cancels
+        if (e.key === "Enter") {
+          commit();
+          setEditing(false);
+          onAdvance?.("down");
+          e.preventDefault();
+        } else if (e.key === "Tab") {
+          commit();
+          setEditing(false);
+          onAdvance?.(e.shiftKey ? "left" : "right");
+          e.preventDefault();
+        } else if (e.key === "Escape") {
+          setV(initial);
+          setEditing(false);
+          onAdvance?.("stay");
+          e.stopPropagation();
+        }
+      }}
     />
   );
 }
@@ -204,6 +242,7 @@ export function DataTable({
   sort,
   onSortChange,
   readOnly,
+  onPeek,
 }: {
   config: ObjectConfig;
   rows: RecordRow[];
@@ -217,6 +256,8 @@ export function DataTable({
   onSortChange?: (s: SortingState) => void;
   /* permission-driven: cells render as formatted text, no editors */
   readOnly?: boolean;
+  /* Cmd/Ctrl+Enter on a focused row — open without leaving the list */
+  onPeek?: (id: string) => void;
 }) {
   const [internalSorting, setInternalSorting] = React.useState<SortingState>([]);
   const sorting = sort ?? internalSorting;
@@ -224,6 +265,30 @@ export function DataTable({
     const next = typeof updater === "function" ? updater(sorting) : updater;
     onSortChange ? onSortChange(next) : setInternalSorting(next);
   };
+  /* ---- keyboard grid: three focus levels (row → cell → editing) ----
+     Row focus: ↑↓ or j/k move · x selects (Shift+x extends) · Cmd/Ctrl+A selects all
+     · Enter drops into the first cell · Cmd/Ctrl+Enter peeks · Escape clears.
+     Cell focus: arrows move · Enter (or typing, which SEEDS the editor) edits ·
+     Backspace clears the value · Escape returns to row focus.
+     Editing: Enter saves + moves down · Tab/Shift+Tab save + move laterally ·
+     Escape closes. Focus follows the SORTED order. */
+  const [focus, setFocus] = React.useState<{ row: number; col: string | null } | null>(null);
+  const [kbEdit, setKbEdit] = React.useState<{ rowId: string; col: string; seed: string | null } | null>(null);
+  const selAnchor = React.useRef<number | null>(null);
+  const gridCols = activeFields(config.fields).filter((f) => !hiddenFields.includes(f.key)).map((f) => f.key);
+  const fieldOf = (key: string | null) => config.fields.find((x) => x.key === key);
+  // keyboard-editable = whatever falls to the generic inline input below
+  // (text, url, email, number, currency, custom types…) — the same rule the
+  // cell renderer uses, so the two can't drift
+  const SPECIAL = ["relation", "user", "multiselect", "boolean", "rating", "dateTime", "json", "longText", "array", "select", "date"];
+  const canKbEdit = (type: string) => !SPECIAL.includes(type);
+  const CLEARABLE: Record<string, unknown> = {
+    number: null, currency: null, boolean: false,
+    multiselect: [], array: [], relation: "", user: "", rating: 0,
+  };
+  const clearValue = (type: string) => (type in CLEARABLE ? CLEARABLE[type] : canKbEdit(type) ? "" : undefined);
+
+
   const col = createColumnHelper<RecordRow>();
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
 
@@ -275,6 +340,8 @@ export function DataTable({
                 className="nxRowLink"
                 href={`#/o/${config.key}/r/${row.original.id}`}
                 onClick={(e) => {
+                  // real link: cmd/ctrl-click opens a genuine new tab (full page)
+                  if (e.metaKey || e.ctrlKey) return;
                   e.preventDefault();
                   onOpen(row.original.id);
                 }}
@@ -283,14 +350,26 @@ export function DataTable({
                 {String(row.original[f.key] ?? "—")}
               </a>
             ) : (
-              <CellEditor row={row.original} field={f} onPatch={onPatch} readOnly={readOnly} />
+              <CellEditor
+                row={row.original}
+                field={f}
+                onPatch={onPatch}
+                readOnly={readOnly}
+                kbEdit={kbEdit?.rowId === row.original.id && kbEdit.col === f.key}
+                kbSeed={kbEdit?.rowId === row.original.id && kbEdit.col === f.key ? kbEdit.seed : null}
+                onEditState={(on) => { if (!on) setKbEdit((k) => (k?.rowId === row.original.id && k.col === f.key ? null : k)); }}
+                onAdvance={(dir) => {
+                  const idx = modelRowsRef.current.findIndex((mr) => (mr.original as RecordRow).id === row.original.id);
+                  advance({ row: idx < 0 ? 0 : idx, col: f.key }, dir);
+                }}
+              />
             ),
         }),
       );
     }
     return defs;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, hiddenFields, selection, onSelectionChange, onPatch, readOnly]);
+  }, [config, hiddenFields, selection, onSelectionChange, onPatch, readOnly, kbEdit]);
 
   const table = useReactTable({
     data: rows,
@@ -308,6 +387,8 @@ export function DataTable({
   // the wrap becomes the scroll container; spacer rows keep the table layout honest.
   const VIRTUAL_AT = 80;
   const modelRows = table.getRowModel().rows;
+  const modelRowsRef = React.useRef(modelRows);
+  modelRowsRef.current = modelRows;
   const virtual = modelRows.length > VIRTUAL_AT;
   const wrapRef = React.useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -318,6 +399,105 @@ export function DataTable({
     enabled: virtual,
   });
   const vItems = virtual ? virtualizer.getVirtualItems() : null;
+
+  // keep the keyboard-focused row rendered + in view (virtualized lists included)
+  React.useEffect(() => {
+    if (!focus) return;
+    if (virtual) virtualizer.scrollToIndex(focus.row);
+    else wrapRef.current?.querySelector("tr[data-row-focus]")?.scrollIntoView({ block: "nearest" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.row]);
+
+  const advance = (from: { row: number; col: string }, dir: "down" | "right" | "left" | "stay") => {
+    setKbEdit(null);
+    if (dir === "down") setFocus({ row: Math.min(from.row + 1, modelRowsRef.current.length - 1), col: from.col });
+    else if (dir === "right" || dir === "left") {
+      const i = gridCols.indexOf(from.col);
+      const ni = dir === "right" ? Math.min(i + 1, gridCols.length - 1) : Math.max(i - 1, 0);
+      setFocus({ row: from.row, col: gridCols[ni] });
+    } else setFocus({ row: from.row, col: from.col });
+    wrapRef.current?.focus();
+  };
+
+  const onGridKey = (e: React.KeyboardEvent) => {
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return; // editors own their keys
+    const rows0 = modelRowsRef.current;
+    if (!rows0.length) return;
+    const handled = () => { e.preventDefault(); e.stopPropagation(); };
+    if (!focus) {
+      if (["ArrowDown", "j", "ArrowUp", "k", "Enter"].includes(e.key)) { setFocus({ row: 0, col: null }); handled(); }
+      return;
+    }
+    const rowRec = rows0[focus.row]?.original as RecordRow | undefined;
+    if (!rowRec) { setFocus(null); return; }
+    // ---- cell level
+    if (focus.col !== null) {
+      const f = fieldOf(focus.col);
+      const move = (dr: number, dc: number) => {
+        const i = gridCols.indexOf(focus.col as string);
+        setFocus({
+          row: Math.max(0, Math.min(focus.row + dr, rows0.length - 1)),
+          col: gridCols[Math.max(0, Math.min(i + dc, gridCols.length - 1))],
+        });
+      };
+      if (e.key === "ArrowDown") { move(1, 0); return handled(); }
+      if (e.key === "ArrowUp") { move(-1, 0); return handled(); }
+      if (e.key === "ArrowRight") { move(0, 1); return handled(); }
+      if (e.key === "ArrowLeft") { move(0, -1); return handled(); }
+      if (e.key === "Escape") { setFocus({ row: focus.row, col: null }); return handled(); }
+      if (!f || readOnly) return;
+      if (e.key === "Enter") {
+        if (f.primary) { onOpen(rowRec.id); return handled(); }
+        if (f.type === "boolean") { onPatch(rowRec.id, { [f.key]: rowRec[f.key] !== true }); return handled(); }
+        if (f.type === "select") { (wrapRef.current?.querySelector("td[data-cell-focus] select") as HTMLSelectElement | null)?.focus(); return handled(); }
+        if (canKbEdit(f.type)) { setKbEdit({ rowId: rowRec.id, col: f.key, seed: null }); return handled(); }
+        return;
+      }
+      if ((e.key === "Backspace" || e.key === "Delete") && !f.primary) {
+        const cleared = clearValue(f.type);
+        if (cleared !== undefined) { onPatch(rowRec.id, { [f.key]: cleared }); return handled(); }
+        return;
+      }
+      if (f.type === "rating" && /^[0-9]$/.test(e.key)) {
+        const n = Math.min(Number(e.key), f.scale ?? 5);
+        onPatch(rowRec.id, { [f.key]: n });
+        return handled();
+      }
+      // type-to-edit: one motion, the keystroke SEEDS the editor
+      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && canKbEdit(f.type) && !f.primary) {
+        setKbEdit({ rowId: rowRec.id, col: f.key, seed: e.key });
+        return handled();
+      }
+      return;
+    }
+    // ---- row level
+    if (e.key === "ArrowDown" || e.key === "j") { setFocus({ row: Math.min(focus.row + 1, rows0.length - 1), col: null }); return handled(); }
+    if (e.key === "ArrowUp" || e.key === "k") { setFocus({ row: Math.max(focus.row - 1, 0), col: null }); return handled(); }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { onPeek ? onPeek(rowRec.id) : onOpen(rowRec.id); return handled(); }
+    if (e.key === "Enter") { setFocus({ row: focus.row, col: gridCols[0] ?? null }); return handled(); }
+    if (e.key === "x" && onSelectionChange) {
+      if (e.shiftKey && selAnchor.current !== null) {
+        const [a, b] = [Math.min(selAnchor.current, focus.row), Math.max(selAnchor.current, focus.row)];
+        const next = { ...selection };
+        for (let i = a; i <= b; i++) next[(rows0[i].original as RecordRow).id] = true;
+        onSelectionChange(next);
+      } else {
+        selAnchor.current = focus.row;
+        onSelectionChange({ ...selection, [rowRec.id]: !selection?.[rowRec.id] });
+      }
+      return handled();
+    }
+    if (e.key === "a" && (e.metaKey || e.ctrlKey) && onSelectionChange) {
+      onSelectionChange(Object.fromEntries(rows0.map((r) => [(r.original as RecordRow).id, true])));
+      return handled();
+    }
+    if (e.key === "Escape") {
+      if (selection && Object.values(selection).some(Boolean) && onSelectionChange) onSelectionChange({});
+      else setFocus(null);
+      return handled();
+    }
+  };
   const padTop = vItems && vItems.length ? vItems[0].start : 0;
   const padBottom = vItems && vItems.length ? virtualizer.getTotalSize() - vItems[vItems.length - 1].end : 0;
   const visibleRows = vItems ? vItems.map((vi) => modelRows[vi.index]) : modelRows;
@@ -327,7 +507,9 @@ export function DataTable({
       className="nxTableWrap"
       data-testid={`table-${config.key}`}
       ref={wrapRef}
-      style={virtual ? { maxHeight: "70vh" } : undefined}
+      tabIndex={0}
+      onKeyDown={onGridKey}
+      style={{ outline: "none", ...(virtual ? { maxHeight: "70vh" } : {}) }}
     >
       <table className="nxTable">
         <thead>
@@ -353,17 +535,29 @@ export function DataTable({
               <td style={{ height: padTop, padding: 0, border: 0 }} colSpan={columns.length} />
             </tr>
           )}
-          {visibleRows.map((r) => (
-            <tr key={r.id} data-testid={`row-${(r.original as RecordRow).id}`}>
+          {visibleRows.map((r) => {
+            const rowIdx = modelRows.indexOf(r);
+            const rowFocused = focus?.row === rowIdx;
+            return (
+            <tr
+              key={r.id}
+              data-testid={`row-${(r.original as RecordRow).id}`}
+              {...(rowFocused && focus?.col === null ? { "data-row-focus": "" } : {})}
+              onClick={() => setFocus((cur) => (cur?.row === rowIdx ? cur : { row: rowIdx, col: null }))}
+            >
               {r.getVisibleCells().map((c) => {
                 const f = config.fields.find((x) => x.key === c.column.id);
                 const numCls = f && (f.type === "number" || f.type === "currency") ? "nxNum" : "";
+                const cellFocused = rowFocused && focus?.col === c.column.id;
                 return (
-                  <td key={c.id} className={numCls}>{flexRender(c.column.columnDef.cell, c.getContext())}</td>
+                  <td key={c.id} className={numCls} {...(cellFocused ? { "data-cell-focus": "" } : {})}>
+                    {flexRender(c.column.columnDef.cell, c.getContext())}
+                  </td>
                 );
               })}
             </tr>
-          ))}
+            );
+          })}
           {padBottom > 0 && (
             <tr aria-hidden>
               <td style={{ height: padBottom, padding: 0, border: 0 }} colSpan={columns.length} />

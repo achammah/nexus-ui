@@ -40,6 +40,8 @@ export interface FieldDef {
 }
 
 export interface ObjectConfig {
+  /* how a row click opens records: side-peek over the list (default) or full page */
+  openIn?: "peek" | "page";
   key: string;               // "companies"
   label: string;             // "Companies"
   labelOne: string;          // "Company"

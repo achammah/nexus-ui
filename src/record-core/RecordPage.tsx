@@ -205,6 +205,7 @@ function RelationPicker({
   options,
   onPick,
   onJump,
+  onCreate,
 }: {
   fieldKey: string;
   label: string;
@@ -212,8 +213,11 @@ function RelationPicker({
   options: string[];
   onPick: (v: string) => void;
   onJump?: () => void;
+  /* "the thing I want doesn't exist yet": create-with-title + attach in one step */
+  onCreate?: (title: string) => void;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [q, setQ] = React.useState("");
   return (
     <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <Popover open={open} onOpenChange={setOpen}>
@@ -233,9 +237,42 @@ function RelationPicker({
         </PopoverTrigger>
         <PopoverContent align="start" style={{ width: 260, padding: 0 }}>
           <Command>
-            <CommandInput placeholder={`Search ${label.toLowerCase()}…`} data-testid={`field-${fieldKey}-search`} />
+            <CommandInput
+              placeholder={`Search ${label.toLowerCase()}…`}
+              data-testid={`field-${fieldKey}-search`}
+              value={q}
+              onValueChange={setQ}
+              onKeyDown={(e) => {
+                // keyboard path for "no match → create": Enter with zero hits
+                if (e.key !== "Enter" || !onCreate) return;
+                const needle = q.trim().toLowerCase();
+                if (!needle || options.some((o) => o.toLowerCase().includes(needle))) return;
+                e.preventDefault();
+                onCreate(q.trim());
+                setQ("");
+                setOpen(false);
+              }}
+            />
             <CommandList>
-              <CommandEmpty>No match.</CommandEmpty>
+              <CommandEmpty>
+                {onCreate && q.trim() ? (
+                  <button
+                    type="button"
+                    className="nxBtn nxBtn--secondary nxBtn--sm"
+                    style={{ width: "100%", justifyContent: "flex-start", gap: 6 }}
+                    data-testid={`field-${fieldKey}-create`}
+                    onClick={() => {
+                      onCreate(q.trim());
+                      setQ("");
+                      setOpen(false);
+                    }}
+                  >
+                    <Plus size={13} /> Create “{q.trim()}”
+                  </button>
+                ) : (
+                  "No match."
+                )}
+              </CommandEmpty>
               <CommandGroup>
                 {options.map((o) => (
                   <CommandItem
@@ -321,6 +358,7 @@ export function RecordPage({
   onAddNote,
   relationOptions = {},
   onOpenRelation,
+  onCreateRelation,
   related = [],
   userOptions = [],
   files,
@@ -340,6 +378,9 @@ export function RecordPage({
   /* relation fieldKey → the target object's primary values (consumer-fetched) */
   relationOptions?: Record<string, string[]>;
   onOpenRelation?: (targetObject: string, value: string) => void;
+  /* picker "Create …" row: create the target with just a title, attach it, and
+     (host's choice) open it for progressive completion */
+  onCreateRelation?: (fieldKey: string, title: string) => void;
   related?: RelatedList[];
   /* the app's people directory — `user` fields pick from it */
   userOptions?: string[];
@@ -448,6 +489,7 @@ export function RecordPage({
                             ? () => onOpenRelation(f.relation!, String(row[f.key] ?? ""))
                             : undefined
                         }
+                        onCreate={onCreateRelation ? (title) => onCreateRelation(f.key, title) : undefined}
                       />
                     ) : f.type === "date" ? (
                       <DateField
