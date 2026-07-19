@@ -1,0 +1,81 @@
+/* record-core — table · kanban · record page. Token-driven only. */
+
+/* ---------- DataTable ---------- */
+.nxTableWrap { overflow: auto; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m); background: var(--nx-bg-raised); }
+.nxTable { border-collapse: separate; border-spacing: 0; width: 100%; font: var(--nx-text-body); }
+.nxTable th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--nx-bg-sunken); color: var(--nx-fg-muted);
+  font: var(--nx-text-meta); font-weight: 600; text-align: left;
+  padding: 8px 12px; border-bottom: 1px solid var(--nx-border);
+  white-space: nowrap; cursor: pointer; user-select: none;
+}
+.nxTable th .nxSortMark { opacity: 0.7; margin-left: 4px; }
+.nxTable td {
+  padding: 7px 12px; border-bottom: 1px solid var(--nx-border);
+  white-space: nowrap; max-width: 340px; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.nxTable tr:hover td { background: var(--nx-bg-sunken); }
+.nxTable tr:last-child td { border-bottom: 0; }
+.nxRowLink { color: var(--nx-fg); font-weight: 500; text-decoration: none; }
+.nxRowLink:hover { color: var(--nx-accent); }
+.nxCellEdit { background: transparent; border: 1px solid transparent; font: inherit; color: inherit; width: 100%; padding: 2px 4px; border-radius: 4px; }
+.nxCellEdit:focus { border-color: var(--nx-accent); background: var(--nx-bg-raised); outline: none; }
+/* selects read as TEXT in table cells (native chrome per-row is noise); affordance on hover */
+.nxTable select.nxCellEdit { appearance: none; -webkit-appearance: none; cursor: pointer; }
+.nxTable select.nxCellEdit:hover { color: var(--nx-accent); }
+.nxTable td.nxNum, .nxTable th.nxNum { text-align: right; }
+.nxTable td.nxNum .nxCellEdit { text-align: right; }
+
+/* ---------- Kanban ---------- */
+.nxKanban { display: flex; gap: var(--nx-gap-3); align-items: flex-start; overflow-x: auto; padding-bottom: var(--nx-gap-3); }
+.nxKCol {
+  min-width: 264px; width: 264px; flex: none;
+  background: var(--nx-bg-sunken); border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m); padding: var(--nx-gap-2);
+}
+.nxKColHead { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 8px; }
+.nxKCards { display: flex; flex-direction: column; gap: var(--nx-gap-2); min-height: 24px; }
+.nxKCard {
+  background: var(--nx-bg-raised); border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s); padding: 10px; cursor: grab;
+  box-shadow: var(--nx-shadow-1);
+  transition: box-shadow var(--nx-t-fast) var(--nx-ease), transform var(--nx-t-fast) var(--nx-ease);
+}
+.nxKCard:hover { box-shadow: var(--nx-shadow-2); transform: translateY(-1px); }
+.nxKCard--drag { opacity: 0.4; }
+.nxKTitle { font-weight: 550; margin-bottom: 4px; }
+.nxKMeta { color: var(--nx-fg-muted); font: var(--nx-text-meta); display: flex; gap: 8px; }
+.nxKCol--over { border-color: var(--nx-accent); background: var(--nx-accent-soft); }
+
+/* ---------- Record page ---------- */
+.nxRecord { display: grid; grid-template-columns: 320px 1fr; gap: var(--nx-gap-4); min-height: 0; }
+.nxRecordSide { display: flex; flex-direction: column; gap: var(--nx-gap-4); min-width: 0; }
+.nxRecordHead { display: flex; align-items: center; gap: var(--nx-gap-3); margin-bottom: var(--nx-gap-2); }
+.nxRecordName { font: var(--nx-text-title); font-size: 18px; margin: 0; }
+.nxFieldList { display: flex; flex-direction: column; }
+.nxFieldRow { display: grid; grid-template-columns: 110px 1fr; gap: 10px; padding: 7px 12px; align-items: center; border-bottom: 1px solid var(--nx-border); }
+.nxFieldRow:last-child { border-bottom: 0; }
+.nxFieldLabel { color: var(--nx-fg-muted); font: var(--nx-text-meta); }
+.nxFieldValue input, .nxFieldValue select { width: 100%; }
+.nxTimeline { display: flex; flex-direction: column; }
+.nxTlItem { display: grid; grid-template-columns: 14px 1fr; gap: 12px; padding: 0 4px; }
+.nxTlRail { display: flex; flex-direction: column; align-items: center; }
+.nxTlDot { width: 8px; height: 8px; border-radius: 50%; background: var(--nx-accent); margin-top: 13px; flex: none; box-shadow: 0 0 0 3px var(--nx-accent-soft); }
+.nxTlRail::after { content: ""; flex: 1; width: 2px; background: var(--nx-border); margin-top: 4px; }
+.nxTlItem:last-child .nxTlRail::after { display: none; }
+.nxTlBody { padding: 9px 0 14px; }
+.nxTlBody { min-width: 0; }
+.nxTlSummary { font: var(--nx-text-body); }
+.nxTlMeta { color: var(--nx-fg-faint); font: var(--nx-text-meta); margin-top: 1px; }
+
+/* ---------- View bar (shared table/kanban chrome) ---------- */
+.nxViewBar { display: flex; align-items: center; gap: var(--nx-gap-2); margin-bottom: var(--nx-gap-3); flex-wrap: wrap; }
+.nxViewBar .nxSpacer { flex: 1; }
+.nxCount { color: var(--nx-fg-faint); font: var(--nx-text-meta); }
+
+@media (max-width: 760px) {
+  .nxRecord { grid-template-columns: 1fr; }
+  .nxKCol { min-width: 84vw; width: 84vw; }
+}

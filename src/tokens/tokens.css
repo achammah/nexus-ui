@@ -1,0 +1,113 @@
+/* Nexus UI — token canvas. The BLANK canvas every app direction restyles (P0.5 design
+   lock overrides tokens, never component internals). Both themes are first-class:
+   prefers-color-scheme carries the OS default; [data-theme] stamped on <html> wins. */
+
+:root {
+  /* ---- neutrals (hue-biased toward the accent family, never pure grey) ---- */
+  --nx-bg: #fafaf9;
+  --nx-bg-raised: #ffffff;
+  --nx-bg-sunken: #f2f1ef;
+  --nx-fg: #1c1b19;
+  --nx-fg-muted: #6e6a63;
+  --nx-fg-faint: #a3a099;
+  --nx-border: #e4e2dd;
+  --nx-border-strong: #c9c6bf;
+
+  /* ---- accent (single spend; semantic colors are separate) ---- */
+  --nx-accent: #4f46e5;
+  --nx-accent-fg: #ffffff;
+  --nx-accent-soft: #eef1fe;
+
+  /* ---- semantic (state, never decoration) ---- */
+  --nx-ok: #15803d;
+  --nx-ok-soft: #e9f6ee;
+  --nx-warn: #b45309;
+  --nx-warn-soft: #fdf3e4;
+  --nx-danger: #b91c1c;
+  --nx-danger-soft: #fdeaea;
+
+  /* ---- type scale ---- */
+  --nx-font-sans: -apple-system, "SF Pro Text", "Segoe UI", Inter, system-ui, sans-serif;
+  --nx-font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --nx-text-title: 600 15px/1.35 var(--nx-font-sans);
+  --nx-text-body: 400 13px/1.5 var(--nx-font-sans);
+  --nx-text-meta: 400 12px/1.4 var(--nx-font-sans);
+  --nx-text-micro: 700 10px/1.2 var(--nx-font-sans);
+  --nx-tracking-micro: 0.06em;
+
+  /* ---- geometry ---- */
+  --nx-radius-s: 6px;
+  --nx-radius-m: 9px;
+  --nx-radius-l: 14px;
+  --nx-gap-1: 4px;
+  --nx-gap-2: 8px;
+  --nx-gap-3: 12px;
+  --nx-gap-4: 16px;
+  --nx-gap-5: 24px;
+
+  /* ---- elevation + motion ---- */
+  --nx-shadow-1: 0 1px 2px rgb(28 27 25 / 0.06);
+  --nx-shadow-2: 0 4px 14px rgb(28 27 25 / 0.10);
+  --nx-ease: cubic-bezier(0.2, 0, 0, 1);
+  --nx-t-fast: 120ms;
+  --nx-t-med: 200ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --nx-bg: #161513;
+    --nx-bg-raised: #1f1e1b;
+    --nx-bg-sunken: #121110;
+    --nx-fg: #eceae6;
+    --nx-fg-muted: #a29e96;
+    --nx-fg-faint: #6e6a63;
+    --nx-border: #2c2b27;
+    --nx-border-strong: #45433d;
+    --nx-accent: #818cf8;
+    --nx-accent-fg: #14131f;
+    --nx-accent-soft: #232438;
+    --nx-ok: #4ade80; --nx-ok-soft: #16281c;
+    --nx-warn: #fbbf24; --nx-warn-soft: #2c2313;
+    --nx-danger: #f87171; --nx-danger-soft: #2e1717;
+    --nx-shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --nx-shadow-2: 0 4px 14px rgb(0 0 0 / 0.5);
+  }
+}
+
+/* Explicit theme stamps beat the media query in BOTH directions. */
+:root[data-theme="light"] {
+  --nx-bg: #fafaf9; --nx-bg-raised: #ffffff; --nx-bg-sunken: #f2f1ef;
+  --nx-fg: #1c1b19; --nx-fg-muted: #6e6a63; --nx-fg-faint: #a3a099;
+  --nx-border: #e4e2dd; --nx-border-strong: #c9c6bf;
+  --nx-accent: #4f46e5; --nx-accent-fg: #ffffff; --nx-accent-soft: #eef1fe;
+  --nx-ok: #15803d; --nx-ok-soft: #e9f6ee;
+  --nx-warn: #b45309; --nx-warn-soft: #fdf3e4;
+  --nx-danger: #b91c1c; --nx-danger-soft: #fdeaea;
+  --nx-shadow-1: 0 1px 2px rgb(28 27 25 / 0.06);
+  --nx-shadow-2: 0 4px 14px rgb(28 27 25 / 0.10);
+}
+:root[data-theme="dark"] {
+  --nx-bg: #161513; --nx-bg-raised: #1f1e1b; --nx-bg-sunken: #121110;
+  --nx-fg: #eceae6; --nx-fg-muted: #a29e96; --nx-fg-faint: #6e6a63;
+  --nx-border: #2c2b27; --nx-border-strong: #45433d;
+  --nx-accent: #818cf8; --nx-accent-fg: #14131f; --nx-accent-soft: #232438;
+  --nx-ok: #4ade80; --nx-ok-soft: #16281c;
+  --nx-warn: #fbbf24; --nx-warn-soft: #2c2313;
+  --nx-danger: #f87171; --nx-danger-soft: #2e1717;
+  --nx-shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --nx-shadow-2: 0 4px 14px rgb(0 0 0 / 0.5);
+}
+
+/* ---- base ---- */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--nx-bg);
+  color: var(--nx-fg);
+  font: var(--nx-text-body);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 2px; border-radius: var(--nx-radius-s); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
