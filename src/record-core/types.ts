@@ -103,6 +103,10 @@ export interface FieldDef {
   /* AI-enrichment seam: the platform primitive that computes this field on demand
      (the UI shows a per-row Run affordance; the consumer wires the call). */
   primitive?: { kind: "task" | "workflow"; taskId?: string; id?: string; label?: string };
+  /* AI inline-suggestions seam (richText only): the AI task that proposes tracked
+     changes for this field. Present → the record page mounts the review surface
+     (editor + rail); absent → the field renders as a plain editor. */
+  suggestTaskId?: string;
 }
 
 export interface ObjectConfig {
@@ -118,6 +122,9 @@ export interface ObjectConfig {
      A per-user Columns menu overrides this at runtime (persisted per object). */
   columns?: string[];
   stageField?: string;       // select field key driving the kanban
+  /* select field key whose options form a record state-pipeline (rendered by the
+     suggestions surface Pipeline); the record's current value marks the active step */
+  pipelineField?: string;
   defaultView: "table" | "kanban";
   /* rows belong to a team: visibility + roles resolve per the caller's active team */
   teamScoped?: boolean;

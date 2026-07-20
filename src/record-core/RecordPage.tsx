@@ -20,6 +20,9 @@ import { formatCell } from "./DataTable";
 import type { AddressValue, FieldDef, FileMeta, FullNameValue, MoneyValue, ObjectConfig, RecordRow, RelationItem, TimelineEvent } from "./types";
 import { isMoneyValue, normalizeOption, optionValues, rowRefs } from "./types";
 import { NotionEditor, textToBlocks, type Block } from "./NotionEditor";
+import { useSuggestions, type Suggestion } from "./useSuggestions";
+import { SuggestionPanel } from "./SuggestionPanel";
+import { Pipeline } from "./Pipeline";
 import { OptionChip, activeFields } from "./options";
 import "./record-core.css";
 
@@ -708,8 +711,21 @@ function DateField({
    reseeds while a same-record poll does not). A subtle save-state chip mirrors the
    async status. Swap the local debounce for foundations' useDebouncedSave({saveState})
    when that lane lands — one debounce implementation, not two. */
-function RichTextField({ fieldKey, label, value, onSave }: {
+/* optional inline-suggestions surface — mounted only when the field config carries a
+   `suggestTaskId` AND the host supplied the `suggest` bundle. See RichTextField. */
+interface SuggestProps {
+  suggestionsValue: unknown;                          // row[`${field}__suggestions`]
+  requesting: boolean;                                // an AI request is in flight
+  readOnly?: boolean;
+  onRequest: () => void;                              // fire the AI task (host reloads → new changes flow in)
+  onPersist: (changes: Suggestion[]) => void;         // persist resolved statuses
+  pipelineStates?: string[];                          // config-declared states (Pipeline)
+  pipelineCurrent?: string;
+}
+
+function RichTextField({ fieldKey, label, value, onSave, suggest }: {
   fieldKey: string; label: string; value: unknown; onSave: (blocks: Block[]) => void;
+  suggest?: SuggestProps;
 }) {
   const [blocks, setBlocks] = React.useState<Block[]>(() => {
     const b = Array.isArray(value) ? (value as Block[]) : [];
@@ -718,27 +734,144 @@ function RichTextField({ fieldKey, label, value, onSave }: {
   const [saveState, setSaveState] = React.useState<"idle" | "saving" | "saved">("idle");
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-  const onChange = (next: Block[]) => {
+  const onChange = React.useCallback((next: Block[]) => {
     setBlocks(next);
     setSaveState("saving");
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => { onSave(next); setSaveState("saved"); }, 700);
-  };
+  }, [onSave]);
+
+  const saveChip = saveState !== "idle" && (
+    <span
+      data-testid={`richtext-save-${fieldKey}`}
+      data-state={saveState}
+      style={{ font: "var(--nx-text-meta)", color: "var(--nx-fg-faint)", alignSelf: "flex-end" }}
+    >
+      {saveState === "saving" ? "Saving…" : "Saved"}
+    </span>
+  );
+
+  // no suggestions configured → the plain editor, byte-for-byte unchanged
+  if (!suggest) {
+    return (
+      <span style={{ display: "flex", flexDirection: "column", gap: 4 }} data-testid={`field-${fieldKey}`} aria-label={label}>
+        <NotionEditor blocks={blocks} onChange={onChange} />
+        {saveChip}
+      </span>
+    );
+  }
   return (
-    <span style={{ display: "flex", flexDirection: "column", gap: 4 }} data-testid={`field-${fieldKey}`} aria-label={label}>
-      <NotionEditor blocks={blocks} onChange={onChange} />
-      {saveState !== "idle" && (
-        <span
-          data-testid={`richtext-save-${fieldKey}`}
-          data-state={saveState}
-          style={{ font: "var(--nx-text-meta)", color: "var(--nx-fg-faint)", alignSelf: "flex-end" }}
-        >
-          {saveState === "saving" ? "Saving…" : "Saved"}
-        </span>
-      )}
+    <SuggestionsSurface
+      fieldKey={fieldKey}
+      label={label}
+      blocks={blocks}
+      onBlocksChange={onChange}
+      saveChip={saveChip}
+      {...suggest}
+    />
+  );
+}
+
+/* editor + inline tracked changes + right-rail review panel + optional Pipeline. The
+   changes come from the server (row[`${field}__suggestions`]); the accept/reject engine
+   (useSuggestions) folds an accepted change into the document (through the editor's
+   debounced save) and persists resolved statuses through onPersist. Entity-agnostic —
+   every object-specific value (task id, states) arrives as a prop. */
+function SuggestionsSurface({
+  fieldKey, label, blocks, onBlocksChange, saveChip,
+  suggestionsValue, requesting, readOnly, onRequest, onPersist, pipelineStates, pipelineCurrent,
+}: SuggestProps & {
+  fieldKey: string; label: string; blocks: Block[];
+  onBlocksChange: (next: Block[]) => void; saveChip: React.ReactNode;
+}) {
+  const sigIds = (arr: Suggestion[] | undefined) => (arr ?? []).map((c) => c.id).join(",");
+  const [changes, setChanges] = React.useState<Suggestion[]>(() =>
+    Array.isArray(suggestionsValue) ? (suggestionsValue as Suggestion[]) : []);
+  // adopt a fresh server set when the id-set changes (a new request, or cleared);
+  // in-place status flips stay local-authoritative until persistence catches up
+  React.useEffect(() => {
+    const incoming = Array.isArray(suggestionsValue) ? (suggestionsValue as Suggestion[]) : [];
+    setChanges((prev) => (sigIds(incoming) !== sigIds(prev) ? incoming : prev));
+  }, [suggestionsValue]);
+  const [hovered, setHovered] = React.useState<string | null>(null);
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+
+  const onChangesChange = React.useCallback((next: Suggestion[]) => {
+    setChanges(next);
+    onPersist(next);
+  }, [onPersist]);
+  const eng = useSuggestions(blocks, onBlocksChange, changes, onChangesChange);
+
+  // clicking a card scrolls to + highlights its inline widget in the editor
+  const focus = (id: string) => {
+    setHovered(id);
+    const el = rootRef.current?.querySelector(`.ne-chg[data-cid="${id}"]`) as HTMLElement | null;
+    if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.remove("is-pulse"); void el.offsetWidth; el.classList.add("is-pulse"); }
+  };
+
+  const hasPanel = changes.length > 0 && !readOnly;
+  const pipeline = pipelineStates && pipelineStates.length && pipelineCurrent;
+
+  return (
+    <span style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid={`field-${fieldKey}`} aria-label={label}>
+      <div className="nxSugSurface-bar">
+        {pipeline ? <Pipeline states={pipelineStates!} current={pipelineCurrent!} inProgress={requesting ? pipelineCurrent : null} /> : <span />}
+        {!readOnly && (
+          <button
+            type="button"
+            className="nxSugSurface-req"
+            data-testid="suggest-request"
+            disabled={requesting}
+            onClick={onRequest}
+            title="Run the AI suggestion task against the current draft"
+          >
+            <Sparkles size={13} /> {requesting ? "Suggesting…" : changes.length ? "Re-run suggestions" : "Request suggestions"}
+          </button>
+        )}
+      </div>
+      <div className={`nxSugSurface${hasPanel ? " has-panel" : ""}`} ref={rootRef}>
+        <div className="nxSugSurface-doc">
+          <NotionEditor
+            blocks={blocks}
+            onChange={onBlocksChange}
+            readOnly={readOnly}
+            changes={changes}
+            hoveredChange={hovered}
+            onHoverChange={setHovered}
+          />
+          {saveChip}
+        </div>
+        {hasPanel && (
+          <SuggestionPanel
+            changes={changes}
+            hovered={hovered}
+            onHover={setHovered}
+            onFocus={focus}
+            onAccept={eng.accept}
+            onReject={eng.reject}
+            onUndo={eng.undo}
+            onAcceptAll={eng.acceptAll}
+            onRejectAll={eng.rejectAll}
+          />
+        )}
+      </div>
+      <style>{SUG_SURFACE_CSS}</style>
     </span>
   );
 }
+
+const SUG_SURFACE_CSS = `
+.nxSugSurface-bar{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}
+.nxSugSurface-req{display:inline-flex;align-items:center;gap:7px;background:var(--nx-bg-raised);color:var(--nx-accent);
+  border:1px solid var(--nx-accent);padding:7px 13px;font:var(--nx-text-micro);letter-spacing:var(--nx-tracking-micro);
+  text-transform:uppercase;cursor:pointer;border-radius:var(--nx-radius-s);transition:background var(--nx-t-fast),transform var(--nx-t-fast)}
+.nxSugSurface-req:hover:not(:disabled){background:var(--nx-accent-soft);transform:translateY(-1px)}
+.nxSugSurface-req:disabled{opacity:.55;cursor:default}
+.nxSugSurface{display:block}
+.nxSugSurface.has-panel{display:grid;grid-template-columns:minmax(0,1fr) min(340px,34vw);align-items:start;gap:0}
+.nxSugSurface-doc{min-width:0;display:flex;flex-direction:column;gap:4px}
+@media(max-width:820px){.nxSugSurface.has-panel{grid-template-columns:1fr}}
+`;
 
 /* RecordPage — header (name + stage) · left fields panel (inline edit) ·
    right tabs (Timeline / Notes). The anatomy is the record-system convention:
@@ -765,6 +898,7 @@ export function RecordPage({
   watch,
   pin,
   mentionOptions = [],
+  suggest,
 }: {
   config: ObjectConfig;
   row: RecordRow;
@@ -805,6 +939,14 @@ export function RecordPage({
   pin?: { on: boolean; onToggle: (next: boolean) => void };
   /* names offered by the @-autocomplete in the note composer */
   mentionOptions?: string[];
+  /* AI inline-suggestions (tracked changes) for richText fields carrying a
+     `suggestTaskId`. Supplied → those fields mount the review surface (editor +
+     rail panel + Request button); absent → richText renders as a plain editor. */
+  suggest?: {
+    requestingField?: string | null;   // the field whose AI request is in flight
+    onRequest: (fieldKey: string) => void;
+    onPersist: (fieldKey: string, changes: Suggestion[]) => void;
+  };
 }) {
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
   const stageField = config.fields.find((f) => f.key === config.stageField);
@@ -995,6 +1137,17 @@ export function RecordPage({
                         label={f.label}
                         value={row[f.key]}
                         onSave={(nextBlocks) => onPatch(row.id, { [f.key]: nextBlocks })}
+                        suggest={suggest && f.suggestTaskId ? {
+                          suggestionsValue: row[`${f.key}__suggestions`],
+                          requesting: suggest.requestingField === f.key,
+                          readOnly,
+                          onRequest: () => suggest.onRequest(f.key),
+                          onPersist: (changes) => suggest.onPersist(f.key, changes),
+                          pipelineStates: config.pipelineField
+                            ? optionValues(config.fields.find((x) => x.key === config.pipelineField)?.options)
+                            : undefined,
+                          pipelineCurrent: config.pipelineField ? String(row[config.pipelineField] ?? "") : undefined,
+                        } : undefined}
                       />
                     ) : f.type === "array" ? (
                       <ArrayField fieldKey={f.key} label={f.label} value={row[f.key]} onChange={(vals) => onPatch(row.id, { [f.key]: vals })} />
