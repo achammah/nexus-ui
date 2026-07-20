@@ -25,7 +25,23 @@ export const emberSkin: Skin = {
   logo: { mark: "■", markBg: "#FF7900", markFg: "#000000" },
 };
 
+/* Warm option-chip palette — the 9 select/multiselect/kanban chip colors, warmed
+   (indigo/amber/terracotta family). A SKIN-OVERRIDABLE preset only: the default token
+   palette (cool) is unchanged. Light-mode override only; dark keeps the shared ramp.
+   Compose it into a brand skin via `overrides.light`, or use the `warm-opt` preset. */
+export const warmOptPalette: Record<string, string> = {
+  "--nx-opt-gray": "#6B6860", "--nx-opt-blue": "#5A47F5", "--nx-opt-green": "#1E8A4E",
+  "--nx-opt-yellow": "#B67A00", "--nx-opt-orange": "#C4632A", "--nx-opt-red": "#C0392B",
+  "--nx-opt-purple": "#6B4FC4", "--nx-opt-pink": "#C43C86", "--nx-opt-teal": "#1C8FA8",
+};
+
+export const warmOptSkin: Skin = {
+  name: "warm-opt",
+  overrides: { light: warmOptPalette },
+};
+
 export const skinPresets: Record<string, Skin> = {
   nexus: nexusSkin,
   ember: emberSkin,
+  "warm-opt": warmOptSkin,
 };
