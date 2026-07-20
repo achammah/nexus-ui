@@ -57,6 +57,12 @@
 .nxFieldList { display: flex; flex-direction: column; }
 .nxFieldRow { display: grid; grid-template-columns: 110px 1fr; gap: 10px; padding: 7px 12px; align-items: center; border-bottom: 1px solid var(--nx-border); }
 .nxFieldRow:last-child { border-bottom: 0; }
+/* a block field (richText) spans the whole details column — label above, editor below
+   at full usable width — instead of being crammed into the narrow value half. */
+.nxFieldRow--block { display: block; }
+.nxFieldRow--block .nxFieldLabel { display: block; margin-bottom: 6px; }
+.nxFieldRow--block .nxFieldValue { display: block; }
+.nxFieldRow--block .nxFieldValue > :first-child { flex: 1 1 auto; }
 .nxFieldLabel { color: var(--nx-fg-muted); font: var(--nx-text-meta); }
 .nxFieldValue input, .nxFieldValue select { width: 100%; }
 .nxTimeline { display: flex; flex-direction: column; }
@@ -78,6 +84,17 @@
 @media (max-width: 760px) {
   .nxRecord { grid-template-columns: 1fr; }
   .nxKCol { min-width: 84vw; width: 84vw; }
+}
+
+/* ---------- Record page — DOCUMENT layout (Notion-style) ---------- */
+/* wide hero editor as the main column + a compact sidebar (other fields, related,
+   timeline/notes/files). The hero card holds the editor; on narrow it stacks. */
+.nxRecordDoc { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--nx-gap-4); align-items: start; min-height: 0; }
+.nxRecordDoc-main { min-width: 0; }
+.nxRecordDoc-side { display: flex; flex-direction: column; gap: var(--nx-gap-4); min-width: 0; }
+.nxRecordDoc-hero { padding: 18px 22px 22px; min-width: 0; }
+@media (max-width: 900px) {
+  .nxRecordDoc { grid-template-columns: 1fr; }
 }
 
 /* Timeline event icon (replaces the plain dot; per-kind glyph) */

@@ -112,6 +112,14 @@ export interface FieldDef {
 export interface ObjectConfig {
   /* how a row click opens records: side-peek over the list (default) or full page */
   openIn?: "peek" | "page";
+  /* record-page shape (default "standard"):
+     - "standard": the fields panel + timeline/notes/files tabs. A richText field
+       spans the full details column and renders cleanly at any width (incl. the peek).
+     - "document": a Notion-style full page — the object's primary richText field
+       becomes a WIDE hero editor as the main column, and the other fields +
+       timeline/notes/files move into a compact sidebar. A "document" object
+       defaults to opening in FULL PAGE (set `openIn` to override). */
+  recordLayout?: "standard" | "document";
   key: string;               // "companies"
   label: string;             // "Companies"
   labelOne: string;          // "Company"

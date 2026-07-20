@@ -813,7 +813,7 @@ function SuggestionsSurface({
   const pipeline = pipelineStates && pipelineStates.length && pipelineCurrent;
 
   return (
-    <span style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid={`field-${fieldKey}`} aria-label={label}>
+    <span className="nxSugSurface-host" style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid={`field-${fieldKey}`} aria-label={label}>
       <div className="nxSugSurface-bar">
         {pipeline ? <Pipeline states={pipelineStates!} current={pipelineCurrent!} inProgress={requesting ? pipelineCurrent : null} /> : <span />}
         {!readOnly && (
@@ -867,9 +867,18 @@ const SUG_SURFACE_CSS = `
   text-transform:uppercase;cursor:pointer;border-radius:var(--nx-radius-s);transition:background var(--nx-t-fast),transform var(--nx-t-fast)}
 .nxSugSurface-req:hover:not(:disabled){background:var(--nx-accent-soft);transform:translateY(-1px)}
 .nxSugSurface-req:disabled{opacity:.55;cursor:default}
+/* the field is its OWN size-container: the editor+rail grid responds to the space
+   the field actually has (peek, sidebar, full page), not the viewport — so a narrow
+   peek stacks the rail under the editor instead of crushing the doc column to zero
+   (the "one letter per line" collapse). */
+.nxSugSurface-host{container-type:inline-size}
 .nxSugSurface{display:block}
-.nxSugSurface.has-panel{display:grid;grid-template-columns:minmax(0,1fr) min(340px,34vw);align-items:start;gap:0}
+/* the doc column keeps a floor width; when editor+rail can't both fit, the container
+   query below stacks them before the floor ever forces an overflow */
+.nxSugSurface.has-panel{display:grid;grid-template-columns:minmax(260px,1fr) min(340px,34vw);align-items:start;gap:0}
 .nxSugSurface-doc{min-width:0;display:flex;flex-direction:column;gap:4px}
+@container (max-width:640px){.nxSugSurface.has-panel{grid-template-columns:1fr}}
+/* viewport fallback for engines without container queries */
 @media(max-width:820px){.nxSugSurface.has-panel{grid-template-columns:1fr}}
 `;
 
@@ -969,9 +978,475 @@ export function RecordPage({
   const [actText, setActText] = React.useState("");
   const fileInput = React.useRef<HTMLInputElement>(null);
 
-  return (
-    <div data-testid={`record-${row.id}`}>
-      <div className="nxRecordHead">
+  const layout = config.recordLayout ?? "standard";
+  // document layout: the first active richText field becomes the wide hero editor
+  const heroField =
+    layout === "document" ? activeFields(config.fields).find((f) => f.type === "richText") : undefined;
+
+  /* the inline editor for ONE field — the config-driven type switch. Identical
+     output (+ testids) in both layouts; the hero renders it full-width, the
+     details rows render it inside a label/value row. */
+  const fieldEditor = (f: FieldDef): React.ReactNode => (
+    <>
+      {readOnly ? (
+        <span data-testid={`field-${f.key}`}>{formatCell(row[f.key], f.type) || "—"}</span>
+      ) : f.type === "user" ? (
+        <RelationPicker
+          fieldKey={f.key}
+          label={f.label}
+          value={row[f.key]}
+          options={userOptions}
+          onPick={(v) => onPatch(row.id, { [f.key]: v })}
+        />
+      ) : f.type === "multiselect" ? (
+        <MultiSelectField
+          fieldKey={f.key}
+          label={f.label}
+          value={row[f.key]}
+          options={f.options ?? []}
+          onChange={(vals) => onPatch(row.id, { [f.key]: vals })}
+        />
+      ) : f.type === "relation" && f.multiple ? (
+        <MultiRelationField
+          fieldKey={f.key}
+          label={f.label}
+          attached={attachedItems(f)}
+          items={relationItems?.[f.key] ?? []}
+          grouped={!!f.relationTargets}
+          onCommit={(list) =>
+            onPatch(row.id, { [f.key]: list.map((x) => (f.relationTargets ? { object: x.type!, id: x.id } : x.id)) })
+          }
+        />
+      ) : f.type === "relation" && relationItems?.[f.key] ? (
+        <RelationPicker
+          fieldKey={f.key}
+          label={f.label}
+          value={row[f.key]}
+          items={relationItems[f.key]}
+          onPickItem={(item) =>
+            onPatch(row.id, { [f.key]: f.relationTargets ? { object: item.type!, id: item.id } : item.id })
+          }
+          onJump={(() => {
+            const ref = rowRefs(row)[f.key];
+            const target = f.relation ?? (typeof ref === "object" && !Array.isArray(ref) ? ref.object : undefined);
+            return onOpenRelation && target && String(row[f.key] ?? "")
+              ? () => onOpenRelation(target, String(row[f.key] ?? ""))
+              : undefined;
+          })()}
+          onCreate={onCreateRelation && !f.relationTargets ? (title) => onCreateRelation(f.key, title) : undefined}
+        />
+      ) : f.type === "relation" ? (
+        <RelationPicker
+          fieldKey={f.key}
+          label={f.label}
+          value={row[f.key]}
+          options={relationOptions[f.key] ?? []}
+          onPick={(v) => onPatch(row.id, { [f.key]: v })}
+          onJump={
+            onOpenRelation && f.relation
+              ? () => onOpenRelation(f.relation!, String(row[f.key] ?? ""))
+              : undefined
+          }
+          onCreate={onCreateRelation ? (title) => onCreateRelation(f.key, title) : undefined}
+        />
+      ) : f.type === "date" ? (
+        <DateField
+          fieldKey={f.key}
+          label={f.label}
+          value={row[f.key]}
+          onPick={(iso) => onPatch(row.id, { [f.key]: iso })}
+        />
+      ) : f.type === "boolean" ? (
+        <label style={{ display: "inline-flex", gap: 8, alignItems: "center", padding: "4px 0" }}>
+          <input
+            type="checkbox"
+            checked={row[f.key] === true}
+            data-testid={`field-${f.key}`}
+            onChange={(e) => onPatch(row.id, { [f.key]: e.target.checked })}
+          />
+          <span style={{ font: "var(--nx-text-meta)", color: "var(--nx-fg-muted)" }}>{row[f.key] === true ? "Yes" : "No"}</span>
+        </label>
+      ) : f.type === "rating" ? (
+        <span data-testid={`field-${f.key}`} style={{ letterSpacing: 2, cursor: "pointer", color: "var(--nx-warn)", fontSize: 15 }}>
+          {Array.from({ length: f.scale ?? 5 }, (_, i) => (
+            <span key={i} data-testid={`field-${f.key}-star-${i + 1}`}
+              onClick={() => onPatch(row.id, { [f.key]: i + 1 === row[f.key] ? 0 : i + 1 })}>
+              {i < (typeof row[f.key] === "number" ? (row[f.key] as number) : 0) ? "★" : "☆"}
+            </span>
+          ))}
+        </span>
+      ) : f.type === "dateTime" ? (
+        <input
+          className="nxCellEdit"
+          type="datetime-local"
+          key={`${f.key}:${String(row[f.key] ?? "")}`}
+          defaultValue={row[f.key] ? new Date(String(row[f.key])).toISOString().slice(0, 16) : ""}
+          aria-label={f.label}
+          data-testid={`field-${f.key}`}
+          onBlur={(e) => {
+            const v = e.target.value ? new Date(e.target.value).toISOString() : "";
+            if (v !== row[f.key]) onPatch(row.id, { [f.key]: v });
+          }}
+        />
+      ) : f.type === "longText" ? (
+        <textarea
+          className="nxCellEdit"
+          rows={3}
+          key={`${f.key}:${String(row[f.key] ?? "")}`}
+          defaultValue={String(row[f.key] ?? "")}
+          aria-label={f.label}
+          data-testid={`field-${f.key}`}
+          style={{ resize: "vertical", font: "var(--nx-text-body)" }}
+          onBlur={(e) => { if (e.target.value !== row[f.key]) onPatch(row.id, { [f.key]: e.target.value }); }}
+        />
+      ) : f.type === "richText" ? (
+        <RichTextField
+          /* keyed by row id → switching records reseeds, but a same-record
+             poll keeps the same key and never clobbers live edits */
+          key={`${row.id}:${f.key}:richtext`}
+          fieldKey={f.key}
+          label={f.label}
+          value={row[f.key]}
+          onSave={(nextBlocks) => onPatch(row.id, { [f.key]: nextBlocks })}
+          suggest={suggest && f.suggestTaskId ? {
+            suggestionsValue: row[`${f.key}__suggestions`],
+            requesting: suggest.requestingField === f.key,
+            readOnly,
+            onRequest: () => suggest.onRequest(f.key),
+            onPersist: (changes) => suggest.onPersist(f.key, changes),
+            pipelineStates: config.pipelineField
+              ? optionValues(config.fields.find((x) => x.key === config.pipelineField)?.options)
+              : undefined,
+            pipelineCurrent: config.pipelineField ? String(row[config.pipelineField] ?? "") : undefined,
+          } : undefined}
+        />
+      ) : f.type === "array" ? (
+        <ArrayField fieldKey={f.key} label={f.label} value={row[f.key]} onChange={(vals) => onPatch(row.id, { [f.key]: vals })} />
+      ) : f.type === "json" ? (
+        <textarea
+          className="nxCellEdit"
+          rows={3}
+          key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
+          defaultValue={row[f.key] == null ? "" : JSON.stringify(row[f.key], null, 2)}
+          aria-label={f.label}
+          data-testid={`field-${f.key}`}
+          style={{ resize: "vertical", font: "12px/1.5 var(--nx-font-mono)" }}
+          onBlur={(e) => {
+            if (!e.target.value.trim()) return onPatch(row.id, { [f.key]: null });
+            try { onPatch(row.id, { [f.key]: JSON.parse(e.target.value) }); }
+            catch { e.target.value = row[f.key] == null ? "" : JSON.stringify(row[f.key], null, 2); }
+          }}
+        />
+      ) : f.type === "select" ? (
+        <select
+          className="nxCellEdit"
+          value={String(row[f.key] ?? "")}
+          aria-label={f.label}
+          data-testid={`field-${f.key}`}
+          onChange={(e) => onPatch(row.id, { [f.key]: e.target.value })}
+        >
+          {optionValues(f.options).map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+      ) : f.type === "money" ? (
+        <MoneyField
+          key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
+          fieldKey={f.key}
+          label={f.label}
+          value={row[f.key]}
+          onSave={(v) => onPatch(row.id, { [f.key]: v })}
+        />
+      ) : f.type === "emails" || f.type === "phones" || f.type === "links" ? (
+        <ListField
+          fieldKey={f.key}
+          label={f.label}
+          value={row[f.key]}
+          placeholder={f.type === "emails" ? "Add an email…" : f.type === "phones" ? "Add a phone…" : "Add a URL…"}
+          validate={listValidators[f.type](f.label)}
+          onSave={(vals) => onPatch(row.id, { [f.key]: vals })}
+        />
+      ) : f.type === "address" ? (
+        <AddressField
+          key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
+          fieldKey={f.key}
+          label={f.label}
+          value={row[f.key]}
+          onSave={(v) => onPatch(row.id, { [f.key]: v })}
+        />
+      ) : f.type === "fullName" ? (
+        <FullNameField
+          key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
+          fieldKey={f.key}
+          label={f.label}
+          value={row[f.key]}
+          onSave={(v) => onPatch(row.id, { [f.key]: v })}
+        />
+      ) : (
+        <input
+          className="nxCellEdit"
+          /* uncontrolled for typing; the key remounts it when the value
+             changes EXTERNALLY (enrich, another tab) so it re-renders */
+          key={`${f.key}:${String(row[f.key] ?? "")}`}
+          defaultValue={String(row[f.key] ?? "")}
+          aria-label={f.label}
+          data-testid={`field-${f.key}`}
+          onBlur={(e) => {
+            const v = f.type === "number" || f.type === "currency" ? Number(e.target.value) : e.target.value;
+            if (v !== row[f.key]) onPatch(row.id, { [f.key]: v });
+          }}
+        />
+      )}
+      {f.primitive && onEnrich && !readOnly && (
+        enrichingKey === f.key ? (
+          <ThinkingDots label={`Enriching ${f.label}`} data-testid={`enriching-${f.key}`} />
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Sparkles size={12} />}
+            aria-label={`Enrich ${f.label}${f.primitive.label ? ` via ${f.primitive.label}` : ""}`}
+            data-testid={`enrich-${f.key}`}
+            onClick={() => onEnrich(f.key)}
+          />
+        )
+      )}
+    </>
+  );
+
+  /* one label/value row in the Details card. A richText field spans the full
+     column (never crammed into the value half) so its editor stays readable. */
+  const fieldRow = (f: FieldDef): React.ReactNode => (
+    <div className={`nxFieldRow${f.type === "richText" ? " nxFieldRow--block" : ""}`} key={f.key}>
+      <span className="nxFieldLabel">{f.label}</span>
+      <span className="nxFieldValue">{fieldEditor(f)}</span>
+    </div>
+  );
+
+  const detailsCard = (fields: FieldDef[]): React.ReactNode => (
+    <div className="nxCard">
+      <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--nx-border)" }}>
+        <Micro>Details</Micro>
+      </div>
+      <div className="nxFieldList">{fields.map((f) => fieldRow(f))}</div>
+    </div>
+  );
+
+  const relatedCards = related.map((rl) => (
+    <div className="nxCard" key={rl.key} data-testid={`related-${rl.key}`}>
+      <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--nx-border)", display: "flex", justifyContent: "space-between" }}>
+        <Micro>{rl.label}</Micro>
+        <span className="nxCount">{rl.rows.length}</span>
+      </div>
+      <div className="nxFieldList">
+        {rl.rows.length === 0 && (
+          <div style={{ padding: "10px 12px", color: "var(--nx-fg-faint)", font: "var(--nx-text-meta)" }}>None yet.</div>
+        )}
+        {rl.rows.slice(0, 6).map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            className="nxFieldRow"
+            data-testid={`related-${rl.key}-${r.id}`}
+            style={{ background: "none", border: 0, cursor: "pointer", width: "100%", gridTemplateColumns: "1fr auto" }}
+            onClick={() => rl.onOpen(r.id)}
+          >
+            <span className="nxRowLink" style={{ textAlign: "left" }}>{String(r[rl.primaryKey] ?? r.id)}</span>
+            {rl.metaKey && <span className="nxFieldLabel">{String(r[rl.metaKey] ?? "")}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  ));
+
+  const tabsCard = (
+    <div className="nxCard" style={{ padding: "8px 16px 16px" }}>
+      <Tabs
+        value={tab}
+        onValueChange={setTab}
+        tabs={[
+          { value: "timeline", label: "Timeline" },
+          { value: "notes", label: "Notes" },
+          ...(files ? [{ value: "files", label: `Files${files.list.length ? ` (${files.list.length})` : ""}` }] : []),
+        ]}
+      >
+        <TabPanel value="timeline">
+          {onLogActivity && !readOnly && (
+            <div style={{ display: "flex", gap: 8, margin: "14px 0", alignItems: "center", flexWrap: "wrap" }} data-testid="activity-composer">
+              <div className="nxSeg">
+                {ACTIVITY_KINDS.map((k) => (
+                  <button
+                    key={k.key}
+                    type="button"
+                    className="nxSegBtn"
+                    data-active={actKind === k.key}
+                    data-testid={`act-kind-${k.key}`}
+                    onClick={() => setActKind(k.key)}
+                  >
+                    {k.icon} {k.label}
+                  </button>
+                ))}
+              </div>
+              <input
+                className="nxInput"
+                style={{ flex: 1, minWidth: 160 }}
+                placeholder={`Log a ${actKind}…`}
+                value={actText}
+                data-testid="act-input"
+                onChange={(e) => setActText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && actText.trim()) {
+                    onLogActivity(actKind, actText.trim());
+                    setActText("");
+                  }
+                }}
+              />
+              <Button
+                variant="primary"
+                data-testid="act-log"
+                onClick={() => {
+                  if (actText.trim()) {
+                    onLogActivity(actKind, actText.trim());
+                    setActText("");
+                  }
+                }}
+              >
+                Log
+              </Button>
+            </div>
+          )}
+          <div className="nxTimeline" data-testid="timeline">
+            {timeline.length === 0 && <div style={{ color: "var(--nx-fg-faint)", padding: 16 }}>No activity yet.</div>}
+            {timeline.map((ev) => {
+              const ic = evIcon(ev);
+              return (
+                <div className="nxTlItem" key={ev.id}>
+                  <div className="nxTlRail"><span className="nxTlIcon" data-testid={ic.tid}>{ic.node}</span></div>
+                  <div className="nxTlBody">
+                    <div className="nxTlSummary">{ev.summary}</div>
+                    <div className="nxTlMeta">{new Date(ev.ts).toLocaleString()} {ev.actor ? `· ${ev.actor}` : ""}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </TabPanel>
+        {files && (
+          <TabPanel value="files">
+            {!readOnly && (
+            <div style={{ display: "flex", margin: "14px 0" }}>
+              <input
+                ref={fileInput}
+                type="file"
+                hidden
+                data-testid="file-input"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  prepareUpload(f).then((payload) => {
+                    files.onUpload(payload);
+                    if (fileInput.current) fileInput.current.value = "";
+                  });
+                }}
+              />
+              <Button variant="primary" icon={<Upload size={13} />} data-testid="file-upload" onClick={() => fileInput.current?.click()}>
+                Upload file
+              </Button>
+            </div>
+            )}
+            <div className="nxFieldList" data-testid="files-list">
+              {files.list.length === 0 && (
+                <div style={{ padding: 16, color: "var(--nx-fg-faint)" }}>No files yet.</div>
+              )}
+              {files.list.map((f) => (
+                <div className="nxFieldRow" key={f.id} data-testid={`file-row-${f.id}`} style={{ gridTemplateColumns: "auto 1fr auto auto" }}>
+                  <span className="nxTlIcon"><Paperclip size={11} /></span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                  <span className="nxFieldLabel">{formatBytes(f.size)} · {new Date(f.ts).toLocaleDateString()}</span>
+                  <a
+                    className="nxRowLink"
+                    href={files.downloadHref(f.id)}
+                    download={f.name}
+                    data-testid={`file-dl-${f.id}`}
+                  >
+                    Download
+                  </a>
+                </div>
+              ))}
+            </div>
+          </TabPanel>
+        )}
+        <TabPanel value="notes">
+          {!readOnly && (
+          <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
+            <input
+              className="nxInput"
+              placeholder="Add a note… (@ mentions notify)"
+              value={note}
+              data-testid="note-input"
+              onChange={(e) => setNote(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && note.trim()) {
+                  onAddNote(note.trim());
+                  setNote("");
+                }
+              }}
+            />
+            <Button
+              variant="primary"
+              data-testid="note-add"
+              onClick={() => {
+                if (note.trim()) {
+                  onAddNote(note.trim());
+                  setNote("");
+                }
+              }}
+            >
+              Add
+            </Button>
+          </div>
+          )}
+          {!readOnly && (() => {
+            const m = note.match(/@([\w]*)$/);
+            if (!m) return null;
+            const frag = m[1].toLowerCase();
+            const hits = mentionOptions.filter((n) => n.toLowerCase().startsWith(frag)).slice(0, 5);
+            if (hits.length === 0) return null;
+            return (
+              <div style={{ display: "flex", gap: 6, margin: "-6px 0 10px", flexWrap: "wrap" }} data-testid="mention-suggest">
+                {hits.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className="nxSegBtn"
+                    style={{ border: "1px solid var(--nx-border)", borderRadius: 999 }}
+                    data-testid={`mention-${n.replaceAll(/\W+/g, "-").toLowerCase()}`}
+                    onClick={() => setNote(note.replace(/@[\w]*$/, `@${n} `))}
+                  >
+                    @{n}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
+          <div className="nxTimeline" data-testid="notes-list">
+            {timeline.filter((t) => t.kind === "note").map((ev) => (
+              <div className="nxTlItem" key={ev.id}>
+                <div className="nxTlRail"><span className="nxTlDot" /></div>
+                <div className="nxTlBody">
+                  <div className="nxTlSummary">{ev.summary}</div>
+                  <div className="nxTlMeta">{new Date(ev.ts).toLocaleString()}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </TabPanel>
+      </Tabs>
+    </div>
+  );
+
+  const head = (
+    <div className="nxRecordHead">
         <Button variant="ghost" size="sm" icon={<ArrowLeft size={14} />} onClick={onBack} aria-label="Back" />
         <h1 className="nxRecordName" data-testid="record-name">{formatCell(row[primary.key], primary.type) || "—"}</h1>
         {stageField && (
@@ -1005,458 +1480,42 @@ export function RecordPage({
           </Button>
         )}
       </div>
+  );
 
-      <div className="nxRecord">
-        <div className="nxRecordSide">
-          <div className="nxCard">
-            <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--nx-border)" }}>
-              <Micro>Details</Micro>
-            </div>
-            <div className="nxFieldList">
-              {activeFields(config.fields).map((f) => (
-                <div className="nxFieldRow" key={f.key}>
-                  <span className="nxFieldLabel">{f.label}</span>
-                  <span className="nxFieldValue">
-                    {readOnly ? (
-                      <span data-testid={`field-${f.key}`}>{formatCell(row[f.key], f.type) || "—"}</span>
-                    ) : f.type === "user" ? (
-                      <RelationPicker
-                        fieldKey={f.key}
-                        label={f.label}
-                        value={row[f.key]}
-                        options={userOptions}
-                        onPick={(v) => onPatch(row.id, { [f.key]: v })}
-                      />
-                    ) : f.type === "multiselect" ? (
-                      <MultiSelectField
-                        fieldKey={f.key}
-                        label={f.label}
-                        value={row[f.key]}
-                        options={f.options ?? []}
-                        onChange={(vals) => onPatch(row.id, { [f.key]: vals })}
-                      />
-                    ) : f.type === "relation" && f.multiple ? (
-                      <MultiRelationField
-                        fieldKey={f.key}
-                        label={f.label}
-                        attached={attachedItems(f)}
-                        items={relationItems?.[f.key] ?? []}
-                        grouped={!!f.relationTargets}
-                        onCommit={(list) =>
-                          onPatch(row.id, { [f.key]: list.map((x) => (f.relationTargets ? { object: x.type!, id: x.id } : x.id)) })
-                        }
-                      />
-                    ) : f.type === "relation" && relationItems?.[f.key] ? (
-                      <RelationPicker
-                        fieldKey={f.key}
-                        label={f.label}
-                        value={row[f.key]}
-                        items={relationItems[f.key]}
-                        onPickItem={(item) =>
-                          onPatch(row.id, { [f.key]: f.relationTargets ? { object: item.type!, id: item.id } : item.id })
-                        }
-                        onJump={(() => {
-                          const ref = rowRefs(row)[f.key];
-                          const target = f.relation ?? (typeof ref === "object" && !Array.isArray(ref) ? ref.object : undefined);
-                          return onOpenRelation && target && String(row[f.key] ?? "")
-                            ? () => onOpenRelation(target, String(row[f.key] ?? ""))
-                            : undefined;
-                        })()}
-                        onCreate={onCreateRelation && !f.relationTargets ? (title) => onCreateRelation(f.key, title) : undefined}
-                      />
-                    ) : f.type === "relation" ? (
-                      <RelationPicker
-                        fieldKey={f.key}
-                        label={f.label}
-                        value={row[f.key]}
-                        options={relationOptions[f.key] ?? []}
-                        onPick={(v) => onPatch(row.id, { [f.key]: v })}
-                        onJump={
-                          onOpenRelation && f.relation
-                            ? () => onOpenRelation(f.relation!, String(row[f.key] ?? ""))
-                            : undefined
-                        }
-                        onCreate={onCreateRelation ? (title) => onCreateRelation(f.key, title) : undefined}
-                      />
-                    ) : f.type === "date" ? (
-                      <DateField
-                        fieldKey={f.key}
-                        label={f.label}
-                        value={row[f.key]}
-                        onPick={(iso) => onPatch(row.id, { [f.key]: iso })}
-                      />
-                    ) : f.type === "boolean" ? (
-                      <label style={{ display: "inline-flex", gap: 8, alignItems: "center", padding: "4px 0" }}>
-                        <input
-                          type="checkbox"
-                          checked={row[f.key] === true}
-                          data-testid={`field-${f.key}`}
-                          onChange={(e) => onPatch(row.id, { [f.key]: e.target.checked })}
-                        />
-                        <span style={{ font: "var(--nx-text-meta)", color: "var(--nx-fg-muted)" }}>{row[f.key] === true ? "Yes" : "No"}</span>
-                      </label>
-                    ) : f.type === "rating" ? (
-                      <span data-testid={`field-${f.key}`} style={{ letterSpacing: 2, cursor: "pointer", color: "var(--nx-warn)", fontSize: 15 }}>
-                        {Array.from({ length: f.scale ?? 5 }, (_, i) => (
-                          <span key={i} data-testid={`field-${f.key}-star-${i + 1}`}
-                            onClick={() => onPatch(row.id, { [f.key]: i + 1 === row[f.key] ? 0 : i + 1 })}>
-                            {i < (typeof row[f.key] === "number" ? (row[f.key] as number) : 0) ? "★" : "☆"}
-                          </span>
-                        ))}
-                      </span>
-                    ) : f.type === "dateTime" ? (
-                      <input
-                        className="nxCellEdit"
-                        type="datetime-local"
-                        key={`${f.key}:${String(row[f.key] ?? "")}`}
-                        defaultValue={row[f.key] ? new Date(String(row[f.key])).toISOString().slice(0, 16) : ""}
-                        aria-label={f.label}
-                        data-testid={`field-${f.key}`}
-                        onBlur={(e) => {
-                          const v = e.target.value ? new Date(e.target.value).toISOString() : "";
-                          if (v !== row[f.key]) onPatch(row.id, { [f.key]: v });
-                        }}
-                      />
-                    ) : f.type === "longText" ? (
-                      <textarea
-                        className="nxCellEdit"
-                        rows={3}
-                        key={`${f.key}:${String(row[f.key] ?? "")}`}
-                        defaultValue={String(row[f.key] ?? "")}
-                        aria-label={f.label}
-                        data-testid={`field-${f.key}`}
-                        style={{ resize: "vertical", font: "var(--nx-text-body)" }}
-                        onBlur={(e) => { if (e.target.value !== row[f.key]) onPatch(row.id, { [f.key]: e.target.value }); }}
-                      />
-                    ) : f.type === "richText" ? (
-                      <RichTextField
-                        /* keyed by row id → switching records reseeds, but a same-record
-                           poll keeps the same key and never clobbers live edits */
-                        key={`${row.id}:${f.key}:richtext`}
-                        fieldKey={f.key}
-                        label={f.label}
-                        value={row[f.key]}
-                        onSave={(nextBlocks) => onPatch(row.id, { [f.key]: nextBlocks })}
-                        suggest={suggest && f.suggestTaskId ? {
-                          suggestionsValue: row[`${f.key}__suggestions`],
-                          requesting: suggest.requestingField === f.key,
-                          readOnly,
-                          onRequest: () => suggest.onRequest(f.key),
-                          onPersist: (changes) => suggest.onPersist(f.key, changes),
-                          pipelineStates: config.pipelineField
-                            ? optionValues(config.fields.find((x) => x.key === config.pipelineField)?.options)
-                            : undefined,
-                          pipelineCurrent: config.pipelineField ? String(row[config.pipelineField] ?? "") : undefined,
-                        } : undefined}
-                      />
-                    ) : f.type === "array" ? (
-                      <ArrayField fieldKey={f.key} label={f.label} value={row[f.key]} onChange={(vals) => onPatch(row.id, { [f.key]: vals })} />
-                    ) : f.type === "json" ? (
-                      <textarea
-                        className="nxCellEdit"
-                        rows={3}
-                        key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
-                        defaultValue={row[f.key] == null ? "" : JSON.stringify(row[f.key], null, 2)}
-                        aria-label={f.label}
-                        data-testid={`field-${f.key}`}
-                        style={{ resize: "vertical", font: "12px/1.5 var(--nx-font-mono)" }}
-                        onBlur={(e) => {
-                          if (!e.target.value.trim()) return onPatch(row.id, { [f.key]: null });
-                          try { onPatch(row.id, { [f.key]: JSON.parse(e.target.value) }); }
-                          catch { e.target.value = row[f.key] == null ? "" : JSON.stringify(row[f.key], null, 2); }
-                        }}
-                      />
-                    ) : f.type === "select" ? (
-                      <select
-                        className="nxCellEdit"
-                        value={String(row[f.key] ?? "")}
-                        aria-label={f.label}
-                        data-testid={`field-${f.key}`}
-                        onChange={(e) => onPatch(row.id, { [f.key]: e.target.value })}
-                      >
-                        {optionValues(f.options).map((o) => (
-                          <option key={o} value={o}>{o}</option>
-                        ))}
-                      </select>
-                    ) : f.type === "money" ? (
-                      <MoneyField
-                        key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
-                        fieldKey={f.key}
-                        label={f.label}
-                        value={row[f.key]}
-                        onSave={(v) => onPatch(row.id, { [f.key]: v })}
-                      />
-                    ) : f.type === "emails" || f.type === "phones" || f.type === "links" ? (
-                      <ListField
-                        fieldKey={f.key}
-                        label={f.label}
-                        value={row[f.key]}
-                        placeholder={f.type === "emails" ? "Add an email…" : f.type === "phones" ? "Add a phone…" : "Add a URL…"}
-                        validate={listValidators[f.type](f.label)}
-                        onSave={(vals) => onPatch(row.id, { [f.key]: vals })}
-                      />
-                    ) : f.type === "address" ? (
-                      <AddressField
-                        key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
-                        fieldKey={f.key}
-                        label={f.label}
-                        value={row[f.key]}
-                        onSave={(v) => onPatch(row.id, { [f.key]: v })}
-                      />
-                    ) : f.type === "fullName" ? (
-                      <FullNameField
-                        key={`${f.key}:${JSON.stringify(row[f.key] ?? null)}`}
-                        fieldKey={f.key}
-                        label={f.label}
-                        value={row[f.key]}
-                        onSave={(v) => onPatch(row.id, { [f.key]: v })}
-                      />
-                    ) : (
-                      <input
-                        className="nxCellEdit"
-                        /* uncontrolled for typing; the key remounts it when the value
-                           changes EXTERNALLY (enrich, another tab) so it re-renders */
-                        key={`${f.key}:${String(row[f.key] ?? "")}`}
-                        defaultValue={String(row[f.key] ?? "")}
-                        aria-label={f.label}
-                        data-testid={`field-${f.key}`}
-                        onBlur={(e) => {
-                          const v = f.type === "number" || f.type === "currency" ? Number(e.target.value) : e.target.value;
-                          if (v !== row[f.key]) onPatch(row.id, { [f.key]: v });
-                        }}
-                      />
-                    )}
-                    {f.primitive && onEnrich && !readOnly && (
-                      enrichingKey === f.key ? (
-                        <ThinkingDots label={`Enriching ${f.label}`} data-testid={`enriching-${f.key}`} />
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={<Sparkles size={12} />}
-                          aria-label={`Enrich ${f.label}${f.primitive.label ? ` via ${f.primitive.label}` : ""}`}
-                          data-testid={`enrich-${f.key}`}
-                          onClick={() => onEnrich(f.key)}
-                        />
-                      )
-                    )}
-                  </span>
-                </div>
-              ))}
+  // DOCUMENT layout — a wide hero editor (the primary richText field) as the main
+  // column, everything else (other fields + related + timeline/notes/files) in a
+  // compact sidebar. Falls back to standard when the object carries no richText.
+  if (layout === "document" && heroField) {
+    const sideFields = activeFields(config.fields).filter((f) => f.key !== heroField.key);
+    return (
+      <div data-testid={`record-${row.id}`} data-record-layout="document">
+        {head}
+        <div className="nxRecordDoc">
+          <div className="nxRecordDoc-main">
+            <div className="nxCard nxRecordDoc-hero" data-testid={`hero-${heroField.key}`}>
+              {fieldEditor(heroField)}
             </div>
           </div>
-
-          {related.map((rl) => (
-            <div className="nxCard" key={rl.key} data-testid={`related-${rl.key}`}>
-              <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--nx-border)", display: "flex", justifyContent: "space-between" }}>
-                <Micro>{rl.label}</Micro>
-                <span className="nxCount">{rl.rows.length}</span>
-              </div>
-              <div className="nxFieldList">
-                {rl.rows.length === 0 && (
-                  <div style={{ padding: "10px 12px", color: "var(--nx-fg-faint)", font: "var(--nx-text-meta)" }}>None yet.</div>
-                )}
-                {rl.rows.slice(0, 6).map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    className="nxFieldRow"
-                    data-testid={`related-${rl.key}-${r.id}`}
-                    style={{ background: "none", border: 0, cursor: "pointer", width: "100%", gridTemplateColumns: "1fr auto" }}
-                    onClick={() => rl.onOpen(r.id)}
-                  >
-                    <span className="nxRowLink" style={{ textAlign: "left" }}>{String(r[rl.primaryKey] ?? r.id)}</span>
-                    {rl.metaKey && <span className="nxFieldLabel">{String(r[rl.metaKey] ?? "")}</span>}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+          <div className="nxRecordDoc-side">
+            {sideFields.length > 0 && detailsCard(sideFields)}
+            {relatedCards}
+            {tabsCard}
+          </div>
         </div>
+      </div>
+    );
+  }
 
-        <div className="nxCard" style={{ padding: "8px 16px 16px" }}>
-          <Tabs
-            value={tab}
-            onValueChange={setTab}
-            tabs={[
-              { value: "timeline", label: "Timeline" },
-              { value: "notes", label: "Notes" },
-              ...(files ? [{ value: "files", label: `Files${files.list.length ? ` (${files.list.length})` : ""}` }] : []),
-            ]}
-          >
-            <TabPanel value="timeline">
-              {onLogActivity && !readOnly && (
-                <div style={{ display: "flex", gap: 8, margin: "14px 0", alignItems: "center", flexWrap: "wrap" }} data-testid="activity-composer">
-                  <div className="nxSeg">
-                    {ACTIVITY_KINDS.map((k) => (
-                      <button
-                        key={k.key}
-                        type="button"
-                        className="nxSegBtn"
-                        data-active={actKind === k.key}
-                        data-testid={`act-kind-${k.key}`}
-                        onClick={() => setActKind(k.key)}
-                      >
-                        {k.icon} {k.label}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    className="nxInput"
-                    style={{ flex: 1, minWidth: 160 }}
-                    placeholder={`Log a ${actKind}…`}
-                    value={actText}
-                    data-testid="act-input"
-                    onChange={(e) => setActText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && actText.trim()) {
-                        onLogActivity(actKind, actText.trim());
-                        setActText("");
-                      }
-                    }}
-                  />
-                  <Button
-                    variant="primary"
-                    data-testid="act-log"
-                    onClick={() => {
-                      if (actText.trim()) {
-                        onLogActivity(actKind, actText.trim());
-                        setActText("");
-                      }
-                    }}
-                  >
-                    Log
-                  </Button>
-                </div>
-              )}
-              <div className="nxTimeline" data-testid="timeline">
-                {timeline.length === 0 && <div style={{ color: "var(--nx-fg-faint)", padding: 16 }}>No activity yet.</div>}
-                {timeline.map((ev) => {
-                  const ic = evIcon(ev);
-                  return (
-                    <div className="nxTlItem" key={ev.id}>
-                      <div className="nxTlRail"><span className="nxTlIcon" data-testid={ic.tid}>{ic.node}</span></div>
-                      <div className="nxTlBody">
-                        <div className="nxTlSummary">{ev.summary}</div>
-                        <div className="nxTlMeta">{new Date(ev.ts).toLocaleString()} {ev.actor ? `· ${ev.actor}` : ""}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </TabPanel>
-            {files && (
-              <TabPanel value="files">
-                {!readOnly && (
-                <div style={{ display: "flex", margin: "14px 0" }}>
-                  <input
-                    ref={fileInput}
-                    type="file"
-                    hidden
-                    data-testid="file-input"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      prepareUpload(f).then((payload) => {
-                        files.onUpload(payload);
-                        if (fileInput.current) fileInput.current.value = "";
-                      });
-                    }}
-                  />
-                  <Button variant="primary" icon={<Upload size={13} />} data-testid="file-upload" onClick={() => fileInput.current?.click()}>
-                    Upload file
-                  </Button>
-                </div>
-                )}
-                <div className="nxFieldList" data-testid="files-list">
-                  {files.list.length === 0 && (
-                    <div style={{ padding: 16, color: "var(--nx-fg-faint)" }}>No files yet.</div>
-                  )}
-                  {files.list.map((f) => (
-                    <div className="nxFieldRow" key={f.id} data-testid={`file-row-${f.id}`} style={{ gridTemplateColumns: "auto 1fr auto auto" }}>
-                      <span className="nxTlIcon"><Paperclip size={11} /></span>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
-                      <span className="nxFieldLabel">{formatBytes(f.size)} · {new Date(f.ts).toLocaleDateString()}</span>
-                      <a
-                        className="nxRowLink"
-                        href={files.downloadHref(f.id)}
-                        download={f.name}
-                        data-testid={`file-dl-${f.id}`}
-                      >
-                        Download
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              </TabPanel>
-            )}
-            <TabPanel value="notes">
-              {!readOnly && (
-              <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
-                <input
-                  className="nxInput"
-                  placeholder="Add a note… (@ mentions notify)"
-                  value={note}
-                  data-testid="note-input"
-                  onChange={(e) => setNote(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && note.trim()) {
-                      onAddNote(note.trim());
-                      setNote("");
-                    }
-                  }}
-                />
-                <Button
-                  variant="primary"
-                  data-testid="note-add"
-                  onClick={() => {
-                    if (note.trim()) {
-                      onAddNote(note.trim());
-                      setNote("");
-                    }
-                  }}
-                >
-                  Add
-                </Button>
-              </div>
-              )}
-              {!readOnly && (() => {
-                const m = note.match(/@([\w]*)$/);
-                if (!m) return null;
-                const frag = m[1].toLowerCase();
-                const hits = mentionOptions.filter((n) => n.toLowerCase().startsWith(frag)).slice(0, 5);
-                if (hits.length === 0) return null;
-                return (
-                  <div style={{ display: "flex", gap: 6, margin: "-6px 0 10px", flexWrap: "wrap" }} data-testid="mention-suggest">
-                    {hits.map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        className="nxSegBtn"
-                        style={{ border: "1px solid var(--nx-border)", borderRadius: 999 }}
-                        data-testid={`mention-${n.replaceAll(/\W+/g, "-").toLowerCase()}`}
-                        onClick={() => setNote(note.replace(/@[\w]*$/, `@${n} `))}
-                      >
-                        @{n}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
-              <div className="nxTimeline" data-testid="notes-list">
-                {timeline.filter((t) => t.kind === "note").map((ev) => (
-                  <div className="nxTlItem" key={ev.id}>
-                    <div className="nxTlRail"><span className="nxTlDot" /></div>
-                    <div className="nxTlBody">
-                      <div className="nxTlSummary">{ev.summary}</div>
-                      <div className="nxTlMeta">{new Date(ev.ts).toLocaleString()}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </TabPanel>
-          </Tabs>
+  // STANDARD layout — the fields panel (richText spans full width) + timeline tabs.
+  return (
+    <div data-testid={`record-${row.id}`} data-record-layout="standard">
+      {head}
+      <div className="nxRecord">
+        <div className="nxRecordSide">
+          {detailsCard(activeFields(config.fields))}
+          {relatedCards}
         </div>
+        {tabsCard}
       </div>
     </div>
   );

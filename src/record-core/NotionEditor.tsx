@@ -597,7 +597,9 @@ const NE_CSS = `
 .ne-chg ins{color:var(--nx-accent);text-decoration:underline;text-decoration-color:var(--nx-accent);text-underline-offset:3px;background:var(--nx-accent-soft);margin-left:.14em;border-radius:2px}
 .ne-chg.is-pulse{animation:chgPulse .8s ease}
 @keyframes chgPulse{0%{background:color-mix(in oklab,var(--nx-accent) 30%,transparent)}100%{background:transparent}}
-.ne-block{flex:1;outline:none;line-height:1.72;white-space:pre-wrap;word-break:break-word;min-height:1.2em;caret-color:var(--nx-accent)}
+/* wrap at word boundaries, breaking only a word too long to fit — never mid-word per
+   character (word-break:break-word crushed to one letter per line in a narrow column) */
+.ne-block{flex:1;min-width:0;outline:none;line-height:1.72;white-space:pre-wrap;word-break:normal;overflow-wrap:break-word;min-height:1.2em;caret-color:var(--nx-accent)}
 .ne-block:empty::before{content:attr(data-ph);color:var(--nx-fg-faint);pointer-events:none}
 .ne-root.is-ro .ne-block:empty::before,.ne-root.is-ro .ne-cap:empty::before{content:""}
 .ne-p{font-size:18px;color:var(--nx-fg);margin:0}
