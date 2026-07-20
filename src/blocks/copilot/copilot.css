@@ -1,0 +1,106 @@
+/* Copilot panel — the docked AI side-panel chrome. Layout only fills its container
+   (the host owns placement: a fixed dock, a grid column, whatever). Fully tokenized,
+   both themes, reduced-motion aware. */
+
+.nxCopilot {
+  height: 100%; min-height: 0; min-width: 0;
+  display: flex; flex-direction: column;
+  background: var(--nx-bg-raised);
+  border-left: 1px solid var(--nx-border);
+  font: var(--nx-text-body); color: var(--nx-fg);
+  overflow: hidden;
+}
+
+.nxCopilot-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--nx-border); flex: none;
+}
+.nxCopilot-title { display: inline-flex; align-items: center; gap: 9px; font: var(--nx-text-title); }
+.nxCopilot-mark {
+  width: 22px; height: 22px; flex: none; border-radius: var(--nx-radius-s);
+  background: var(--nx-accent); color: var(--nx-accent-fg);
+  display: grid; place-items: center; font-weight: 700; font-size: 12px;
+}
+.nxCopilot-x {
+  background: none; border: 0; cursor: pointer; color: var(--nx-fg-muted);
+  padding: 4px; border-radius: var(--nx-radius-s); display: grid; place-items: center;
+  transition: color var(--nx-t-fast), background var(--nx-t-fast);
+}
+.nxCopilot-x:hover { color: var(--nx-fg); background: var(--nx-bg-sunken); }
+
+.nxCopilot-scroll {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 20px 16px; display: flex; flex-direction: column; gap: 16px;
+}
+
+.nxCopilot-empty { color: var(--nx-fg-muted); display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+.nxCopilot-empty p { margin: 0; line-height: 1.55; max-width: 40ch; }
+.nxCopilot-suggest { display: flex; flex-direction: column; gap: 8px; }
+.nxCopilot-chip {
+  text-align: left; cursor: pointer; color: var(--nx-fg);
+  background: var(--nx-bg-sunken); border: 1px solid var(--nx-border);
+  border-left: 2px solid var(--nx-accent); border-radius: var(--nx-radius-s);
+  padding: 10px 13px; font: var(--nx-text-body);
+  transition: border-color var(--nx-t-fast), background var(--nx-t-fast);
+}
+.nxCopilot-chip:hover { border-color: var(--nx-accent); background: var(--nx-accent-soft); }
+
+.nxCopilot-msg { display: flex; gap: 10px; align-items: flex-start; }
+.nxCopilot-msg.is-user { justify-content: flex-end; }
+.nxCopilot-avatar {
+  width: 24px; height: 24px; flex: none; margin-top: 2px; border-radius: var(--nx-radius-s);
+  background: var(--nx-accent); color: var(--nx-accent-fg);
+  display: grid; place-items: center; font-weight: 700; font-size: 12px;
+}
+.nxCopilot-bubble { max-width: 84%; line-height: 1.6; }
+.nxCopilot-msg.is-user .nxCopilot-bubble {
+  background: var(--nx-accent); color: var(--nx-accent-fg);
+  padding: 10px 13px; border-radius: var(--nx-radius-m); white-space: pre-wrap;
+}
+.nxCopilot-msg.is-agent .nxCopilot-bubble { max-width: 100%; width: 100%; color: var(--nx-fg); }
+
+.nxCopilot-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.nxCopilot-tool {
+  font: var(--nx-text-micro); text-transform: var(--nx-label-transform);
+  letter-spacing: var(--nx-label-tracking); color: var(--nx-accent);
+  border: 1px solid var(--nx-accent); background: var(--nx-accent-soft);
+  border-radius: var(--nx-radius-s); padding: 3px 8px;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+
+.nxCopilot-inputbar {
+  display: flex; gap: 8px; align-items: flex-end; flex: none;
+  padding: 14px 16px; border-top: 1px solid var(--nx-border);
+}
+.nxCopilot-input {
+  flex: 1; resize: none; max-height: 140px;
+  border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m);
+  background: var(--nx-bg); color: var(--nx-fg);
+  padding: 11px 13px; font: var(--nx-text-body); outline: none;
+  transition: border-color var(--nx-t-fast);
+}
+.nxCopilot-input:focus { border-color: var(--nx-accent); }
+.nxCopilot-send {
+  width: 40px; height: 40px; flex: none; cursor: pointer; border: 0;
+  border-radius: var(--nx-radius-m); background: var(--nx-accent); color: var(--nx-accent-fg);
+  display: grid; place-items: center; transition: background var(--nx-t-fast);
+}
+.nxCopilot-send:hover:not(:disabled) { background: var(--nx-accent-hover); }
+.nxCopilot-send:disabled { opacity: 0.4; cursor: default; }
+
+/* toggle / launch button — host places it in the chrome */
+.nxCopilotToggle {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s);
+  background: var(--nx-bg-raised); color: var(--nx-fg);
+  padding: 6px 10px; font: var(--nx-text-meta);
+  transition: border-color var(--nx-t-fast), background var(--nx-t-fast), color var(--nx-t-fast);
+}
+.nxCopilotToggle:hover { border-color: var(--nx-accent); background: var(--nx-accent-soft); }
+.nxCopilotToggle.is-on { background: var(--nx-accent); color: var(--nx-accent-fg); border-color: var(--nx-accent); }
+.nxCopilotToggle-kbd {
+  display: inline-flex; align-items: center; gap: 1px;
+  background: var(--nx-bg-sunken); color: var(--nx-fg-muted);
+  border-radius: var(--nx-radius-s); padding: 1px 5px; font: var(--nx-text-micro);
+}
+.nxCopilotToggle.is-on .nxCopilotToggle-kbd { background: var(--nx-accent-soft); color: var(--nx-accent); }

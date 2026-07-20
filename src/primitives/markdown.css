@@ -1,0 +1,50 @@
+/* Markdown render styles — the blocks emitted by renderMarkdown(). Tokenized so any
+   surface (a copilot reply, a doc preview) renders consistently in both themes. */
+
+.nxMd { font: var(--nx-text-body); color: var(--nx-fg); line-height: 1.6; }
+.nxMd > :first-child { margin-top: 0; }
+.nxMd > :last-child { margin-bottom: 0; }
+
+.md-h { font-weight: 700; letter-spacing: -0.01em; margin: 12px 0 6px; }
+.md-h1 { font-size: 1.25em; }
+.md-h2 { font-size: 1.1em; }
+.md-h3 { font-size: 1em; color: var(--nx-fg-muted); }
+.md-h4 { font-size: 0.95em; color: var(--nx-fg-muted); }
+
+.md-p { margin: 0 0 9px; }
+.md-ul, .md-ol { margin: 0 0 9px; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
+.md-ul li, .md-ol li { line-height: 1.55; }
+
+.md-quote {
+  margin: 0 0 9px; padding: 6px 12px;
+  border-left: 3px solid var(--nx-accent);
+  background: var(--nx-bg-sunken); color: var(--nx-fg-muted);
+  border-radius: 0 var(--nx-radius-s) var(--nx-radius-s) 0;
+}
+
+.md-code {
+  margin: 0 0 9px; padding: 12px;
+  background: var(--nx-bg-sunken); color: var(--nx-fg);
+  border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s);
+  overflow-x: auto; font-family: var(--nx-font-mono); font-size: 0.85em; line-height: 1.5;
+}
+.md-icode {
+  font-family: var(--nx-font-mono); font-size: 0.88em;
+  background: var(--nx-bg-sunken); border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s); padding: 1px 5px;
+}
+
+.md-hr { border: 0; border-top: 1px solid var(--nx-border); margin: 12px 0; }
+
+.md-tablewrap { overflow-x: auto; margin: 0 0 10px; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s); }
+.md-table { border-collapse: collapse; width: 100%; font-size: 0.95em; }
+.md-table th, .md-table td {
+  border: 1px solid var(--nx-border); padding: 7px 10px;
+  text-align: left; vertical-align: top; line-height: 1.45;
+}
+.md-table th {
+  background: var(--nx-bg-sunken); font: var(--nx-text-micro);
+  text-transform: var(--nx-label-transform); letter-spacing: var(--nx-label-tracking);
+  color: var(--nx-fg-muted); white-space: nowrap;
+}
+.md-table tr:nth-child(even) td { background: var(--nx-bg-sunken); }

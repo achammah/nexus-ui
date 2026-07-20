@@ -117,6 +117,9 @@ export interface ObjectConfig {
      (the primary field is always shown). Omitted → every non-primary field shows.
      A per-user Columns menu overrides this at runtime (persisted per object). */
   columns?: string[];
+  /* field keys fed to the copilot as context when a record of this object is open
+     (replaces any hardcoded per-object context). Omitted → the primary field only. */
+  contextFields?: string[];
   stageField?: string;       // select field key driving the kanban
   defaultView: "table" | "kanban";
   /* rows belong to a team: visibility + roles resolve per the caller's active team */

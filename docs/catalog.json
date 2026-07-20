@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 76,
+  "count": 78,
   "items": [
     {
       "name": "accordion",
@@ -396,6 +396,13 @@
       "source": "ours"
     },
     {
+      "name": "Markdown · renderMarkdown",
+      "kind": "wrapper",
+      "import": "src/primitives/Markdown.tsx",
+      "when": "dependency-free Markdown → React renderer (inline bold/italic/code + block headings/lists/quotes/fenced code/tables/rules); tokenized in markdown.css — for agent replies and short rich text",
+      "source": "ours"
+    },
+    {
       "name": "DataTable",
       "kind": "record-core",
       "import": "src/record-core/DataTable.tsx",
@@ -470,6 +477,13 @@
       "kind": "wrapper",
       "import": "src/blocks/wizard/SourcesInput.tsx",
       "when": "URL list + file-pick source composer (readFile overridable) — the sources-kind wizard input",
+      "source": "ours"
+    },
+    {
+      "name": "CopilotPanel · CopilotToggle",
+      "kind": "wrapper",
+      "import": "src/blocks/copilot/CopilotPanel.tsx",
+      "when": "docked AI copilot side-panel: conversation state + Markdown replies + tool-use chips (host injects the transport + per-turn context), plus the toggle button; config-driven (title/mark/emptyStateCopy/suggestions)",
       "source": "ours"
     },
     {

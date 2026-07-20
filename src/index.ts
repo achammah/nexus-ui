@@ -9,6 +9,7 @@ export type { SettingsTab } from "./primitives/SettingsTabs";
 export { EditableRuleList } from "./primitives/EditableRuleList";
 export type { SeverityOption, EditableRuleListProps } from "./primitives/EditableRuleList";
 export { ThinkingDots } from "./primitives/ThinkingDots";
+export { Markdown, renderMarkdown } from "./primitives/Markdown";
 
 /* async + live-sync hooks */
 export { usePollRev } from "./hooks/usePollRev";
@@ -30,3 +31,6 @@ export type { ObjectConfig, FieldDef, RecordRow, ViewDef, TimelineEvent, FieldTy
 
 /* blocks — composed multi-step UI (guided wizard) */
 export * from "./blocks/wizard";
+
+/* blocks — AI copilot side-panel */
+export * from "./blocks/copilot";
