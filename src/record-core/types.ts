@@ -6,7 +6,13 @@ export type FieldType =
   | "text" | "number" | "select" | "date" | "currency" | "email" | "url"
   | "relation" | "user" | "multiselect"
   | "boolean" | "longText" | "dateTime" | "rating" | "array" | "json"
-  | "money" | "emails" | "phones" | "links" | "address" | "fullName";
+  | "money" | "emails" | "phones" | "links" | "address" | "fullName"
+  | "richText";
+
+/* richText value = Block[] — the Notion-grade editor's block array, stored as
+   JSON in the record store (edits on the record page, truncated preview in tables).
+   One-way re-export (NotionEditor imports nothing from here → no cycle). */
+export type { Block } from "./NotionEditor";
 
 /* Shaped (composite) field values — CRM-grade structured values. Lists
    (emails/phones/links) are plain string[]. `currency` (a bare number) stays

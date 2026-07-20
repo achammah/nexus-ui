@@ -80,6 +80,7 @@ const OURS = [
   ["record-core/DataTable.tsx", "record-core", "DataTable", "config-driven grid: sort, selection, inline edit, relation link cells, numeric alignment — see docs/record-core.md"],
   ["record-core/KanbanBoard.tsx", "record-core", "KanbanBoard", "config-driven board over the object's stageField; drag or stage-select moves cards"],
   ["record-core/RecordPage.tsx", "record-core", "RecordPage", "record anatomy: header + fields panel (inline edit, enrich affordance) + Timeline (activity composer, per-kind icons) / Notes / Files tabs"],
+  ["record-core/NotionEditor.tsx", "record-core", "NotionEditor", "Notion-grade block editor for the richText field type: hand-rolled contenteditable blocks (p/h/quote/list/divider/image/table), slash menu, drag-reorder, inline markdown, image-drop; controlled (blocks/onChange) + inline-change props for a suggestions layer"],
   ["record-core/ChartView.tsx", "record-core", "ChartView", "config-driven chart: one bar per group option, Count or Σ numeric measure — the third view family beside table/board"],
   ["record-core/types.ts", "record-core", "ObjectConfig · FieldDef · RecordRow · ViewDef · TimelineEvent · FileMeta", "the config-driven object model — the schema every record surface renders from"],
   ["skins/skin.ts", "skins", "Skin · skinToCss() · applySkin()", "brand-as-data: a small JSON in, the full --nx-* set out (accent ramp, chrome, radius, fonts, labels, density, shadows, dark derivation, raw overrides) — see docs/THEMING.md"],

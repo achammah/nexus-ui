@@ -22,4 +22,6 @@ export { skinPresets, warmOptPalette, warmOptSkin } from "./skins/presets";
 export { DataTable } from "./record-core/DataTable";
 export { KanbanBoard } from "./record-core/KanbanBoard";
 export { RecordPage } from "./record-core/RecordPage";
+export { NotionEditor, textToBlocks, blocksToMarkdown, bid } from "./record-core/NotionEditor";
+export type { Block, InlineChange } from "./record-core/NotionEditor";
 export type { ObjectConfig, FieldDef, RecordRow, ViewDef, TimelineEvent, FieldType } from "./record-core/types";

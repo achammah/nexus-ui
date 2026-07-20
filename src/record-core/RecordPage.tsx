@@ -19,6 +19,7 @@ import {
 import { formatCell } from "./DataTable";
 import type { AddressValue, FieldDef, FileMeta, FullNameValue, MoneyValue, ObjectConfig, RecordRow, RelationItem, TimelineEvent } from "./types";
 import { isMoneyValue, normalizeOption, optionValues, rowRefs } from "./types";
+import { NotionEditor, textToBlocks, type Block } from "./NotionEditor";
 import { OptionChip, activeFields } from "./options";
 import "./record-core.css";
 
@@ -698,6 +699,47 @@ function DateField({
   );
 }
 
+/* richText editor field — a controlled NotionEditor over a Block[] value.
+   The editor fires onChange per keystroke, so this wrapper holds the live document
+   in local state and DEBOUNCES a single whole-Block[] commit through onSave (→ onPatch)
+   — one save per pause, never a patch/reload/toast per keystroke. Seed-once: local
+   state owns the live document, so a concurrent record-poll re-rendering the page can't
+   clobber in-progress edits (the mount site keys this by row id, so switching records
+   reseeds while a same-record poll does not). A subtle save-state chip mirrors the
+   async status. Swap the local debounce for foundations' useDebouncedSave({saveState})
+   when that lane lands — one debounce implementation, not two. */
+function RichTextField({ fieldKey, label, value, onSave }: {
+  fieldKey: string; label: string; value: unknown; onSave: (blocks: Block[]) => void;
+}) {
+  const [blocks, setBlocks] = React.useState<Block[]>(() => {
+    const b = Array.isArray(value) ? (value as Block[]) : [];
+    return b.length ? b : textToBlocks(""); // always at least one line to type in
+  });
+  const [saveState, setSaveState] = React.useState<"idle" | "saving" | "saved">("idle");
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const onChange = (next: Block[]) => {
+    setBlocks(next);
+    setSaveState("saving");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => { onSave(next); setSaveState("saved"); }, 700);
+  };
+  return (
+    <span style={{ display: "flex", flexDirection: "column", gap: 4 }} data-testid={`field-${fieldKey}`} aria-label={label}>
+      <NotionEditor blocks={blocks} onChange={onChange} />
+      {saveState !== "idle" && (
+        <span
+          data-testid={`richtext-save-${fieldKey}`}
+          data-state={saveState}
+          style={{ font: "var(--nx-text-meta)", color: "var(--nx-fg-faint)", alignSelf: "flex-end" }}
+        >
+          {saveState === "saving" ? "Saving…" : "Saved"}
+        </span>
+      )}
+    </span>
+  );
+}
+
 /* RecordPage — header (name + stage) · left fields panel (inline edit) ·
    right tabs (Timeline / Notes). The anatomy is the record-system convention:
    glance (header) → zoom (fields/timeline) → act (inline edits, note composer). */
@@ -943,6 +985,16 @@ export function RecordPage({
                         data-testid={`field-${f.key}`}
                         style={{ resize: "vertical", font: "var(--nx-text-body)" }}
                         onBlur={(e) => { if (e.target.value !== row[f.key]) onPatch(row.id, { [f.key]: e.target.value }); }}
+                      />
+                    ) : f.type === "richText" ? (
+                      <RichTextField
+                        /* keyed by row id → switching records reseeds, but a same-record
+                           poll keeps the same key and never clobbers live edits */
+                        key={`${row.id}:${f.key}:richtext`}
+                        fieldKey={f.key}
+                        label={f.label}
+                        value={row[f.key]}
+                        onSave={(nextBlocks) => onPatch(row.id, { [f.key]: nextBlocks })}
                       />
                     ) : f.type === "array" ? (
                       <ArrayField fieldKey={f.key} label={f.label} value={row[f.key]} onChange={(vals) => onPatch(row.id, { [f.key]: vals })} />

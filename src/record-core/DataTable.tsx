@@ -12,8 +12,28 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import { Checkbox } from "../primitives/fields";
 import type { FieldDef, ObjectConfig, RecordRow } from "./types";
 import { addressLine, formatMoney, hostLabel, isMoneyValue, joinName, optionValues, rowRefs } from "./types";
+import { blocksToMarkdown, type Block } from "./NotionEditor";
 import { OptionChip, activeFields } from "./options";
 import "./record-core.css";
+
+/* richText (Block[]) → readable plain text for a truncated table preview: flatten
+   to markdown, then strip the markup so a cell reads as prose (never [object Object]
+   or raw JSON). Editing happens on the record page. */
+export const richTextPreview = (v: unknown): string => {
+  if (!Array.isArray(v)) return "";
+  return blocksToMarkdown(v as Block[])
+    .replace(/^#{1,3}\s+/gm, "")
+    .replace(/^>\s+/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/^-{3,}$/gm, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+};
 
 /* DataTable — the record-core grid. Config-driven columns, sortable, selectable,
    inline-editable text/select cells (edit commits on blur/Enter via onPatch). */
@@ -36,6 +56,7 @@ export const formatCell = (v: unknown, type: string) => {
   if (type === "array" || type === "multiselect") return Array.isArray(v) ? v.join(" · ") : String(v ?? "");
   if (type === "json") return v == null ? "—" : JSON.stringify(v).slice(0, 60);
   if (type === "longText") { const s = String(v ?? ""); return s.length > 80 ? s.slice(0, 77) + "…" : s; }
+  if (type === "richText") { const s = richTextPreview(v); return s.length > 80 ? s.slice(0, 77) + "…" : s; }
   if (type === "money" && isMoneyValue(v)) return formatMoney(v);
   if ((type === "emails" || type === "phones") && Array.isArray(v)) return v.join(" · ");
   if (type === "links" && Array.isArray(v)) return v.map((u) => hostLabel(String(u))).join(" · ");
@@ -366,7 +387,7 @@ export function DataTable({
   // cell renderer uses, so the two can't drift
   const SPECIAL = [
     "relation", "user", "multiselect", "boolean", "rating", "dateTime", "json", "longText", "array", "select", "date",
-    "money", "emails", "phones", "links", "address", "fullName",
+    "money", "emails", "phones", "links", "address", "fullName", "richText",
   ];
   const canKbEdit = (type: string) => !SPECIAL.includes(type);
   const CLEARABLE: Record<string, unknown> = {
@@ -424,7 +445,7 @@ export function DataTable({
               />
             ) : f.type === "rating" ? (
               <RatingCell row={row.original} field={f} onPatch={onPatch} readOnly={readOnly} />
-            ) : ["dateTime", "json", "longText", "array"].includes(f.type) ? (
+            ) : ["dateTime", "json", "longText", "array", "richText"].includes(f.type) ? (
               <span data-testid={`cell-${row.original.id}-${f.key}`}>{formatCell(row.original[f.key], f.type) || "—"}</span>
             ) : f.type === "emails" || f.type === "phones" ? (
               <ListChipsCell row={row.original} field={f} />
