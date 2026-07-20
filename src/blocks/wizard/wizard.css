@@ -1,0 +1,144 @@
+/* Wizard block styles — --nx-* tokens throughout. Motion uses a local cubic-bezier;
+   swap to --nx-ease-* when foundations lands the motion-token set (tracked, Wave-2
+   integration sweep — see docs/plans/wizard.md). */
+
+.nxwiz-root {
+  --nxwiz-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 8px 48px;
+  color: var(--nx-fg);
+  font-family: var(--nx-font-sans);
+}
+.nxwiz-head { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; }
+.nxwiz-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px; font-family: var(--nx-font-mono);
+  font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--nx-accent); flex: none;
+}
+.nxwiz-prog { flex: 1; height: 3px; background: var(--nx-border); overflow: hidden; }
+.nxwiz-prog span { display: block; height: 100%; background: var(--nx-accent); transition: width 0.4s var(--nxwiz-ease); }
+.nxwiz-count { font-family: var(--nx-font-mono); font-size: 11px; color: var(--nx-fg-muted); flex: none; }
+
+.nxwiz-card { animation: nxwizCardIn 0.32s var(--nxwiz-ease); }
+.nxwiz-card.in-l { animation: nxwizCardInL 0.32s var(--nxwiz-ease); }
+@keyframes nxwizCardIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes nxwizCardInL { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+.nxwiz-qn { font-family: var(--nx-font-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--nx-accent); margin-bottom: 14px; }
+.nxwiz-q { font-size: clamp(22px, 3.4vw, 32px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+.nxwiz-hint { color: var(--nx-fg-muted); margin-top: 10px; font-size: 14px; line-height: 1.55; max-width: 52ch; }
+
+.nxwiz-choose { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 640px) { .nxwiz-choose { grid-template-columns: 1fr; } }
+.nxwiz-choice {
+  display: flex; flex-direction: column; gap: 10px; text-align: left; padding: 22px;
+  border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m); background: var(--nx-bg-raised);
+  cursor: pointer; transition: border-color 0.16s, transform 0.12s; color: var(--nx-fg);
+}
+.nxwiz-choice:hover:not(:disabled) { border-color: var(--nx-accent); transform: translateY(-2px); }
+.nxwiz-choice:disabled { opacity: 0.6; cursor: default; }
+.nxwiz-choice svg { color: var(--nx-accent); }
+.nxwiz-choice-h { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+.nxwiz-choice-d { font-size: 13px; line-height: 1.55; color: var(--nx-fg-muted); }
+
+.nxwiz-opts { display: grid; gap: 10px; margin-top: 24px; }
+.nxwiz-opt {
+  text-align: left; padding: 14px 16px; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s);
+  background: var(--nx-bg-raised); font-size: 15px; font-weight: 600; cursor: pointer; color: var(--nx-fg);
+  transition: border-color 0.16s, transform 0.12s, background 0.16s;
+}
+.nxwiz-opt:hover { border-color: var(--nx-fg); transform: translateX(3px); }
+.nxwiz-opt.is-on { border-color: var(--nx-accent); background: var(--nx-accent-soft); }
+
+.nxwiz-input {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s);
+  background: var(--nx-bg-raised); font-family: var(--nx-font-sans); font-size: 15px; color: var(--nx-fg);
+  outline: none; transition: border-color 0.16s;
+}
+.nxwiz-input:focus { border-color: var(--nx-accent); }
+.nxwiz-area { margin-top: 24px; resize: vertical; line-height: 1.55; }
+
+.nxwiz-nav { display: flex; align-items: center; margin-top: 28px; }
+.nxwiz-grow { flex: 1; }
+.nxwiz-back {
+  display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s); padding: 8px 13px; font-family: var(--nx-font-mono); font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; color: var(--nx-fg); transition: border-color 0.16s, transform 0.16s;
+}
+.nxwiz-back:hover { border-color: var(--nx-fg); transform: translateX(-2px); }
+.nxwiz-next, .nxwiz-create {
+  display: inline-flex; align-items: center; gap: 8px; background: var(--nx-accent); color: var(--nx-accent-fg);
+  border: 0; border-radius: var(--nx-radius-s); padding: 10px 18px; font-family: var(--nx-font-mono);
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: background 0.16s, transform 0.12s;
+}
+.nxwiz-next:hover:not(:disabled), .nxwiz-create:hover:not(:disabled) { background: var(--nx-accent-hover); transform: translateY(-1px); }
+.nxwiz-next:disabled, .nxwiz-create:disabled { opacity: 0.4; cursor: not-allowed; }
+.nxwiz-spin {
+  width: 12px; height: 12px; border: 2px solid rgba(255, 255, 255, 0.4); border-top-color: currentColor;
+  border-radius: 50%; display: inline-block; animation: nxwizspin 0.7s linear infinite;
+}
+@keyframes nxwizspin { to { transform: rotate(360deg); } }
+
+.nxwiz-sum { margin-top: 20px; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m); background: var(--nx-bg-raised); }
+.nxwiz-sum-row { display: grid; grid-template-columns: 120px 1fr; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--nx-border); align-items: baseline; }
+.nxwiz-sum-row:last-child { border-bottom: none; }
+.nxwiz-sum-k { font-family: var(--nx-font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--nx-fg-faint); padding-top: 2px; }
+.nxwiz-sum-v { font-size: 14px; line-height: 1.55; color: var(--nx-fg); }
+.nxwiz-sum-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.nxwiz-sum-chip { font-size: 13px; color: var(--nx-fg); background: var(--nx-bg-sunken); border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s); padding: 4px 10px; }
+.nxwiz-sum-src { display: inline-flex; align-items: center; gap: 6px; font-family: var(--nx-font-mono); font-size: 11.5px; color: var(--nx-fg-muted); }
+
+/* ChipListInput */
+.nxwiz-list { margin-top: 22px; display: flex; flex-direction: column; gap: 14px; }
+.nxwiz-chips { display: flex; flex-wrap: wrap; gap: 8px; min-height: 20px; }
+.nxwiz-listchip { display: inline-flex; align-items: center; gap: 8px; background: var(--nx-accent-soft); color: var(--nx-accent); border: 1px solid var(--nx-accent); border-radius: var(--nx-radius-s); padding: 6px 10px; font-size: 13px; }
+.nxwiz-listchip button { background: none; border: 0; cursor: pointer; color: inherit; display: grid; place-items: center; opacity: 0.7; }
+.nxwiz-listchip button:hover { opacity: 1; }
+.nxwiz-listempty { color: var(--nx-fg-muted); font-family: var(--nx-font-mono); font-size: 12px; }
+.nxwiz-addrow { display: flex; gap: 8px; }
+.nxwiz-addrow .nxwiz-input { font-size: 14px; padding: 10px 12px; }
+.nxwiz-addbtn { width: 40px; flex: none; background: var(--nx-accent); color: var(--nx-accent-fg); border: 0; border-radius: var(--nx-radius-s); cursor: pointer; display: grid; place-items: center; transition: background 0.16s; }
+.nxwiz-addbtn:hover { background: var(--nx-accent-hover); }
+.nxwiz-suggest { display: flex; flex-wrap: wrap; gap: 8px; }
+.nxwiz-sugchip { display: inline-flex; align-items: center; gap: 5px; background: var(--nx-bg-sunken); border: 1px dashed var(--nx-border); border-radius: var(--nx-radius-s); color: var(--nx-fg-muted); padding: 6px 10px; font-size: 12.5px; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+.nxwiz-sugchip:hover { border-color: var(--nx-accent); color: var(--nx-accent); }
+
+/* SourcesInput */
+.nxwiz-sources { margin-top: 22px; display: flex; flex-direction: column; gap: 20px; }
+.nxwiz-srcblock { display: flex; flex-direction: column; gap: 9px; }
+.nxwiz-srclabel { display: inline-flex; align-items: center; gap: 7px; font-family: var(--nx-font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--nx-fg-muted); }
+.nxwiz-srcdrop {
+  display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 22px; border: 1.5px dashed var(--nx-border);
+  border-radius: var(--nx-radius-m); background: var(--nx-bg-sunken); cursor: pointer; color: var(--nx-fg); transition: border-color 0.16s, background 0.16s;
+}
+.nxwiz-srcdrop:hover { border-color: var(--nx-accent); background: var(--nx-accent-soft); }
+.nxwiz-srcdrophint { font-family: var(--nx-font-mono); font-size: 11px; color: var(--nx-fg-muted); }
+.nxwiz-srclist { display: flex; flex-direction: column; gap: 7px; }
+.nxwiz-srcitem { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s); background: var(--nx-bg-raised); font-size: 13px; }
+.nxwiz-srcname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--nx-font-mono); font-size: 12px; }
+.nxwiz-srcsize { font-family: var(--nx-font-mono); font-size: 11px; color: var(--nx-fg-muted); }
+.nxwiz-srcitem button { background: none; border: 0; cursor: pointer; color: var(--nx-fg-muted); display: grid; place-items: center; }
+.nxwiz-srcitem button:hover { color: var(--nx-fg); }
+
+/* ModalOverlay */
+.nxwiz-overlay {
+  position: fixed; inset: 0; z-index: 120; background: rgb(0 0 0 / 0.42); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-start; justify-content: center; padding: 6vh 20px; overflow-y: auto;
+  animation: nxwizFade 0.18s ease;
+}
+@keyframes nxwizFade { from { opacity: 0; } to { opacity: 1; } }
+.nxwiz-modal {
+  position: relative; width: min(760px, 100%); background: var(--nx-bg-raised); border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-l); box-shadow: var(--nx-shadow-2); animation: nxwizPop 0.22s var(--nxwiz-ease, cubic-bezier(0.16, 1, 0.3, 1));
+  padding: 36px clamp(20px, 4vw, 40px) 32px;
+}
+@keyframes nxwizPop { from { opacity: 0; transform: translateY(14px) scale(0.985); } to { opacity: 1; transform: none; } }
+.nxwiz-modal-x {
+  position: absolute; top: 14px; right: 14px; z-index: 2; width: 30px; height: 30px; display: grid; place-items: center;
+  border: 0; border-radius: var(--nx-radius-s); background: var(--nx-bg-sunken); color: var(--nx-fg-muted); cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.nxwiz-modal-x:hover { background: var(--nx-border); color: var(--nx-fg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .nxwiz-card, .nxwiz-card.in-l, .nxwiz-spin, .nxwiz-prog span, .nxwiz-overlay, .nxwiz-modal { animation: none; transition: none; }
+}

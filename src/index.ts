@@ -25,3 +25,6 @@ export { RecordPage } from "./record-core/RecordPage";
 export { NotionEditor, textToBlocks, blocksToMarkdown, bid } from "./record-core/NotionEditor";
 export type { Block, InlineChange } from "./record-core/NotionEditor";
 export type { ObjectConfig, FieldDef, RecordRow, ViewDef, TimelineEvent, FieldType } from "./record-core/types";
+
+/* blocks — composed multi-step UI (guided wizard) */
+export * from "./blocks/wizard";

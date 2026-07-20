@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 71,
+  "count": 75,
   "items": [
     {
       "name": "accordion",
@@ -436,6 +436,34 @@
       "import": "src/record-core/types.ts",
       "when": "the config-driven object model — the schema every record surface renders from",
       "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "Wizard",
+      "kind": "wrapper",
+      "import": "src/blocks/wizard/Wizard.tsx",
+      "when": "config-driven guided flow: question set (kinds select/text/long/list/sources) → step engine with progress + slide anim → onComplete; a guided-vs-blank landing; host supplies questions + callbacks",
+      "source": "ours"
+    },
+    {
+      "name": "ModalOverlay",
+      "kind": "wrapper",
+      "import": "src/blocks/wizard/ModalOverlay.tsx",
+      "when": "lightweight centered overlay shell (backdrop + escape/close) for a full-page-or-popup wizard",
+      "source": "ours"
+    },
+    {
+      "name": "ChipListInput",
+      "kind": "wrapper",
+      "import": "src/blocks/wizard/ChipListInput.tsx",
+      "when": "chip composer: type + enter to add removable tag chips — the list-kind wizard input, reusable standalone",
+      "source": "ours"
+    },
+    {
+      "name": "SourcesInput",
+      "kind": "wrapper",
+      "import": "src/blocks/wizard/SourcesInput.tsx",
+      "when": "URL list + file-pick source composer (readFile overridable) — the sources-kind wizard input",
+      "source": "ours"
     },
     {
       "name": "Skin · skinToCss() · applySkin()",
