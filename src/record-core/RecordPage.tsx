@@ -1491,12 +1491,10 @@ export function RecordPage({
       <div data-testid={`record-${row.id}`} data-record-layout="document">
         {head}
         <div className="nxRecordDoc">
-          <div className="nxRecordDoc-main">
-            <div className="nxCard nxRecordDoc-hero" data-testid={`hero-${heroField.key}`}>
+          <div className="nxRecordDoc-col">
+            <div className="nxRecordDoc-hero" data-testid={`hero-${heroField.key}`}>
               {fieldEditor(heroField)}
             </div>
-          </div>
-          <div className="nxRecordDoc-side">
             {sideFields.length > 0 && detailsCard(sideFields)}
             {relatedCards}
             {tabsCard}
@@ -1506,17 +1504,27 @@ export function RecordPage({
     );
   }
 
-  // STANDARD layout — the fields panel (richText spans full width) + timeline tabs.
+  // STANDARD layout — compact metadata (details card) + timeline tabs on top; any
+  // richText field breaks OUT into a full-width document section below, so the editor
+  // (and its suggestions rail) get the whole record width instead of the narrow column.
+  const stdRich = activeFields(config.fields).filter((f) => f.type === "richText");
+  const stdMeta = activeFields(config.fields).filter((f) => f.type !== "richText");
   return (
     <div data-testid={`record-${row.id}`} data-record-layout="standard">
       {head}
       <div className="nxRecord">
         <div className="nxRecordSide">
-          {detailsCard(activeFields(config.fields))}
+          {detailsCard(stdMeta)}
           {relatedCards}
         </div>
         {tabsCard}
       </div>
+      {stdRich.map((f) => (
+        <div className="nxCard nxRecordBlock" key={f.key} data-testid={`richblock-${f.key}`}>
+          <div className="nxRecordBlock-label">{f.label}</div>
+          {fieldEditor(f)}
+        </div>
+      ))}
     </div>
   );
 }
