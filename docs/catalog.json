@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 78,
+  "count": 81,
   "items": [
     {
       "name": "accordion",
@@ -428,6 +428,27 @@
       "kind": "record-core",
       "import": "src/record-core/NotionEditor.tsx",
       "when": "Notion-grade block editor for the richText field type: hand-rolled contenteditable blocks (p/h/quote/list/divider/image/table), slash menu, drag-reorder, inline markdown, image-drop; controlled (blocks/onChange) + inline-change props for a suggestions layer",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "useSuggestions · Suggestion",
+      "kind": "record-core",
+      "import": "src/record-core/useSuggestions.ts",
+      "when": "the accept/reject/undo engine for inline tracked changes over a Block[] document: folds an accepted change's original into replacement in the doc, tracks each change's status; entity-agnostic (no object/api coupling), pairs with SuggestionPanel + NotionEditor's inline-change props",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "SuggestionPanel",
+      "kind": "record-core",
+      "import": "src/record-core/SuggestionPanel.tsx",
+      "when": "the review rail for inline tracked changes: one card per change (del to ins diff + reason), accept/reject on pending + undo on resolved, bulk accept-all/reject-all, progress; pure presentational, wired to the useSuggestions callbacks",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "Pipeline · Chip",
+      "kind": "record-core",
+      "import": "src/record-core/Pipeline.tsx",
+      "when": "generic horizontal state indicator over a config-declared set of states (done/current/in-progress steps) plus the Chip status pill it is built from; states are plain strings the caller supplies",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
