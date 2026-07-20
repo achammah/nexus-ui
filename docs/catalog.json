@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 63,
+  "count": 65,
   "items": [
     {
       "name": "accordion",
@@ -372,6 +372,20 @@
       "kind": "wrapper",
       "import": "src/primitives/overlays.tsx",
       "when": "house APIs over vendored dialog/dropdown-menu (title+footer / trigger+items)",
+      "source": "ours"
+    },
+    {
+      "name": "SettingsTabs",
+      "kind": "wrapper",
+      "import": "src/primitives/SettingsTabs.tsx",
+      "when": "generic settings shell: sticky tab bar (tabs-as-config: key/label/icon/render) + body, own active-tab state — page head stays app content",
+      "source": "ours"
+    },
+    {
+      "name": "EditableRuleList",
+      "kind": "wrapper",
+      "import": "src/primitives/EditableRuleList.tsx",
+      "when": "config-driven editable rule/policy list: inline add/edit card, optional severity chip (enum+colors as props) and active toggle, over any object — no fetch inside, onCreate/onPatch/onRemove callback contract like DataTable",
       "source": "ours"
     },
     {

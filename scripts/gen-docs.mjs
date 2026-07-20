@@ -74,6 +74,8 @@ const OURS = [
   ["primitives/Button.tsx", "wrapper", "Button", "the house button API (variant primary/secondary/ghost/danger · size sm/md · busy · icon) over vendored button"],
   ["primitives/fields.tsx", "wrapper", "Input · Badge · Micro · Tabs/TabPanel · Checkbox · Tip", "house APIs over vendored input/badge/tabs/checkbox/tooltip + the Micro eyebrow"],
   ["primitives/overlays.tsx", "wrapper", "Dialog · Menu", "house APIs over vendored dialog/dropdown-menu (title+footer / trigger+items)"],
+  ["primitives/SettingsTabs.tsx", "wrapper", "SettingsTabs", "generic settings shell: sticky tab bar (tabs-as-config: key/label/icon/render) + body, own active-tab state — page head stays app content"],
+  ["primitives/EditableRuleList.tsx", "wrapper", "EditableRuleList", "config-driven editable rule/policy list: inline add/edit card, optional severity chip (enum+colors as props) and active toggle, over any object — no fetch inside, onCreate/onPatch/onRemove callback contract like DataTable"],
   ["record-core/DataTable.tsx", "record-core", "DataTable", "config-driven grid: sort, selection, inline edit, relation link cells, numeric alignment — see docs/record-core.md"],
   ["record-core/KanbanBoard.tsx", "record-core", "KanbanBoard", "config-driven board over the object's stageField; drag or stage-select moves cards"],
   ["record-core/RecordPage.tsx", "record-core", "RecordPage", "record anatomy: header + fields panel (inline edit, enrich affordance) + Timeline (activity composer, per-kind icons) / Notes / Files tabs"],
