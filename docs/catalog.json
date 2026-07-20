@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 75,
+  "count": 76,
   "items": [
     {
       "name": "accordion",
@@ -421,6 +421,13 @@
       "kind": "record-core",
       "import": "src/record-core/NotionEditor.tsx",
       "when": "Notion-grade block editor for the richText field type: hand-rolled contenteditable blocks (p/h/quote/list/divider/image/table), slash menu, drag-reorder, inline markdown, image-drop; controlled (blocks/onChange) + inline-change props for a suggestions layer",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "FilterBar · FilterChips · matchFilters · opsFor · filterableFields",
+      "kind": "record-core",
+      "import": "src/record-core/Filters.tsx",
+      "when": "advanced filtering: command-style filter builder (any column, type-aware operators) + removable active-filter chips + a pure matchFilters(row,conds) predicate; filterableFields(fields) maps an object's fields to the filterable set",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {

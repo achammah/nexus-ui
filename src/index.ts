@@ -24,6 +24,8 @@ export { KanbanBoard } from "./record-core/KanbanBoard";
 export { RecordPage } from "./record-core/RecordPage";
 export { NotionEditor, textToBlocks, blocksToMarkdown, bid } from "./record-core/NotionEditor";
 export type { Block, InlineChange } from "./record-core/NotionEditor";
+export { FilterBar, FilterChips, matchFilters, opsFor, filterableFields } from "./record-core/Filters";
+export type { FilterField, FilterCond } from "./record-core/Filters";
 export type { ObjectConfig, FieldDef, RecordRow, ViewDef, TimelineEvent, FieldType } from "./record-core/types";
 
 /* blocks — composed multi-step UI (guided wizard) */
