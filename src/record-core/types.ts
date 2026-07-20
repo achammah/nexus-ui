@@ -96,7 +96,7 @@ export interface FieldDef {
   scale?: number;
   /* AI-enrichment seam: the platform primitive that computes this field on demand
      (the UI shows a per-row Run affordance; the consumer wires the call). */
-  primitive?: { kind: "task" | "workflow"; id?: string; label?: string };
+  primitive?: { kind: "task" | "workflow"; taskId?: string; id?: string; label?: string };
 }
 
 export interface ObjectConfig {
