@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 65,
+  "count": 70,
   "items": [
     {
       "name": "accordion",
@@ -389,6 +389,13 @@
       "source": "ours"
     },
     {
+      "name": "ThinkingDots",
+      "kind": "wrapper",
+      "import": "src/primitives/ThinkingDots.tsx",
+      "when": "the 'AI is working' indicator (three bouncing accent dots); tokenized + reduced-motion aware — drop in beside any agent/task-run affordance",
+      "source": "ours"
+    },
+    {
       "name": "DataTable",
       "kind": "record-core",
       "import": "src/record-core/DataTable.tsx",
@@ -431,10 +438,10 @@
       "source": "ours"
     },
     {
-      "name": "skinPresets (nexus · ember)",
+      "name": "skinPresets (nexus · ember · warm-opt)",
       "kind": "skins",
       "import": "src/skins/presets.ts",
-      "when": "built-in skins: the house identity + a full-range org example (dark chrome, sharp corners, own palette/type)",
+      "when": "built-in skins: the house identity, a full-range org example (dark chrome, sharp corners, own palette/type), and a warm option-chip palette preset (skin-overridable; default palette unchanged)",
       "source": "ours"
     },
     {
@@ -445,10 +452,38 @@
       "source": "ours"
     },
     {
+      "name": "nx motion utilities",
+      "kind": "tokens",
+      "import": "src/tokens/motion.css",
+      "when": "riseIn/popIn entrance families + .nx-tap-scale/.nx-hover-lift micro-interactions, tokenized on the ease vars; ONE reduced-motion guard (opt back in with data-motion=\"always\")",
+      "source": "ours"
+    },
+    {
       "name": "shadcn semantic bridge",
       "kind": "tokens",
       "import": "src/styles/shadcn.css",
       "when": "maps shadcn variables onto --nx-* + Tailwind v4 @theme; import AFTER tokens.css",
+      "source": "ours"
+    },
+    {
+      "name": "usePollRev",
+      "kind": "hook",
+      "import": "src/hooks/usePollRev.ts",
+      "when": "live-sync: poll a revision counter, fire onChange when another writer bumped it (transport-agnostic fetchRev; pauses while the tab is hidden)",
+      "source": "ours"
+    },
+    {
+      "name": "useAsyncOp · computeAsyncOp",
+      "kind": "hook",
+      "import": "src/hooks/useAsyncOp.ts",
+      "when": "drive a long off-machine op with a stall guard: poll while in-flight, onSettle once, stalled past a threshold (injectable clock)",
+      "source": "ours"
+    },
+    {
+      "name": "useDebouncedSave · createDebouncer",
+      "kind": "hook",
+      "import": "src/hooks/useDebouncedSave.ts",
+      "when": "debounced autosave: coalesce rapid edits into ONE persist + a saveState (idle→saving→saved)",
       "source": "ours"
     },
     {

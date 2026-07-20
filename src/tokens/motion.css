@@ -1,0 +1,37 @@
+/* Motion utilities — entrances + micro-interactions, tokenized on the ease/timing
+   vars from tokens.css. Imported once by tokens.css, so any app that pulls tokens
+   gets them. Opt-out is automatic: the SINGLE reduced-motion guard at the bottom
+   neutralizes every utility under the OS "reduce" setting — unless a root opts back
+   in with data-motion="always" (rare; e.g. a kiosk/demo). */
+
+/* ---- entrances: riseIn family (fade + travel up, settle ease) ---- */
+@keyframes nxRiseIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.nx-rise-in { animation: nxRiseIn var(--nx-t-med) var(--nx-ease-settle) both; }
+.nx-rise-in-sm { animation: nxRiseIn var(--nx-t-fast) var(--nx-ease-settle) both; }
+.nx-rise-in-lg { animation: nxRiseIn 320ms var(--nx-ease-settle) both; }
+/* stagger children: set --nx-stagger on the parent, index via --i on each child */
+.nx-rise-in[style*="--i"], .nx-rise-in-sm[style*="--i"] { animation-delay: calc(var(--i) * var(--nx-stagger, 40ms)); }
+
+/* ---- popIn: scale up with a slight spring overshoot (menus, toasts, chips) ---- */
+@keyframes nxPopIn { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
+.nx-pop-in { animation: nxPopIn var(--nx-t-med) var(--nx-ease-spring) both; }
+
+/* ---- micro-interactions ---- */
+.nx-tap-scale { transition: transform var(--nx-t-fast) var(--nx-ease); }
+.nx-tap-scale:active { transform: scale(.96); }
+.nx-hover-lift { transition: transform var(--nx-t-fast) var(--nx-ease), box-shadow var(--nx-t-fast) var(--nx-ease); }
+.nx-hover-lift:hover { transform: translateY(-1px); box-shadow: var(--nx-shadow-2); }
+
+/* ---- ONE reduced-motion blanket (opt back in with data-motion="always") ---- */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="always"]) .nx-rise-in,
+  :root:not([data-motion="always"]) .nx-rise-in-sm,
+  :root:not([data-motion="always"]) .nx-rise-in-lg,
+  :root:not([data-motion="always"]) .nx-pop-in,
+  :root:not([data-motion="always"]) .nx-tap-scale,
+  :root:not([data-motion="always"]) .nx-hover-lift {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}

@@ -4,6 +4,7 @@ import {
   Flag, Mail, MessageSquare, Paperclip, Pencil, Phone, Plus, Sparkles, Upload,
 } from "lucide-react";
 import { Button } from "../primitives/Button";
+import { ThinkingDots } from "../primitives/ThinkingDots";
 import { Badge, Micro, Tabs, TabPanel } from "../primitives/fields";
 import { Calendar } from "../components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
@@ -717,6 +718,7 @@ export function RecordPage({
   files,
   onLogActivity,
   onEnrich,
+  enrichingKey,
   readOnly,
   watch,
   pin,
@@ -750,6 +752,9 @@ export function RecordPage({
   onLogActivity?: (kind: "call" | "email" | "meeting", text: string) => void;
   /* AI-enrichment: fields carrying `primitive` show a Run affordance → this fires */
   onEnrich?: (fieldKey: string) => void;
+  /* while enrichment runs for a field, its key is here → the Run affordance becomes a
+     ThinkingDots indicator (the host owns the busy state; clears on settle) */
+  enrichingKey?: string | null;
   /* permission-driven: fields render as text; composers/upload/enrich hidden */
   readOnly?: boolean;
   /* record subscription (needs an identity): current state + toggle */
@@ -1017,14 +1022,18 @@ export function RecordPage({
                       />
                     )}
                     {f.primitive && onEnrich && !readOnly && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<Sparkles size={12} />}
-                        aria-label={`Enrich ${f.label}${f.primitive.label ? ` via ${f.primitive.label}` : ""}`}
-                        data-testid={`enrich-${f.key}`}
-                        onClick={() => onEnrich(f.key)}
-                      />
+                      enrichingKey === f.key ? (
+                        <ThinkingDots label={`Enriching ${f.label}`} data-testid={`enriching-${f.key}`} />
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={<Sparkles size={12} />}
+                          aria-label={`Enrich ${f.label}${f.primitive.label ? ` via ${f.primitive.label}` : ""}`}
+                          data-testid={`enrich-${f.key}`}
+                          onClick={() => onEnrich(f.key)}
+                        />
+                      )
                     )}
                   </span>
                 </div>

@@ -8,6 +8,16 @@ export { SettingsTabs } from "./primitives/SettingsTabs";
 export type { SettingsTab } from "./primitives/SettingsTabs";
 export { EditableRuleList } from "./primitives/EditableRuleList";
 export type { SeverityOption, EditableRuleListProps } from "./primitives/EditableRuleList";
+export { ThinkingDots } from "./primitives/ThinkingDots";
+
+/* async + live-sync hooks */
+export { usePollRev } from "./hooks/usePollRev";
+export { useAsyncOp, computeAsyncOp } from "./hooks/useAsyncOp";
+export { useDebouncedSave, createDebouncer } from "./hooks/useDebouncedSave";
+export type { SaveState } from "./hooks/useDebouncedSave";
+
+/* skins */
+export { skinPresets, warmOptPalette, warmOptSkin } from "./skins/presets";
 
 export { DataTable } from "./record-core/DataTable";
 export { KanbanBoard } from "./record-core/KanbanBoard";
