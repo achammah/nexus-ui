@@ -2,9 +2,10 @@ import * as React from "react";
 import { X, ChevronDown, ChevronLeft, Search, CornerDownLeft, Type as TypeIcon, Hash, Calendar, User, Tag } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 
-/* Advanced filter — a COMMAND-style builder. The add affordance is an always-present
-   input (no "+ Filter" gate): type a value and it suggests complete filters ("Type is
-   Blog post", "Author contains marco"); type a field name to browse it. Fully keyboard-
+/* Advanced filter — a COMMAND-style builder AND the object's primary search box in
+   one. The add affordance is an always-present input (no "+ Filter" gate): type a
+   value and it both searches free-text and suggests complete filters ("Status is
+   Active", "Owner contains alex"); type a field name to browse it. Fully keyboard-
    driven. Active filters render as removable chips you can still tweak in place. */
 
 export type FilterField = { key: string; label: string; type: string; options?: unknown[] };
@@ -98,9 +99,11 @@ type Sug =
 
 /* the ONE field: free text live-searches the rows AND, in the same dropdown, offers
    the string as a filter on any compatible field/condition in one go. */
-function FilterCommand({ fields, onAdd, onRemoveLast, hasFilters, search, onSearch }: {
+function FilterCommand({ fields, onAdd, onRemoveLast, hasFilters, search, onSearch, searchTestId }: {
   fields: FilterField[]; onAdd: (field: FilterField, op: string, value: string) => void; onRemoveLast: () => void;
   hasFilters: boolean; search: string; onSearch: (s: string) => void;
+  /* override the search input's data-testid (defaults to "filter-command") so a host can keep a legacy search hook on this same input */
+  searchTestId?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const [active, setActive] = React.useState(0);
@@ -189,7 +192,7 @@ function FilterCommand({ fields, onAdd, onRemoveLast, hasFilters, search, onSear
       <span className="flt-cmd-ic">{pick ? fieldIcon(pick.type) : <Search size={13} />}</span>
       {pick && <button className="flt-cmd-crumb" onClick={() => { setPick(null); setPickQ(""); focusInput(); }}><ChevronLeft size={11} />{pick.label}</button>}
       <input
-        ref={inputRef} className="flt-cmd-input" data-testid="filter-command" value={q} placeholder={placeholder}
+        ref={inputRef} className="flt-cmd-input" data-testid={searchTestId ?? "filter-command"} value={q} placeholder={placeholder}
         onFocus={() => setOpen(true)} onChange={(e) => { pick ? setPickQ(e.target.value) : onSearch(e.target.value); setOpen(true); }} onKeyDown={onKey}
       />
       {open && (
@@ -244,7 +247,7 @@ function FilterCommand({ fields, onAdd, onRemoveLast, hasFilters, search, onSear
 
 /* the toolbar field — just the command input; active filters live on their own row
    (FilterChips) so adding a filter never shoves the search bar around. */
-export function FilterBar({ fields, value, onChange, search, onSearch }: { fields: FilterField[]; value: FilterCond[]; onChange: (f: FilterCond[]) => void; search: string; onSearch: (s: string) => void }) {
+export function FilterBar({ fields, value, onChange, search, onSearch, searchTestId }: { fields: FilterField[]; value: FilterCond[]; onChange: (f: FilterCond[]) => void; search: string; onSearch: (s: string) => void; /* forwarded to the search input's data-testid (defaults to "filter-command") */ searchTestId?: string }) {
   return (
     <div className="flt-bar" data-testid="filter-bar">
       <FilterCommand
@@ -252,6 +255,7 @@ export function FilterBar({ fields, value, onChange, search, onSearch }: { field
         hasFilters={value.length > 0}
         search={search}
         onSearch={onSearch}
+        searchTestId={searchTestId}
         onAdd={(field, op, val) => onChange([...value, { id: fid(), field: field.key, op, value: val }])}
         onRemoveLast={() => onChange(value.slice(0, -1))}
       />
@@ -313,50 +317,50 @@ const FLT_CSS = `
 .flt-bar{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
 /* active-filter chips row — its own line between the search bar and the table */
 .flt-chips{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:11px 0 1px}
-.flt-chip{display:inline-flex;align-items:stretch;border:1px solid #0B0B0B;background:#fff;box-shadow:1.5px 0 #FF3B30,-1.5px 0 #22D3EE;animation:fltChipIn .2s cubic-bezier(.16,1,.3,1)}
+.flt-chip{display:inline-flex;align-items:stretch;border:1px solid var(--nx-border-strong);background:var(--nx-bg-raised);box-shadow:var(--nx-shadow-1);animation:fltChipIn .2s var(--nx-ease-settle)}
 @keyframes fltChipIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-.flt-seg{display:inline-flex;align-items:center;gap:4px;font-size:12px;background:none;border:0;border-right:1px solid var(--nx-border,#E7E4DD);padding:5px 9px;cursor:pointer;color:var(--nx-fg,#0B0B0B);white-space:nowrap}
-.flt-field{font-family:var(--nx-font-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--nx-accent,#5A47F5)}
-.flt-op{color:var(--nx-fg-muted,#5E5B54);font-style:italic}
+.flt-seg{display:inline-flex;align-items:center;gap:4px;font-size:12px;background:none;border:0;border-right:1px solid var(--nx-border);padding:5px 9px;cursor:pointer;color:var(--nx-fg);white-space:nowrap}
+.flt-field{font-family:var(--nx-font-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--nx-accent)}
+.flt-op{color:var(--nx-fg-muted);font-style:italic}
 .flt-val,.flt-input{font-weight:600}
-.flt-input{outline:none;max-width:120px;border-right:1px solid var(--nx-border,#E7E4DD)}
-.flt-seg:hover{background:var(--nx-bg-sunken,#F7F7F5)}
-.flt-x{display:grid;place-items:center;background:none;border:0;padding:0 8px;cursor:pointer;color:var(--nx-fg-faint,#8A877E)}
-.flt-x:hover{color:var(--nx-danger,#C0392B)}
-.flt-clear{font-family:var(--nx-font-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--nx-fg-faint,#8A877E);background:none;border:0;cursor:pointer;padding:4px}
-.flt-clear:hover{color:var(--nx-danger,#C0392B)}
+.flt-input{outline:none;max-width:120px;border-right:1px solid var(--nx-border)}
+.flt-seg:hover{background:var(--nx-bg-sunken)}
+.flt-x{display:grid;place-items:center;background:none;border:0;padding:0 8px;cursor:pointer;color:var(--nx-fg-faint)}
+.flt-x:hover{color:var(--nx-danger)}
+.flt-clear{font-family:var(--nx-font-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--nx-fg-faint);background:none;border:0;cursor:pointer;padding:4px}
+.flt-clear:hover{color:var(--nx-danger)}
 .flt-menu{max-height:280px;overflow:auto}
 
 /* command filter */
 .flt-cmd{position:relative;display:inline-flex;align-items:center;gap:7px;flex:1;min-width:220px;max-width:440px;height:34px;
-  border:1px solid var(--nx-border,#E7E4DD);background:var(--nx-bg,#fff);padding:0 9px}
-.flt-cmd:focus-within{border-color:var(--nx-accent,#5A47F5);box-shadow:1.5px 0 #FF3B30,-1.5px 0 #22D3EE}
-.flt-cmd-ic{display:grid;place-items:center;color:var(--nx-fg-faint,#8A877E);flex:none}
+  border:1px solid var(--nx-border);background:var(--nx-bg);padding:0 9px}
+.flt-cmd:focus-within{border-color:var(--nx-accent);box-shadow:0 0 0 3px var(--nx-accent-soft)}
+.flt-cmd-ic{display:grid;place-items:center;color:var(--nx-fg-faint);flex:none}
 .flt-cmd-crumb{display:inline-flex;align-items:center;gap:2px;font-family:var(--nx-font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--nx-accent,#5A47F5);background:var(--nx-accent-soft,#EEECFE);border:0;padding:3px 7px 3px 4px;cursor:pointer;flex:none}
-.flt-cmd-input{border:0;outline:none;background:none;font-size:13px;color:var(--nx-fg,#0B0B0B);min-width:110px;flex:1;height:100%}
-.flt-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:60;width:min(348px,86vw);background:var(--nx-bg,#fff);
-  border:1px solid #0B0B0B;box-shadow:2px 0 #FF3B30,-2px 0 #22D3EE,0 18px 46px rgba(11,11,11,.22);animation:fltPop .16s cubic-bezier(.16,1,.3,1)}
+  color:var(--nx-accent);background:var(--nx-accent-soft);border:0;padding:3px 7px 3px 4px;cursor:pointer;flex:none}
+.flt-cmd-input{border:0;outline:none;background:none;font-size:13px;color:var(--nx-fg);min-width:110px;flex:1;height:100%}
+.flt-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:60;width:min(348px,86vw);background:var(--nx-bg);
+  border:1px solid var(--nx-border-strong);box-shadow:var(--nx-shadow-2);animation:fltPop .16s var(--nx-ease-settle)}
 @keyframes fltPop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 .flt-pop-list{max-height:300px;overflow:auto;padding:5px}
-.flt-sug{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-left:2px solid transparent;padding:9px 10px;cursor:pointer;color:var(--nx-fg,#0B0B0B)}
-.flt-sug.is-active{background:var(--nx-bg-sunken,#F7F7F5);border-left-color:var(--nx-accent,#5A47F5)}
-.flt-sug-ic{display:grid;place-items:center;color:var(--nx-fg-faint,#8A877E);flex:none}
+.flt-sug{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:0;border-left:2px solid transparent;padding:9px 10px;cursor:pointer;color:var(--nx-fg)}
+.flt-sug.is-active{background:var(--nx-bg-sunken);border-left-color:var(--nx-accent)}
+.flt-sug-ic{display:grid;place-items:center;color:var(--nx-fg-faint);flex:none}
 .flt-sug-main{font-size:13px;line-height:1.3;overflow:hidden;text-overflow:ellipsis}
 .flt-sug-f{font-weight:600}
-.flt-sug-op{font-family:var(--nx-font-mono);font-size:10.5px;color:var(--nx-fg-muted,#5E5B54);text-transform:uppercase;letter-spacing:.05em;margin:0 5px}
-.flt-sug-go{margin-left:auto;color:var(--nx-fg-faint,#8A877E);font-size:15px;flex:none}
-.flt-hl{background:rgba(90,71,245,.2);color:inherit}
-.flt-empty{padding:14px 12px;color:var(--nx-fg-muted,#5E5B54);font-size:12.5px}
-.flt-pop-foot{display:flex;gap:14px;align-items:center;padding:7px 11px;border-top:1px solid var(--nx-border,#E7E4DD);
-  font-family:var(--nx-font-mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--nx-fg-faint,#8A877E)}
-.flt-pop-foot kbd{font-family:var(--nx-font-mono);background:var(--nx-bg-sunken,#F7F7F5);border:1px solid var(--nx-border,#E7E4DD);padding:1px 5px;margin-right:4px;color:var(--nx-fg-muted,#5E5B54)}
+.flt-sug-op{font-family:var(--nx-font-mono);font-size:10.5px;color:var(--nx-fg-muted);text-transform:uppercase;letter-spacing:.05em;margin:0 5px}
+.flt-sug-go{margin-left:auto;color:var(--nx-fg-faint);font-size:15px;flex:none}
+.flt-hl{background:var(--nx-accent-soft);color:inherit}
+.flt-empty{padding:14px 12px;color:var(--nx-fg-muted);font-size:12.5px}
+.flt-pop-foot{display:flex;gap:14px;align-items:center;padding:7px 11px;border-top:1px solid var(--nx-border);
+  font-family:var(--nx-font-mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--nx-fg-faint)}
+.flt-pop-foot kbd{font-family:var(--nx-font-mono);background:var(--nx-bg-sunken);border:1px solid var(--nx-border);padding:1px 5px;margin-right:4px;color:var(--nx-fg-muted)}
 .flt-pick-form{padding:11px}
-.flt-pick-lbl{display:flex;align-items:center;gap:7px;font-family:var(--nx-font-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--nx-accent,#5A47F5);margin-bottom:9px}
+.flt-pick-lbl{display:flex;align-items:center;gap:7px;font-family:var(--nx-font-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--nx-accent);margin-bottom:9px}
 .flt-pick-row{display:flex;gap:7px;align-items:stretch}
-.flt-pick-op{border:1px solid var(--nx-border,#E7E4DD);background:var(--nx-bg,#fff);font-family:var(--nx-font-mono);font-size:11px;text-transform:uppercase;padding:7px 8px;color:var(--nx-fg,#0B0B0B)}
-.flt-pick-val{flex:1;min-width:0;border:1px solid var(--nx-border,#E7E4DD);padding:7px 9px;font-size:13px;outline:none;color:var(--nx-fg,#0B0B0B);background:var(--nx-bg,#fff)}
-.flt-pick-val:focus{border-color:var(--nx-accent,#5A47F5)}
-.flt-pick-go{display:grid;place-items:center;width:40px;flex:none;border:1px solid var(--nx-accent,#5A47F5);background:var(--nx-accent,#5A47F5);color:#fff;cursor:pointer}
+.flt-pick-op{border:1px solid var(--nx-border);background:var(--nx-bg);font-family:var(--nx-font-mono);font-size:11px;text-transform:uppercase;padding:7px 8px;color:var(--nx-fg)}
+.flt-pick-val{flex:1;min-width:0;border:1px solid var(--nx-border);padding:7px 9px;font-size:13px;outline:none;color:var(--nx-fg);background:var(--nx-bg)}
+.flt-pick-val:focus{border-color:var(--nx-accent)}
+.flt-pick-go{display:grid;place-items:center;width:40px;flex:none;border:1px solid var(--nx-accent);background:var(--nx-accent);color:var(--nx-accent-fg);cursor:pointer}
 @media(max-width:768px){.flt-bar{flex-basis:100%}.flt-cmd{min-width:0;width:100%;max-width:none}.flt-pop{width:100%}}
 `;

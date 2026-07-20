@@ -1,9 +1,7 @@
-/* Wizard block styles — --nx-* tokens throughout. Motion uses a local cubic-bezier;
-   swap to --nx-ease-* when foundations lands the motion-token set (tracked, Wave-2
-   integration sweep — see docs/plans/wizard.md). */
+/* Wizard block styles — color, shape, and motion all bind to --nx-* tokens. The one
+   raw color is the overlay scrim (functional black), which no theme token covers. */
 
 .nxwiz-root {
-  --nxwiz-ease: cubic-bezier(0.16, 1, 0.3, 1);
   max-width: 720px;
   margin: 0 auto;
   padding: 32px 8px 48px;
@@ -16,11 +14,11 @@
   font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--nx-accent); flex: none;
 }
 .nxwiz-prog { flex: 1; height: 3px; background: var(--nx-border); overflow: hidden; }
-.nxwiz-prog span { display: block; height: 100%; background: var(--nx-accent); transition: width 0.4s var(--nxwiz-ease); }
+.nxwiz-prog span { display: block; height: 100%; background: var(--nx-accent); transition: width 0.4s var(--nx-ease-settle); }
 .nxwiz-count { font-family: var(--nx-font-mono); font-size: 11px; color: var(--nx-fg-muted); flex: none; }
 
-.nxwiz-card { animation: nxwizCardIn 0.32s var(--nxwiz-ease); }
-.nxwiz-card.in-l { animation: nxwizCardInL 0.32s var(--nxwiz-ease); }
+.nxwiz-card { animation: nxwizCardIn 0.32s var(--nx-ease-settle); }
+.nxwiz-card.in-l { animation: nxwizCardInL 0.32s var(--nx-ease-settle); }
 @keyframes nxwizCardIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
 @keyframes nxwizCardInL { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
 .nxwiz-qn { font-family: var(--nx-font-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--nx-accent); margin-bottom: 14px; }
@@ -73,7 +71,7 @@
 .nxwiz-next:hover:not(:disabled), .nxwiz-create:hover:not(:disabled) { background: var(--nx-accent-hover); transform: translateY(-1px); }
 .nxwiz-next:disabled, .nxwiz-create:disabled { opacity: 0.4; cursor: not-allowed; }
 .nxwiz-spin {
-  width: 12px; height: 12px; border: 2px solid rgba(255, 255, 255, 0.4); border-top-color: currentColor;
+  width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent;
   border-radius: 50%; display: inline-block; animation: nxwizspin 0.7s linear infinite;
 }
 @keyframes nxwizspin { to { transform: rotate(360deg); } }
@@ -128,7 +126,7 @@
 @keyframes nxwizFade { from { opacity: 0; } to { opacity: 1; } }
 .nxwiz-modal {
   position: relative; width: min(760px, 100%); background: var(--nx-bg-raised); border: 1px solid var(--nx-border);
-  border-radius: var(--nx-radius-l); box-shadow: var(--nx-shadow-2); animation: nxwizPop 0.22s var(--nxwiz-ease, cubic-bezier(0.16, 1, 0.3, 1));
+  border-radius: var(--nx-radius-l); box-shadow: var(--nx-shadow-2); animation: nxwizPop 0.22s var(--nx-ease-settle);
   padding: 36px clamp(20px, 4vw, 40px) 32px;
 }
 @keyframes nxwizPop { from { opacity: 0; transform: translateY(14px) scale(0.985); } to { opacity: 1; transform: none; } }

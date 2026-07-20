@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 
 /* ModalOverlay — a standalone full-screen overlay shell: Escape + backdrop-click close,
    optional × button. Wraps ANY children — zero coupling to Wizard or any particular
-   content. Generalized from blog-studio-lambda's NewArticleModal. */
+   content. */
 
 export function ModalOverlay({
   onClose,

@@ -5,11 +5,11 @@ import { SourcesInput } from "./SourcesInput";
 import { type Ans, type Kind, type Q, type Sources, asList, asSources } from "./types";
 import "./wizard.css";
 
-/* Wizard — a config-driven multi-step step engine (generalized from
-   blog-studio-lambda's Builder.tsx): a `Q[]` renders one step at a time with a
-   progress bar + slide animation, `required` gates Next, a generic review screen
-   lists every answered question, and onComplete(answers) fires the final action.
-   An optional `landing` renders the "guided vs blank" 2-choice entry first. */
+/* Wizard — a config-driven multi-step step engine: a `Q[]` renders one step at a
+   time with a progress bar + slide animation, `required` gates Next, a generic
+   review screen lists every answered question, and onComplete(answers) fires the
+   final action. An optional `landing` renders the "guided vs blank" 2-choice entry
+   first. */
 
 type KindRenderer = (ctx: {
   q: Q;
