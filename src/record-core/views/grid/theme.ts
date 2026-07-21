@@ -41,9 +41,9 @@ export const chipColorLiterals = (): Record<string, ChipColors> => {
 };
 
 /* --nx-* → glide Theme. Keys with no dedicated token map to the nearest
-   existing one (bgSearchResult/bgBubbleSelected → accent-soft ·
-   bgBubble/header-hover → bg-sunken · drilldownBorder → border-strong) —
-   candidate tokens, listed in the lane report. */
+   existing one (bgSearchResult/bgBubbleSelected → accent-soft · bgBubble →
+   bg-sunken · drilldownBorder → border-strong) — candidate tokens, listed in
+   the lane report. */
 export const deriveGridTheme = (): Partial<Theme> => ({
   accentColor: resolveCssColor("var(--nx-accent)"),
   accentFg: resolveCssColor("var(--nx-accent-fg)"),
@@ -56,11 +56,15 @@ export const deriveGridTheme = (): Partial<Theme> => ({
   fgIconHeader: resolveCssColor("var(--nx-bg)"),
   textHeader: resolveCssColor("var(--nx-fg-muted)"),
   textHeaderSelected: resolveCssColor("var(--nx-accent-fg)"),
-  bgCell: resolveCssColor("var(--nx-bg)"),
-  bgCellMedium: resolveCssColor("var(--nx-bg-raised)"),
-  bgHeader: resolveCssColor("var(--nx-bg-raised)"),
-  bgHeaderHasFocus: resolveCssColor("var(--nx-bg-sunken)"),
-  bgHeaderHovered: resolveCssColor("var(--nx-bg-sunken)"),
+  /* surfaces mirror the DataTable so the grid reads as a native part of the app,
+     not an embedded widget: data cells on the raised surface (`.nxTable td` on
+     its raised wrap), header + the row-marker gutter on the sunken tone
+     (`.nxTable th`), a faint darken on header hover/focus for interactivity */
+  bgCell: resolveCssColor("var(--nx-bg-raised)"),
+  bgCellMedium: resolveCssColor("var(--nx-bg-sunken)"),
+  bgHeader: resolveCssColor("var(--nx-bg-sunken)"),
+  bgHeaderHasFocus: resolveCssColor("color-mix(in oklab, var(--nx-bg-sunken) 90%, var(--nx-fg))"),
+  bgHeaderHovered: resolveCssColor("color-mix(in oklab, var(--nx-bg-sunken) 90%, var(--nx-fg))"),
   bgBubble: resolveCssColor("var(--nx-bg-sunken)"),
   bgBubbleSelected: resolveCssColor("var(--nx-accent-soft)"),
   bgSearchResult: resolveCssColor("var(--nx-accent-soft)"),
