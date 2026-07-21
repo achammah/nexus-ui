@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 83,
+  "count": 91,
   "items": [
     {
       "name": "accordion",
@@ -463,6 +463,62 @@
       "kind": "record-core",
       "import": "src/record-core/ChartView.tsx",
       "when": "config-driven chart: one bar per group option, Count or Σ numeric measure — the third view family beside table/board",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "ViewDefinition · ViewProps · ViewInstanceConfig",
+      "kind": "record-core",
+      "import": "src/record-core/views/types.ts",
+      "when": "the view-type contract: what a views/<type>/definition.tsx default-exports (label/icon/component/toolbar/config schema) and the props every view receives from its host",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "viewDefinitions · getViewDefinition",
+      "kind": "record-core",
+      "import": "src/record-core/views/registry.ts",
+      "when": "build-time self-registering view registry (import.meta.glob over views/*/definition) — drop a folder = a new view type in every consumer's switcher, zero switcher edits",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "buildRegistry · configuredViewsFor",
+      "kind": "record-core",
+      "import": "src/record-core/views/resolve.ts",
+      "when": "the registry's pure core (no browser, no vite — node-testable): fold glob modules into the type map; derive an object's view tabs (declared `views` or the legacy table/board/chart set)",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "groupableFields · measurableFields · resolveGroupBy",
+      "kind": "record-core",
+      "import": "src/record-core/views/group.ts",
+      "when": "shared grouping derivations for board/chart views and their host: which fields can group, which can measure, and the groupBy fallback chain (runtime pick → instance config → stageField → first groupable)",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "GroupByMenu",
+      "kind": "record-core",
+      "import": "src/record-core/views/controls.tsx",
+      "when": "the shared group-by picker rendered by both board and chart toolbars (same viewState.groupBy — regroup one, the other follows)",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "table view definition",
+      "kind": "record-core",
+      "import": "src/record-core/views/table/definition.tsx",
+      "when": "the built-in table view: DataTable behind the ViewProps contract + the Columns visibility menu as its toolbar",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "kanban view definition",
+      "kind": "record-core",
+      "import": "src/record-core/views/kanban/definition.tsx",
+      "when": "the built-in board view: KanbanBoard behind the ViewProps contract + group-by and per-column rollup pickers as its toolbar",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "chart view definition",
+      "kind": "record-core",
+      "import": "src/record-core/views/chart/definition.tsx",
+      "when": "the built-in chart view: ChartView behind the ViewProps contract + measure and group-by pickers as its toolbar",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {

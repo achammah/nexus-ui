@@ -136,7 +136,14 @@ export interface ObjectConfig {
   /* select field key whose options form a record state-pipeline (rendered by the
      suggestions surface Pipeline); the record's current value marks the active step */
   pipelineField?: string;
-  defaultView: "table" | "kanban";
+  /* the view tabs this object offers, in order: `type` picks an installed view
+     definition (views/<type>/ — see views/registry.ts), the other keys are that
+     type's config (its configSchema). Omitted → derived: the table, plus board +
+     chart when a select/user field exists. */
+  views?: { type: string; [key: string]: unknown }[];
+  /* the initially-active view — any installed view type ("table" | "kanban" |
+     "chart" built in) */
+  defaultView: "table" | "kanban" | (string & {});
   /* rows belong to a team: visibility + roles resolve per the caller's active team */
   teamScoped?: boolean;
   /* role → allowed actions (view/create/edit/delete/export + editOwn/deleteOwn) */

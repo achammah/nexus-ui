@@ -35,6 +35,11 @@ export { FilterBar, FilterChips, matchFilters, opsFor, filterableFields } from "
 export type { FilterField, FilterCond } from "./record-core/Filters";
 export type { ObjectConfig, FieldDef, RecordRow, ViewDef, TimelineEvent, FieldType } from "./record-core/types";
 
+/* view registry — self-registering view types (views/<type>/definition.tsx) */
+export { viewDefinitions, getViewDefinition } from "./record-core/views/registry";
+export type { ViewDefinition, ViewProps, ViewToolbarProps, ViewConfigField, ViewInstanceConfig } from "./record-core/views/types";
+export { groupableFields, measurableFields, resolveGroupBy } from "./record-core/views/group";
+
 /* blocks — composed multi-step UI (guided wizard) */
 export * from "./blocks/wizard";
 
