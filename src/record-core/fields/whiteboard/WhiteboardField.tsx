@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { Excalidraw, getSceneVersion } from "@excalidraw/excalidraw";
+import { Excalidraw, MainMenu, getSceneVersion } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { Pencil, X } from "lucide-react";
 import { Button } from "../../../primitives/Button";
@@ -37,8 +37,21 @@ import { Thumbnail } from "./Thumbnail";
 
 type ExcalidrawElements = readonly { isDeleted?: boolean }[];
 
+/* Trim excalidraw's foreign chrome to a native minimum: no view-background picker
+   (the surface is token-driven), no export-to dialog (its links/collab are foreign),
+   no theme toggle (the app drives the theme), no file load/save. Kept: Reset the
+   canvas + Save as image (native, useful). The image TOOL stays off (scenes stay
+   lean JSON — no base64 blobs in the command log). */
 const UI_OPTIONS = {
-  canvasActions: { loadScene: false, saveToActiveFile: false },
+  canvasActions: {
+    changeViewBackgroundColor: false,
+    clearCanvas: true,
+    export: false,
+    loadScene: false,
+    saveToActiveFile: false,
+    toggleTheme: false,
+    saveAsImage: true,
+  },
   tools: { image: false },
 } as const;
 
@@ -110,9 +123,17 @@ export default function WhiteboardField({ field, row, value, readOnly, onSave }:
       theme={theme}
       viewModeEnabled={readOnly}
       UIOptions={UI_OPTIONS}
-      initialData={{ elements: seed.elements as never, scrollToContent: true }}
+      initialData={{ elements: seed.elements as never, appState: { showWelcomeScreen: false } as never, scrollToContent: true }}
       onChange={onChange as never}
-    />
+    >
+      {/* a minimal native menu — Save as image + Reset only; excalidraw's foreign
+          items (library, live-collaboration, socials, help, load/save-file) are gone.
+          Rendering children also suppresses the default welcome-screen overlay. */}
+      <MainMenu>
+        <MainMenu.DefaultItems.SaveAsImage />
+        <MainMenu.DefaultItems.ClearCanvas />
+      </MainMenu>
+    </Excalidraw>
   );
 
   // mobile rest state: static preview + Edit; the canvas mounts only in the overlay

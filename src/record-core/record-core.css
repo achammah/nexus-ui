@@ -166,12 +166,14 @@
 .nxTable td[data-cell-focus] { box-shadow: inset 0 0 0 2px var(--nx-accent); border-radius: 2px; }
 
 /* ---------- Whiteboard field (fields/whiteboard) ---------- */
-/* record-page canvas block — a bounded drawing surface; the page scrolls around it */
+/* record-page canvas block — an inset WELL (bg-sunken, the depth the flow canvas and
+   kanban columns use) that the excalidraw toolbar island floats above (bg-raised via
+   --island-bg-color); the page scrolls around it */
 .nxWbHost { display: flex; flex-direction: column; gap: 4px; }
 .nxWbCanvas {
   height: clamp(320px, 55vh, 620px);
   border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m);
-  overflow: hidden; background: var(--nx-bg-raised);
+  overflow: hidden; background: var(--nx-bg-sunken);
 }
 /* lazy-chunk loading state (the generic Suspense fallback for registry renders) */
 .nxFieldLoading {
@@ -206,3 +208,86 @@
   padding: 14px; border: 1px dashed var(--nx-border); border-radius: var(--nx-radius-m);
   color: var(--nx-fg-muted); font: var(--nx-text-meta);
 }
+
+/* ---------- Native excalidraw chrome (Native-not-widget, contract §4) ----------
+   Excalidraw renders its whole UI (toolbar island, tool buttons, popovers, panels,
+   context menu, zoom/undo controls) from its OWN CSS custom properties. This scope
+   DERIVES every one from the live --nx-* canvas, so the chrome reads as a native
+   Nexus surface — not excalidraw's stock indigo/rounded widget — and a live theme OR
+   skin flip re-derives it with zero JS, exactly as the flow view binds --xy-*. The
+   both theme states take the SAME --nx-* derivation because the tokens already flip
+   per theme. Excalidraw stamps .theme--dark for dark but NO class for light, so the
+   base .excalidraw (0,2,0, beats excalidraw's .excalidraw 0,1,0) covers light and the
+   .theme--dark selector (0,3,0, beats excalidraw's .excalidraw.theme--dark 0,2,0)
+   covers dark. */
+.nxWbCanvas .excalidraw, .nxWbCanvas .excalidraw.theme--dark,
+.nxWbOverlayBody .excalidraw, .nxWbOverlayBody .excalidraw.theme--dark {
+  /* surfaces */
+  --island-bg-color: var(--nx-bg-raised);
+  --default-bg-color: var(--nx-bg-sunken);
+  --popup-bg-color: var(--nx-bg-raised);
+  --popup-secondary-bg-color: var(--nx-bg-sunken);
+  --sidebar-bg-color: var(--nx-bg-raised);
+  --input-bg-color: var(--nx-bg);
+  --input-hover-bg-color: var(--nx-bg-sunken);
+  --overlay-bg-color: color-mix(in oklab, var(--nx-bg) 62%, transparent);
+  --color-surface-lowest: var(--nx-bg);
+  --color-surface-low: var(--nx-bg-sunken);
+  --color-surface-mid: var(--nx-bg-raised);
+  --color-surface-high: var(--nx-bg-raised);
+  --color-surface-primary-container: var(--nx-accent-soft);
+  --color-muted: var(--nx-fg-faint);
+  --color-muted-background: var(--nx-bg-sunken);
+  --color-muted-background-darker: var(--nx-border);
+  /* text + icons */
+  --color-on-surface: var(--nx-fg);
+  --color-on-primary-container: var(--nx-accent);
+  /* accent — replace excalidraw's stock indigo */
+  --color-primary: var(--nx-accent);
+  --color-primary-hover: var(--nx-accent-hover);
+  --color-primary-darker: var(--nx-accent-hover);
+  --color-primary-darkest: var(--nx-accent-hover);
+  --color-primary-light: var(--nx-accent-soft);
+  --color-brand-hover: var(--nx-accent-hover);
+  --color-brand-active: var(--nx-accent);
+  --color-selection: var(--nx-accent);
+  /* buttons / tools */
+  --button-bg: transparent;
+  --button-hover-bg: var(--nx-bg-sunken);
+  --button-active-bg: var(--nx-accent-soft);
+  --button-color: var(--nx-fg-muted);
+  --button-hover-color: var(--nx-fg);
+  --button-border: var(--nx-border);
+  --button-hover-border: var(--nx-border-strong);
+  --button-active-border: var(--nx-accent);
+  /* borders + geometry */
+  --border-color: var(--nx-border);
+  --border-active: var(--nx-accent);
+  --border-hover: var(--nx-border-strong);
+  --border-radius-md: var(--nx-radius-s);
+  --border-radius-lg: var(--nx-radius-m);
+  /* elevation */
+  --shadow-island: var(--nx-shadow-1);
+  --modal-shadow: var(--nx-shadow-2);
+  --sidebar-shadow: var(--nx-shadow-2);
+  --library-dropdown-shadow: var(--nx-shadow-2);
+  /* semantic */
+  --color-danger: var(--nx-danger);
+  --color-danger-background: var(--nx-danger-soft);
+  --color-warning-background: var(--nx-warn-soft);
+  --color-success-text: var(--nx-ok);
+  /* the HTML chrome adopts our type; the canvas hand-drawn font is unaffected
+     (drawn to the <canvas>, not via CSS font-family) */
+  font-family: var(--nx-font-sans);
+}
+/* the toolbar island reads as a floating native panel, not a boxed sub-window */
+.nxWbCanvas .excalidraw .Island,
+.nxWbOverlayBody .excalidraw .Island { border: 1px solid var(--nx-border); }
+/* trim foreign excalidraw UI we do not expose — the library, the keyboard-hint
+   banner, and the help-dialog trigger: a clean embedded canvas, not a standalone app */
+.nxWbCanvas .excalidraw .default-sidebar-trigger,
+.nxWbCanvas .excalidraw .HintViewer,
+.nxWbCanvas .excalidraw .help-icon,
+.nxWbOverlayBody .excalidraw .default-sidebar-trigger,
+.nxWbOverlayBody .excalidraw .HintViewer,
+.nxWbOverlayBody .excalidraw .help-icon { display: none !important; }
