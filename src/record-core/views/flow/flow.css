@@ -1,0 +1,119 @@
+/* Flow view — records-as-graph canvas. Token-driven only: xyflow draws its own
+   chrome (edges, minimap, controls, background, selection) from --xy-* variables,
+   and this scope derives every one of them from the live --nx-* canvas — dark
+   mode and runtime skins re-theme the whole surface through plain CSS
+   inheritance, no JS re-derivation. Record cards and hubs are our own markup
+   styled directly on tokens. */
+
+.nxFlowWrap {
+  position: relative;
+  height: clamp(360px, calc(100vh - 250px), 760px);
+  padding: 0;
+  overflow: hidden;
+
+  /* xyflow chrome → tokens */
+  --xy-background-color: transparent;
+  --xy-background-pattern-color: var(--nx-border-strong);
+  --xy-edge-stroke: var(--nx-border-strong);
+  --xy-edge-stroke-selected: var(--nx-accent);
+  --xy-edge-stroke-width: 1.5;
+  --xy-connectionline-stroke: var(--nx-accent);
+  --xy-handle-background-color: transparent;
+  --xy-handle-border-color: transparent;
+  --xy-minimap-background-color: var(--nx-bg-sunken);
+  --xy-minimap-mask-background-color: color-mix(in oklab, var(--nx-bg) 55%, transparent);
+  --xy-minimap-mask-stroke-color: var(--nx-border);
+  --xy-minimap-node-background-color: var(--nx-border-strong);
+  --xy-attribution-background-color: color-mix(in oklab, var(--nx-bg-raised) 65%, transparent);
+  --xy-controls-box-shadow: var(--nx-shadow-1);
+  --xy-controls-button-background-color: var(--nx-bg-raised);
+  --xy-controls-button-background-color-hover: var(--nx-bg-sunken);
+  --xy-controls-button-color: var(--nx-fg-muted);
+  --xy-controls-button-color-hover: var(--nx-fg);
+  --xy-controls-button-border-color: var(--nx-border);
+  --xy-selection-background-color: var(--nx-accent-soft);
+  --xy-selection-border: 1px dashed var(--nx-accent);
+}
+
+/* ---------- record-card node ---------- */
+.nxFlowCard {
+  width: 220px;
+  min-height: 64px;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s);
+  padding: 10px;
+  box-shadow: var(--nx-shadow-1);
+  cursor: pointer;
+  transition: box-shadow var(--nx-t-fast) var(--nx-ease), transform var(--nx-t-fast) var(--nx-ease), border-color var(--nx-t-fast) var(--nx-ease);
+  /* entrance: the list-stagger family (nxRiseIn keyframes from motion.css) */
+  animation: nxRiseIn var(--nx-t-med) var(--nx-ease-settle) both;
+  animation-delay: calc(var(--i, 0) * var(--nx-stagger));
+}
+.react-flow__node:hover .nxFlowCard { box-shadow: var(--nx-shadow-2); transform: translateY(-1px); }
+.react-flow__node.dragging .nxFlowCard { box-shadow: var(--nx-shadow-2); transform: scale(1.02); cursor: grabbing; }
+.react-flow__node.selectable.selected .nxFlowCard { border-color: var(--nx-accent); box-shadow: 0 0 0 3px var(--nx-accent-soft); }
+.react-flow__node:focus-visible { outline: none; }
+.react-flow__node:focus-visible .nxFlowCard { border-color: var(--nx-accent); box-shadow: 0 0 0 3px var(--nx-accent-soft), var(--nx-shadow-1); }
+.nxFlowCard .nxKMeta { flex-wrap: wrap; row-gap: 3px; }
+.nxFlowCard .nxKMeta > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 196px; }
+
+/* ---------- hub node (cross-object target chip) ---------- */
+.nxFlowHub {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 168px;
+  padding: 7px 13px;
+  background: var(--nx-bg-sunken);
+  border: 1px solid var(--nx-border-strong);
+  border-radius: 999px;
+  font: var(--nx-text-meta);
+  font-weight: 600;
+  color: var(--nx-fg-muted);
+  box-shadow: var(--nx-shadow-1);
+  transition: box-shadow var(--nx-t-fast) var(--nx-ease), border-color var(--nx-t-fast) var(--nx-ease);
+  animation: nxPopIn var(--nx-t-med) var(--nx-ease-spring) both;
+  animation-delay: calc(var(--i, 0) * var(--nx-stagger));
+}
+.nxFlowHubLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.react-flow__node.selectable.selected .nxFlowHub,
+.react-flow__node:focus-visible .nxFlowHub { border-color: var(--nx-accent); box-shadow: 0 0 0 3px var(--nx-accent-soft); }
+
+/* handles exist only as invisible edge anchors — the flow view never draws connections */
+.nxFlowWrap .react-flow__handle { opacity: 0; pointer-events: none; }
+
+/* ---------- states ---------- */
+.nxFlowEmpty {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 56px 24px;
+  text-align: center;
+  color: var(--nx-fg-faint);
+}
+.nxFlowEmpty b { color: var(--nx-fg-muted); font-weight: 600; }
+
+/* screen-reader-only live region (drag commit announcements) */
+.nxFlowSrOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .nxFlowWrap { height: clamp(320px, calc(100vh - 230px), 560px); }
+}
+
+/* mirror the motion.css blanket for this file's own animations/transitions */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="always"]) .nxFlowCard,
+  :root:not([data-motion="always"]) .nxFlowHub {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
