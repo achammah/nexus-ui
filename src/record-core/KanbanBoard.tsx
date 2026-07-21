@@ -150,7 +150,7 @@ export function KanbanBoard({
           <Column key={s} stage={s} config={config} onOpen={onOpen} groupKey={groupKey} aggregate={aggregate} rows={rows.filter((r) => r[stageField.key] === s)} />
         ))}
       </div>
-      <DragOverlay>{active && (() => { const p = config.fields.find((f) => f.primary) ?? config.fields[0]; return <div className="nxKCard"><div className="nxKTitle">{formatCell(active[p.key], p.type)}</div></div>; })()}</DragOverlay>
+      <DragOverlay>{active && (() => { const p = config.fields.find((f) => f.primary) ?? config.fields[0]; return <div className="nxKCard nxKCard--overlay"><div className="nxKTitle">{formatCell(active[p.key], p.type)}</div></div>; })()}</DragOverlay>
     </DndContext>
   );
 }

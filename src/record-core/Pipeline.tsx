@@ -60,17 +60,17 @@ const PL_CSS = `
 .nxPl{display:flex;align-items:center}
 .nxPl-step{display:inline-flex;align-items:center;gap:6px}
 .nxPl-dot{width:18px;height:18px;flex:none;border:1px solid var(--nx-border);display:grid;place-items:center;
-  font:var(--nx-text-micro);color:var(--nx-fg-muted);background:var(--nx-bg-raised);border-radius:50%}
-.nxPl-label{font:var(--nx-text-micro);letter-spacing:var(--nx-tracking-micro);text-transform:uppercase;color:var(--nx-fg-muted)}
+  font:var(--nx-text-micro);color:var(--nx-fg-muted);background:var(--nx-bg-raised);border-radius:50%;transition:background var(--nx-t-med) var(--nx-ease),border-color var(--nx-t-med) var(--nx-ease),color var(--nx-t-med) var(--nx-ease)}
+.nxPl-label{font:var(--nx-text-micro);letter-spacing:var(--nx-tracking-micro);text-transform:uppercase;color:var(--nx-fg-muted);transition:color var(--nx-t-fast) var(--nx-ease)}
 .nxPl-step:not(.is-current):not(.is-prog):not(.is-done) .nxPl-label{display:none}
 @media(max-width:1100px){.nxPl-label{display:none}}
-.nxPl-line{width:16px;height:1px;background:var(--nx-border);margin:0 5px}
+.nxPl-line{width:16px;height:1px;background:var(--nx-border);margin:0 5px;transition:background var(--nx-t-med) var(--nx-ease)}
 .nxPl-line.is-done{background:var(--nx-accent)}
 .nxPl-step.is-done .nxPl-dot{background:var(--nx-accent);border-color:var(--nx-accent);color:var(--nx-accent-fg)}
 .nxPl-step.is-done .nxPl-label{color:var(--nx-fg)}
 .nxPl-step.is-current .nxPl-dot,.nxPl-step.is-prog .nxPl-dot{border-color:var(--nx-accent)}
 .nxPl-step.is-current .nxPl-label,.nxPl-step.is-prog .nxPl-label{color:var(--nx-accent);font-weight:600}
-.nxPl-spin{width:11px;height:11px;border:2px solid var(--nx-accent-soft);border-top-color:var(--nx-accent);border-radius:50%;display:inline-block;animation:nxPlSpin .7s linear infinite}
+.nxPl-spin{width:11px;height:11px;border:2px solid var(--nx-accent-soft);border-top-color:var(--nx-accent);border-radius:50%;display:inline-block;animation:nxPlSpin var(--nx-t-spin) linear infinite}
 @keyframes nxPlSpin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.nxPl-spin{animation:none}}
 `;

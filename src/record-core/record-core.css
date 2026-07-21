@@ -9,19 +9,23 @@
   font: var(--nx-text-meta); font-weight: 600; text-align: left;
   padding: 8px 12px; border-bottom: 1px solid var(--nx-border);
   white-space: nowrap; cursor: pointer; user-select: none;
+  transition: color var(--nx-t-fast) var(--nx-ease);
 }
-.nxTable th .nxSortMark { opacity: 0.7; margin-left: 4px; }
+.nxTable th:hover { color: var(--nx-fg); }
+.nxTable th .nxSortMark { opacity: 0.7; margin-left: 4px; animation: nxCaretIn var(--nx-t-fast) var(--nx-ease-settle) both; }
+@keyframes nxCaretIn { from { opacity: 0; transform: translateY(-2px); } to { opacity: 0.7; transform: none; } }
 .nxTable td {
   padding: 7px 12px; border-bottom: 1px solid var(--nx-border);
   white-space: nowrap; max-width: 340px; overflow: hidden; text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
+  transition: background var(--nx-t-fast) var(--nx-ease), box-shadow var(--nx-t-fast) var(--nx-ease);
 }
 .nxTable tr:hover td { background: var(--nx-bg-sunken); }
 .nxTable tr:last-child td { border-bottom: 0; }
 .nxRowLink { color: var(--nx-fg); font-weight: 500; text-decoration: none; }
 .nxRowLink:hover { color: var(--nx-accent); }
-.nxCellEdit { background: transparent; border: 1px solid transparent; font: inherit; color: inherit; width: 100%; padding: 2px 4px; border-radius: 4px; }
-.nxCellEdit:focus { border-color: var(--nx-accent); background: var(--nx-bg-raised); outline: none; }
+.nxCellEdit { background: transparent; border: 1px solid transparent; font: inherit; color: inherit; width: 100%; padding: 2px 4px; border-radius: 4px; transition: border-color var(--nx-t-fast) var(--nx-ease), box-shadow var(--nx-t-fast) var(--nx-ease), background var(--nx-t-fast) var(--nx-ease); }
+.nxCellEdit:focus { border-color: var(--nx-accent); background: var(--nx-bg-raised); outline: none; box-shadow: 0 0 0 3px var(--nx-accent-soft); }
 /* selects read as TEXT in table cells (native chrome per-row is noise); affordance on hover */
 .nxTable select.nxCellEdit { appearance: none; -webkit-appearance: none; cursor: pointer; }
 .nxTable select.nxCellEdit:hover { color: var(--nx-accent); }
@@ -34,6 +38,7 @@
   min-width: 264px; width: 264px; flex: none;
   background: var(--nx-bg-sunken); border: 1px solid var(--nx-border);
   border-radius: var(--nx-radius-m); padding: var(--nx-gap-2);
+  transition: border-color var(--nx-t-fast) var(--nx-ease), background var(--nx-t-fast) var(--nx-ease);
 }
 .nxKColHead { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 8px; }
 .nxKCards { display: flex; flex-direction: column; gap: var(--nx-gap-2); min-height: 24px; }
@@ -45,6 +50,8 @@
 }
 .nxKCard:hover { box-shadow: var(--nx-shadow-2); transform: translateY(-1px); }
 .nxKCard--drag { opacity: 0.4; }
+/* the floating DragOverlay card — reads as physically "picked up" */
+.nxKCard--overlay { box-shadow: var(--nx-shadow-2); transform: scale(1.02); cursor: grabbing; }
 .nxKTitle { font-weight: 550; margin-bottom: 4px; }
 .nxKMeta { color: var(--nx-fg-muted); font: var(--nx-text-meta); display: flex; gap: 8px; }
 .nxKCol--over { border-color: var(--nx-accent); background: var(--nx-accent-soft); }
@@ -66,7 +73,13 @@
 .nxFieldLabel { color: var(--nx-fg-muted); font: var(--nx-text-meta); }
 .nxFieldValue input, .nxFieldValue select { width: 100%; }
 .nxTimeline { display: flex; flex-direction: column; }
-.nxTlItem { display: grid; grid-template-columns: 14px 1fr; gap: 12px; padding: 0 4px; }
+.nxTlItem { display: grid; grid-template-columns: 14px 1fr; gap: 12px; padding: 0 4px; animation: nxTlIn var(--nx-t-med) var(--nx-ease-settle) both; }
+@keyframes nxTlIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.nxTlItem:nth-child(2) { animation-delay: calc(var(--nx-stagger) * 1); }
+.nxTlItem:nth-child(3) { animation-delay: calc(var(--nx-stagger) * 2); }
+.nxTlItem:nth-child(4) { animation-delay: calc(var(--nx-stagger) * 3); }
+.nxTlItem:nth-child(5) { animation-delay: calc(var(--nx-stagger) * 4); }
+.nxTlItem:nth-child(6) { animation-delay: calc(var(--nx-stagger) * 5); }
 .nxTlRail { display: flex; flex-direction: column; align-items: center; }
 .nxTlDot { width: 8px; height: 8px; border-radius: 50%; background: var(--nx-accent); margin-top: 13px; flex: none; box-shadow: 0 0 0 3px var(--nx-accent-soft); }
 .nxTlRail::after { content: ""; flex: 1; width: 2px; background: var(--nx-border); margin-top: 4px; }
@@ -118,8 +131,10 @@
   display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px;
   font: var(--nx-text-meta); font-weight: 600; color: var(--nx-fg-muted);
   background: none; border: 0; cursor: pointer;
+  transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease);
 }
 .nxSegBtn + .nxSegBtn { border-left: 1px solid var(--nx-border); }
+.nxSegBtn:hover:not([data-active="true"]) { color: var(--nx-fg); }
 .nxSegBtn[data-active="true"] { background: var(--nx-accent-soft); color: var(--nx-accent); }
 
 /* Field value row hosts an editor + optional enrich affordance side by side */
@@ -132,7 +147,13 @@
 .nxChart { display: flex; align-items: flex-end; gap: 18px; overflow-x: auto; padding-bottom: 4px; }
 .nxChartCol { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 56px; flex: 1; }
 .nxChartValue { font: var(--nx-text-meta); font-weight: 700; font-variant-numeric: tabular-nums; }
-.nxBar { width: 100%; max-width: 72px; background: var(--nx-accent); border-radius: 6px 6px 2px 2px; opacity: 0.85; transition: height 200ms ease; }
+.nxBar { width: 100%; max-width: 72px; background: var(--nx-accent); border-radius: 6px 6px 2px 2px; opacity: 0.85; transform-origin: bottom; transition: height var(--nx-t-med) var(--nx-ease), opacity var(--nx-t-fast) var(--nx-ease); animation: nxBarGrow var(--nx-t-slow) var(--nx-ease-settle) both; }
+@keyframes nxBarGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.nxChartCol:nth-child(2) .nxBar { animation-delay: calc(var(--nx-stagger) * 1); }
+.nxChartCol:nth-child(3) .nxBar { animation-delay: calc(var(--nx-stagger) * 2); }
+.nxChartCol:nth-child(4) .nxBar { animation-delay: calc(var(--nx-stagger) * 3); }
+.nxChartCol:nth-child(5) .nxBar { animation-delay: calc(var(--nx-stagger) * 4); }
+.nxChartCol:nth-child(6) .nxBar { animation-delay: calc(var(--nx-stagger) * 5); }
 .nxChartCol:hover .nxBar { opacity: 1; }
 .nxChartLabel { font: var(--nx-text-meta); color: var(--nx-fg-muted); max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

@@ -572,12 +572,12 @@ const NE_CSS = `
 .ne-drop{position:fixed;inset:auto;left:50%;top:90px;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:9px;
   background:var(--nx-accent);color:var(--nx-accent-fg);padding:10px 18px;border-radius:var(--nx-radius-m);font-family:var(--nx-font-mono);font-size:12px;letter-spacing:.05em;box-shadow:var(--nx-shadow-2)}
 .ne-row{position:relative;display:flex;align-items:flex-start;gap:2px;margin:1px 0;border-radius:5px;
-  transition:opacity .16s ease,background .16s ease}
+  transition:opacity var(--nx-t-fast) var(--nx-ease),background var(--nx-t-fast) var(--nx-ease)}
 .ne-row.ne-list-row{align-items:baseline}
 .ne-row:hover{background:color-mix(in oklab,var(--nx-bg-sunken) 55%,transparent)}
-.ne-handle{position:absolute;left:-74px;top:1px;display:flex;gap:1px;opacity:0;transition:opacity .13s}
+.ne-handle{position:absolute;left:-74px;top:1px;display:flex;gap:1px;opacity:0;transition:opacity var(--nx-t-fast)}
 .ne-row:hover>.ne-handle{opacity:1}
-.ne-handle button{width:23px;height:24px;display:grid;place-items:center;border:0;background:none;color:var(--nx-fg-faint);cursor:pointer;border-radius:5px;transition:background .13s,color .13s}
+.ne-handle button{width:23px;height:24px;display:grid;place-items:center;border:0;background:none;color:var(--nx-fg-faint);cursor:pointer;border-radius:5px;transition:background var(--nx-t-fast),color var(--nx-t-fast)}
 .ne-handle button:hover{background:var(--nx-bg-sunken);color:var(--nx-fg)}
 .ne-h-grip{cursor:grab}
 .ne-h-grip:active{cursor:grabbing}
@@ -585,13 +585,13 @@ const NE_CSS = `
 /* drag-to-reorder feedback — light: the row just fades, a crisp accent line marks the slot */
 .ne-row.is-dragging{opacity:.35;background:transparent}
 .ne-row.drop-before::before,.ne-row.drop-after::after{content:"";position:absolute;left:-2px;right:-2px;height:2.5px;border-radius:3px;
-  background:var(--nx-accent);box-shadow:0 0 8px color-mix(in oklab,var(--nx-accent) 50%,transparent);animation:dropLine .14s ease}
+  background:var(--nx-accent);box-shadow:0 0 8px color-mix(in oklab,var(--nx-accent) 50%,transparent);animation:dropLine var(--nx-t-fast) var(--nx-ease)}
 .ne-row.drop-before::before{top:-2px}
 .ne-row.drop-after::after{bottom:-2px}
 @keyframes dropLine{from{opacity:0;transform:scaleX(.7)}to{opacity:1;transform:none}}
 /* inline tracked change (suggesting mode) */
 .ne-suggesting{cursor:default}
-.ne-chg{border-radius:3px;padding:0 1px;transition:background .18s,box-shadow .18s}
+.ne-chg{border-radius:3px;padding:0 1px;transition:background var(--nx-t-med),box-shadow var(--nx-t-med)}
 .ne-chg.is-hot{background:color-mix(in oklab,var(--nx-accent) 12%,transparent);box-shadow:0 0 0 2px color-mix(in oklab,var(--nx-accent) 28%,transparent)}
 .ne-chg del{color:var(--nx-danger);text-decoration:line-through;text-decoration-color:var(--nx-danger);opacity:.66}
 .ne-chg ins{color:var(--nx-accent);text-decoration:underline;text-decoration-color:var(--nx-accent);text-underline-offset:3px;background:var(--nx-accent-soft);margin-left:.14em;border-radius:2px}
@@ -625,22 +625,22 @@ const NE_CSS = `
 .ne-cell:focus{box-shadow:inset 0 0 0 2px var(--nx-accent)}
 .ne-cell-h{font-weight:700;background:var(--nx-bg-sunken)}
 .ne-cell:empty::before{content:attr(data-ph);color:var(--nx-fg-faint)}
-.ne-table-ctl{display:flex;gap:6px;margin-top:6px;opacity:0;transition:opacity .14s}
+.ne-table-ctl{display:flex;gap:6px;margin-top:6px;opacity:0;transition:opacity var(--nx-t-fast)}
 .ne-table-row:hover .ne-table-ctl{opacity:1}
 .ne-table-ctl button{display:inline-flex;align-items:center;gap:4px;font-family:var(--nx-font-mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;
-  border:1px solid var(--nx-border);background:var(--nx-bg);color:var(--nx-fg-muted);padding:4px 9px;border-radius:5px;cursor:pointer}
+  border:1px solid var(--nx-border);background:var(--nx-bg);color:var(--nx-fg-muted);padding:4px 9px;border-radius:5px;cursor:pointer;transition:border-color var(--nx-t-fast) var(--nx-ease),color var(--nx-t-fast) var(--nx-ease)}
 .ne-table-ctl button:hover{border-color:var(--nx-accent);color:var(--nx-accent)}
 .ne-menu{position:fixed;z-index:50;width:250px;max-height:320px;overflow-y:auto;background:var(--nx-bg);border:1px solid var(--nx-border);
-  border-radius:10px;box-shadow:0 12px 40px rgba(11,11,11,.16);padding:6px;animation:neMenuIn .13s cubic-bezier(.16,1,.3,1)}
+  border-radius:10px;box-shadow:0 12px 40px rgba(11,11,11,.16);padding:6px;animation:neMenuIn var(--nx-t-fast) var(--nx-ease-settle)}
 @keyframes neMenuIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 .ne-menu-h{font-family:var(--nx-font-mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--nx-fg-faint);padding:6px 10px 4px}
-.ne-menu-i{display:flex;align-items:center;gap:11px;width:100%;border:0;background:none;padding:8px 10px;border-radius:7px;cursor:pointer;text-align:left}
+.ne-menu-i{display:flex;align-items:center;gap:11px;width:100%;border:0;background:none;padding:8px 10px;border-radius:7px;cursor:pointer;text-align:left;transition:background var(--nx-t-fast) var(--nx-ease)}
 .ne-menu-i.is-sel{background:var(--nx-accent-soft)}
 .ne-menu-ic{display:grid;place-items:center;width:32px;height:32px;border:1px solid var(--nx-border);border-radius:6px;color:var(--nx-fg);flex:none;background:var(--nx-bg)}
 .ne-menu-tx{display:flex;flex-direction:column;line-height:1.35}
 .ne-menu-tx b{font-size:13.5px;font-weight:600;color:var(--nx-fg)}
 .ne-menu-tx i{font-style:normal;font-size:11.5px;color:var(--nx-fg-muted)}
-.ne-menu-above{transform:translateY(-100%);animation:neMenuInUp .13s cubic-bezier(.16,1,.3,1)}
+.ne-menu-above{transform:translateY(-100%);animation:neMenuInUp var(--nx-t-fast) var(--nx-ease-settle)}
 @keyframes neMenuInUp{from{opacity:0;transform:translateY(calc(-100% + 6px))}to{opacity:1;transform:translateY(-100%)}}
 @media(prefers-reduced-motion:reduce){.ne-menu,.ne-menu-above{animation:none}}
 `;

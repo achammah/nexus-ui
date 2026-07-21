@@ -100,13 +100,13 @@ export function SuggestionPanel({
 
 const SUG_CSS = `
 .nxSug{border-left:1px solid var(--nx-border);background:var(--nx-bg-sunken);align-self:start;
-  max-height:calc(100vh - 52px);overflow-y:auto;animation:nxSugIn .26s var(--nx-ease-settle)}
+  max-height:calc(100vh - 52px);overflow-y:auto;animation:nxSugIn var(--nx-t-slow) var(--nx-ease-settle)}
 @keyframes nxSugIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
 .nxSug-head{padding:16px 18px 13px;border-bottom:1px solid var(--nx-border);position:sticky;top:0;background:var(--nx-bg-sunken);z-index:1}
 .nxSug-title{display:flex;align-items:center;gap:8px;font:var(--nx-text-title);font-weight:700}
 .nxSug-sub{font:var(--nx-text-micro);letter-spacing:var(--nx-tracking-micro);text-transform:uppercase;color:var(--nx-fg-muted);margin-top:6px}
 .nxSug-prog{height:3px;background:var(--nx-border);margin-top:12px;overflow:hidden;border-radius:var(--nx-radius-s)}
-.nxSug-prog span{display:block;height:100%;background:var(--nx-accent);transition:width .5s var(--nx-ease-settle)}
+.nxSug-prog span{display:block;height:100%;background:var(--nx-accent);transition:width var(--nx-t-slow) var(--nx-ease-settle)}
 .nxSug-bulk{display:flex;gap:7px;margin-top:13px}
 .nxSug-bulk-b{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;font:var(--nx-text-micro);
   letter-spacing:var(--nx-tracking-micro);text-transform:uppercase;padding:7px 8px;border:1px solid var(--nx-border);
@@ -114,7 +114,8 @@ const SUG_CSS = `
 .nxSug-bulk-b.acc:hover{border-color:var(--nx-accent);color:var(--nx-accent);background:var(--nx-accent-soft)}
 .nxSug-bulk-b.rej:hover{border-color:var(--nx-danger);color:var(--nx-danger);background:var(--nx-danger-soft)}
 .nxSug-card{padding:15px 18px;border-bottom:1px solid var(--nx-border);cursor:pointer;position:relative;
-  transition:background var(--nx-t-med),box-shadow var(--nx-t-med)}
+  transition:background var(--nx-t-med),box-shadow var(--nx-t-med);animation:nxSugCardIn var(--nx-t-med) var(--nx-ease-settle) backwards}
+@keyframes nxSugCardIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .nxSug-card:hover,.nxSug-card.is-hot{background:var(--nx-bg-raised)}
 .nxSug-card.is-hot{box-shadow:inset 3px 0 0 var(--nx-accent)}
 .nxSug-card.is-rejected{opacity:.55}
@@ -143,5 +144,5 @@ const SUG_CSS = `
 .nxSug-undo{display:inline-flex;align-items:center;gap:4px;background:none;border:0;color:var(--nx-fg-muted);
   font:var(--nx-text-micro);letter-spacing:var(--nx-tracking-micro);text-transform:uppercase;cursor:pointer}
 .nxSug-undo:hover{color:var(--nx-fg)}
-@media (prefers-reduced-motion:reduce){.nxSug,.nxSug-prog span{animation:none;transition:none}}
+@media (prefers-reduced-motion:reduce){.nxSug,.nxSug-prog span,.nxSug-card{animation:none;transition:none}}
 `;
