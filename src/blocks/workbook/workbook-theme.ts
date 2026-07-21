@@ -113,9 +113,9 @@ export function accentScale(resolve: (expr: string) => string): ColorScale {
    400..900 a text ramp toward --nx-fg. Univer's stock scale is a cool blue-gray;
    this is the single biggest "foreign widget" tell, so every step comes from our
    neutral tokens (mix steps fill the gaps between the few tokens we define).
-   gray.300 maps to the PLAIN border (not border-strong): its one visible canvas
-   consumer is the frozen-pane divider (HeaderFreezeRenderController re-reads it on
-   every setTheme), which should be a subtle rule, not a heavy bar — the DOM chrome
+   gray.300 carries a LOW ACCENT TINT: its one visible canvas consumer is the
+   frozen-pane divider (HeaderFreezeRenderController re-reads it on every
+   setTheme) — a quiet brand rule instead of a heavy gray bar; the DOM chrome
    reads the independent --univer-* CSS tables, so this stays canvas-scoped. */
 export function neutralScale(resolve: (expr: string) => string): ColorScale {
   const mixFg = (pct: number) => resolve(`color-mix(in srgb, var(--nx-fg) ${pct}%, var(--nx-fg-muted))`);
@@ -123,7 +123,7 @@ export function neutralScale(resolve: (expr: string) => string): ColorScale {
     50: resolve("var(--nx-bg)"),
     100: resolve("var(--nx-bg-sunken)"),
     200: resolve("var(--nx-border)"),
-    300: resolve("var(--nx-border)"),
+    300: resolve("color-mix(in srgb, var(--nx-accent) 25%, var(--nx-border))"),
     400: resolve("var(--nx-fg-faint)"),
     500: resolve("var(--nx-fg-muted)"),
     600: mixFg(35),
@@ -183,11 +183,15 @@ export function canvasGridTheme(resolve: (expr: string) => string): CanvasGridTh
   const fontFamily =
     typeof document !== "undefined" ? getComputedStyle(document.body).fontFamily : "sans-serif";
   return {
-    gridlinesColor: resolve("color-mix(in srgb, var(--nx-border) 60%, var(--nx-bg-raised))"),
+    // whisper lines: a modern sheet's gridlines are barely-there guides — the
+    // delta against the stock gray mesh must be OBVIOUS at normal zoom
+    gridlinesColor: resolve("color-mix(in srgb, var(--nx-border) 32%, var(--nx-bg-raised))"),
     header: {
-      backgroundColor: resolve("var(--nx-bg-sunken)"),
+      // the resting grid carries the app's identity: the header band wears a low
+      // accent tint (not a neutral gray slab), its hairlines a stronger one
+      backgroundColor: resolve("color-mix(in srgb, var(--nx-accent) 8%, var(--nx-bg))"),
       fontColor: resolve("var(--nx-fg-muted)"),
-      borderColor: resolve("var(--nx-border)"),
+      borderColor: resolve("color-mix(in srgb, var(--nx-accent) 18%, var(--nx-border))"),
       fontFamily,
     },
   };
