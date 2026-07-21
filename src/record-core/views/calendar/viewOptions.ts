@@ -31,6 +31,12 @@ export const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
 const SLOT_MAP: Record<string, string> = { "15m": "00:15:00", "30m": "00:30:00", "60m": "01:00:00" };
 export const SLOT_VALUES = Object.keys(SLOT_MAP);
 
+/* snapDuration select values → FC duration strings. Snapping is FINER than the
+   slot lines: a drag/create/resize lands on these increments (precise-hour moves),
+   so a 30-minute slot grid still places events on the quarter hour. */
+const SNAP_MAP: Record<string, string> = { "5m": "00:05:00", "10m": "00:10:00", "15m": "00:15:00", "30m": "00:30:00" };
+export const SNAP_VALUES = Object.keys(SNAP_MAP);
+
 const isView = (v: unknown): v is CalViewName => typeof v === "string" && (ALL_VIEWS as string[]).includes(v);
 const parseBool = (v: unknown, dflt: boolean): boolean => (typeof v === "boolean" ? v : dflt);
 
@@ -77,8 +83,14 @@ const parseTime = (v: unknown, fallback: string): string => {
 export interface CalFcOptions {
   firstDay: number;
   slotDuration: string;
+  /* finer than slotDuration — the increment a drag/create/resize snaps to */
+  snapDuration: string;
   slotMinTime: string;
   slotMaxTime: string;
+  /* the hour a time-grid view opens SCROLLED to (the rest stays reachable) */
+  scrollTime: string;
+  /* the all-day lane at the top of a time-grid view */
+  allDaySlot: boolean;
   weekNumbers: boolean;
   businessHours: boolean | { daysOfWeek: number[]; startTime: string; endTime: string };
   nowIndicator: boolean;
@@ -95,8 +107,11 @@ export const viewOptions = (cfg: Record<string, unknown>): CalFcOptions => {
   return {
     firstDay: dayIdx >= 0 ? dayIdx : 1, // default Monday
     slotDuration: SLOT_MAP[typeof cfg.slotDuration === "string" ? cfg.slotDuration : ""] ?? "00:30:00",
+    snapDuration: SNAP_MAP[typeof cfg.snapDuration === "string" ? cfg.snapDuration : ""] ?? "00:15:00",
     slotMinTime: parseTime(cfg.slotMinTime, "00:00:00"),
     slotMaxTime: parseTime(cfg.slotMaxTime, "24:00:00"),
+    scrollTime: parseTime(cfg.scrollTime, "08:00:00"),
+    allDaySlot: parseBool(cfg.allDaySlot, true),
     weekNumbers: parseBool(cfg.weekNumbers, false),
     businessHours: parseBool(cfg.businessHours, false)
       ? { daysOfWeek: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "17:00" }

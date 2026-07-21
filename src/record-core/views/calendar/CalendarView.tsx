@@ -40,6 +40,11 @@ import { AgendaList } from "./AgendaList";
 import { EventEditDialog } from "./EventEditDialog";
 import "./calendar.css";
 
+/* hourly time-grid axis labels + event times in the app's 24h idiom (the same
+   format AgendaList uses), so every hour is labelled and events read "09:00 – 10:00" */
+const SLOT_LABEL_FORMAT = { hour: "2-digit", minute: "2-digit", hour12: false } as const;
+const EVENT_TIME_FORMAT = { hour: "2-digit", minute: "2-digit", hour12: false } as const;
+
 /* CalendarView — the full-fidelity FullCalendar surface behind the ViewProps
    contract. Records with a valid start render as events (colors from the
    colorField's own select-option palette — the same chipStyle the table chips and
@@ -135,6 +140,18 @@ export default function CalendarView({
   const [announce, setAnnounce] = React.useState("");
   const [editing, setEditing] = React.useState<RecordRow | null>(null);
 
+  // a bounded, viewport-responsive scroll window for the time grid (Google-style):
+  // it opens at scrollTime with the full 24h reachable by scroll; month/list/year
+  // size to their own content ("auto")
+  const [gridH, setGridH] = React.useState(() =>
+    typeof window === "undefined" ? 700 : Math.max(560, Math.min(900, window.innerHeight - 210)),
+  );
+  React.useEffect(() => {
+    const onResize = () => setGridH(Math.max(560, Math.min(900, window.innerHeight - 210)));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // viewState is the source of truth; the FC API follows it (picker choice,
   // saved-view/applyView restores)
   React.useEffect(() => {
@@ -190,14 +207,16 @@ export default function CalendarView({
     setAnnounce(`${info.event.title} moved to ${formatCell(patch[fields.start.key], fields.start.type)}`);
   };
 
+  // resize from EITHER edge (eventResizableFromStart): patchForResize writes both
+  // the start and the end field, so dragging the top edge persists the new start
   const onEventResize = (info: EventResizeDoneArg) => {
     const patch = patchForResize(
       { startStr: info.event.startStr, endStr: info.event.endStr, allDay: info.event.allDay },
       fields,
     );
-    if (fields.end && Object.keys(patch).length) {
+    if (Object.keys(patch).length) {
       onPatch(info.event.id, patch);
-      setAnnounce(`${info.event.title} now ends ${formatCell(patch[fields.end.key], fields.end.type)}`);
+      setAnnounce(`${info.event.title} resized to ${formatCell(patch[fields.start.key], fields.start.type)}`);
     }
   };
 
@@ -295,9 +314,16 @@ export default function CalendarView({
           businessHours={opts.businessHours}
           eventOverlap={opts.eventOverlap}
           slotDuration={opts.slotDuration}
+          snapDuration={opts.snapDuration}
           slotMinTime={opts.slotMinTime}
           slotMaxTime={opts.slotMaxTime}
-          height={timed ? 640 : "auto"}
+          scrollTime={opts.scrollTime}
+          slotLabelInterval="01:00:00"
+          slotLabelFormat={SLOT_LABEL_FORMAT}
+          eventTimeFormat={EVENT_TIME_FORMAT}
+          allDaySlot={opts.allDaySlot}
+          expandRows
+          height={timed ? gridH : "auto"}
           dayMaxEvents
           navLinks
           navLinkDayClick={(date) => onViewState({ calView: enabled.includes("day" as never) ? "day" : curView, calDate: localDay(date) })}
@@ -305,6 +331,7 @@ export default function CalendarView({
           events={fcEvents}
           editable={editable}
           eventDurationEditable={editable && !!fields.end}
+          eventResizableFromStart={editable && !!fields.end}
           selectable={selectable}
           selectMirror
           datesSet={onDatesSet}

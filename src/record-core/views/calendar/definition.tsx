@@ -4,7 +4,7 @@ import type { ViewDefinition, ViewToolbarProps } from "../types";
 import { useIsMobile } from "../../../hooks/use-mobile";
 import { activeFields } from "../../options";
 import { firstDateField, isDateField } from "./events";
-import { ALL_VIEWS, SLOT_VALUES, VIEW_LABELS, WEEKDAYS, defaultView, enabledViews } from "./viewOptions";
+import { ALL_VIEWS, SLOT_VALUES, SNAP_VALUES, VIEW_LABELS, WEEKDAYS, defaultView, enabledViews } from "./viewOptions";
 
 /* Calendar view — the full-fidelity FullCalendar surface behind the registry
    contract. Config keys (all optional but startDateField):
@@ -14,9 +14,11 @@ import { ALL_VIEWS, SLOT_VALUES, VIEW_LABELS, WEEKDAYS, defaultView, enabledView
      its own option palette), recurrenceField (a text field holding an RRULE string
      → its rows render as a recurring series, render-only)
    - defaultView / enabledViews (which of month·week·day·listWeek·listMonth·year the
-     picker offers), editable, selectable, firstDay, slotDuration, slotMinTime,
-     slotMaxTime, weekNumbers, businessHours, nowIndicator, eventOverlap — every one
-     resolved through the pure viewOptions mapping.
+     picker offers), editable, selectable, firstDay, slotDuration, snapDuration
+     (the finer drag/create/resize increment), slotMinTime, slotMaxTime, scrollTime
+     (the hour a time-grid view opens scrolled to), allDaySlot, weekNumbers,
+     businessHours, nowIndicator, eventOverlap — every one resolved through the pure
+     viewOptions mapping.
    State keys in the bag: `calView` (the chosen view) · `calDate` (the visible
    anchor — reload lands where you were). The component is heavy (the FullCalendar
    engine + plugins), so it ships as a lazy chunk. */
@@ -72,8 +74,11 @@ const definition: ViewDefinition = {
     { key: "selectable", label: "Drag to create", kind: "boolean" },
     { key: "firstDay", label: "Week starts", kind: "select", options: [...WEEKDAYS] },
     { key: "slotDuration", label: "Time slot", kind: "select", options: [...SLOT_VALUES] },
+    { key: "snapDuration", label: "Snap to", kind: "select", options: [...SNAP_VALUES] },
     { key: "slotMinTime", label: "Day starts (HH:MM)", kind: "text" },
     { key: "slotMaxTime", label: "Day ends (HH:MM)", kind: "text" },
+    { key: "scrollTime", label: "Opens at (HH:MM)", kind: "text" },
+    { key: "allDaySlot", label: "All-day lane", kind: "boolean" },
     { key: "weekNumbers", label: "Week numbers", kind: "boolean" },
     { key: "businessHours", label: "Shade business hours", kind: "boolean" },
     { key: "nowIndicator", label: "Now indicator", kind: "boolean" },
