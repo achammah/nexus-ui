@@ -34,7 +34,29 @@ const SKIP = Symbol("skip");
 export default function SpreadsheetView({
   object, rows, users, readOnly, onPatch, selection, onSelectionChange,
 }: ViewProps) {
-  const { theme, chips } = useGridTheme();
+  const { theme, chips, selectionText } = useGridTheme();
+  const hasSelText = Object.keys(selectionText).length > 0;
+
+  /* latest cell selection, read at DRAW time so the stable getCellContent can
+     give selected cells a contrast-safe text override without re-identifying
+     on every selection move */
+  const selRef = React.useRef<GridSelection | null>(null);
+
+  /* does glide paint this cell with the accent selection fill? (active cell +
+     range + rangeStack + fully-selected rows/cols — the exact set glide tints,
+     so the override lands on precisely those cells and no others) */
+  const isSelectionFilled = React.useCallback((col: number, row: number): boolean => {
+    const sel = selRef.current;
+    if (!sel) return false;
+    const cur = sel.current;
+    if (cur) {
+      const inRect = (r: { x: number; y: number; width: number; height: number }) =>
+        col >= r.x && col < r.x + r.width && row >= r.y && row < r.y + r.height;
+      if (inRect(cur.range)) return true;
+      for (const r of cur.rangeStack) if (inRect(r)) return true;
+    }
+    return sel.rows.hasIndex(row) || sel.columns.hasIndex(col);
+  }, []);
 
   // primary first — it is the frozen identity column
   const fields = React.useMemo(() => {
@@ -141,9 +163,14 @@ export default function SpreadsheetView({
       const f = fields[col];
       const rec = rows[row];
       if (!f || !rec) return { kind: GridCellKind.Text, data: "", displayData: "", allowOverlay: false };
-      return buildCell(f, rec[f.key]);
+      const cell = buildCell(f, rec[f.key]);
+      // a selected cell sits on the accent fill — flip its text ramp for contrast
+      if (hasSelText && isSelectionFilled(col, row)) {
+        return { ...cell, themeOverride: { ...cell.themeOverride, ...selectionText } } as GridCell;
+      }
+      return cell;
     },
-    [fields, rows, buildCell],
+    [fields, rows, buildCell, hasSelText, isSelectionFilled, selectionText],
   );
 
   /* an incoming edited cell → the raw field value. A same-kind cell hands its
@@ -240,6 +267,7 @@ export default function SpreadsheetView({
     columns: CompactSelection.empty(),
     rows: CompactSelection.empty(),
   });
+  selRef.current = gridSel; // keep the draw-time selection ref current every render
   const pushingRef = React.useRef(false);
   const onGridSelectionChange = React.useCallback((sel: GridSelection) => {
     setGridSel(sel);

@@ -2,6 +2,7 @@ import * as React from "react";
 import type { Theme } from "@glideapps/glide-data-grid";
 import type { OptionColor } from "../../types";
 import { chipStyle } from "../../options";
+import { deriveSelectionText } from "./contrast";
 
 /* Token → glide Theme derivation. The grid paints canvas LITERALS, so live
    --nx-* values resolve through a probe element at mount and RE-DERIVE when
@@ -77,15 +78,23 @@ export const deriveGridTheme = (): Partial<Theme> => ({
   roundingRadius: Number.parseFloat(cssVar("--nx-radius-s")) || 6,
 });
 
-export interface GridThemeState { theme: Partial<Theme>; chips: Record<string, ChipColors> }
+export interface GridThemeState {
+  theme: Partial<Theme>;
+  chips: Record<string, ChipColors>;
+  /* text-key overrides for selected cells (empty when the base ink already reads) */
+  selectionText: Partial<Theme>;
+}
 
 export const useGridTheme = (): GridThemeState => {
-  const [state, setState] = React.useState<GridThemeState>(() => ({
-    theme: deriveGridTheme(),
-    chips: chipColorLiterals(),
-  }));
+  const [state, setState] = React.useState<GridThemeState>(() => {
+    const theme = deriveGridTheme();
+    return { theme, chips: chipColorLiterals(), selectionText: deriveSelectionText(theme) };
+  });
   React.useEffect(() => {
-    const redo = () => setState({ theme: deriveGridTheme(), chips: chipColorLiterals() });
+    const redo = () => {
+      const theme = deriveGridTheme();
+      setState({ theme, chips: chipColorLiterals(), selectionText: deriveSelectionText(theme) });
+    };
     // dark-mode toggle writes documentElement.dataset.theme
     const attrObs = new MutationObserver(redo);
     attrObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
