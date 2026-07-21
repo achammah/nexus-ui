@@ -40,3 +40,6 @@ export * from "./blocks/wizard";
 
 /* blocks — AI copilot side-panel */
 export * from "./blocks/copilot";
+
+/* blocks — mobile chrome: keyboard-shortcuts overlay + phone review banner */
+export * from "./blocks/mobile";

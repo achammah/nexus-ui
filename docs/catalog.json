@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 81,
+  "count": 83,
   "items": [
     {
       "name": "accordion",
@@ -505,6 +505,20 @@
       "kind": "wrapper",
       "import": "src/blocks/copilot/CopilotPanel.tsx",
       "when": "docked AI copilot side-panel: conversation state + Markdown replies + tool-use chips (host injects the transport + per-turn context), plus the toggle button; config-driven (title/mark/emptyStateCopy/suggestions)",
+      "source": "ours"
+    },
+    {
+      "name": "ShortcutsOverlay",
+      "kind": "wrapper",
+      "import": "src/blocks/mobile/ShortcutsOverlay.tsx",
+      "when": "keyboard-shortcuts help modal (host toggles it, typically on `?`): host passes shortcut GROUPS — a core shell group vs an app/config-driven group — the overlay renders the reference and claims Escape/? in capture while open; pairs with the starter's keyboard-nav layer",
+      "source": "ours"
+    },
+    {
+      "name": "MobileReviewBanner",
+      "kind": "wrapper",
+      "import": "src/blocks/mobile/MobileReviewBanner.tsx",
+      "when": "generic phone bottom step-through: prev / index-of-total / next over a set of N items plus per-item action buttons (accept/reject/default tones); pure presentation, fixed above a bottom tab bar (--nx-mobilenav-h), hidden on desktop — e.g. stepping a record set or suggestions on mobile",
       "source": "ours"
     },
     {
