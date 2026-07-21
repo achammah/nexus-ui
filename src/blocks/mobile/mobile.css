@@ -1,0 +1,108 @@
+/* Mobile lane chrome — the keyboard-shortcuts overlay (all viewports) + the phone
+   review banner (a bottom step-through, hidden on desktop). Fully tokenized, both
+   themes, reduced-motion aware. The bottom tab bar itself is app-shell chrome and lives
+   in the starter (src/app/app.css); this file styles the two library pieces only. */
+
+/* ---------- ShortcutsOverlay — a centered help modal ---------- */
+.nxShortcuts {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgb(0 0 0 / 0.5); /* neutral scrim, matching the vendored dialog/sheet overlay */
+  backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+  animation: nxScFade var(--nx-t-med) var(--nx-ease);
+}
+@keyframes nxScFade { from { opacity: 0; } }
+.nxShortcuts-panel {
+  width: min(520px, 96vw); max-height: 86vh; overflow-y: auto;
+  background: var(--nx-bg-raised); color: var(--nx-fg);
+  border: 1px solid var(--nx-border); border-radius: var(--nx-radius-l);
+  box-shadow: var(--nx-shadow-2); padding: 20px 22px 22px;
+  animation: nxScRise var(--nx-t-med) var(--nx-ease-settle);
+}
+@keyframes nxScRise { from { opacity: 0; transform: translateY(10px); } }
+.nxShortcuts-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.nxShortcuts-title { font: var(--nx-text-title); font-size: 17px; margin: 0; }
+.nxShortcuts-x {
+  background: none; border: 0; cursor: pointer; color: var(--nx-fg-muted);
+  padding: 4px; border-radius: var(--nx-radius-s); display: grid; place-items: center;
+  transition: color var(--nx-t-fast), background var(--nx-t-fast);
+}
+.nxShortcuts-x:hover { color: var(--nx-fg); background: var(--nx-bg-sunken); }
+.nxShortcuts-groups { display: flex; flex-direction: column; gap: 18px; }
+.nxShortcuts-groupTitle {
+  font: var(--nx-text-micro); text-transform: var(--nx-label-transform);
+  letter-spacing: var(--nx-label-tracking); color: var(--nx-fg-faint);
+}
+.nxShortcuts-list { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; }
+.nxShortcuts-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 8px 4px; border-bottom: 1px solid var(--nx-border);
+}
+.nxShortcuts-row:last-child { border-bottom: 0; }
+.nxShortcuts-keys { display: inline-flex; align-items: center; gap: 5px; min-width: 128px; flex: none; }
+.nxShortcuts-kbd {
+  font: var(--nx-text-micro); font-family: var(--nx-font-mono);
+  min-width: 22px; text-align: center; padding: 3px 6px;
+  background: var(--nx-bg-sunken); border: 1px solid var(--nx-border-strong);
+  border-bottom-width: 2px; border-radius: var(--nx-radius-s); color: var(--nx-fg);
+}
+.nxShortcuts-then { font: var(--nx-text-micro); color: var(--nx-fg-faint); text-transform: lowercase; letter-spacing: normal; }
+.nxShortcuts-label { font: var(--nx-text-body); color: var(--nx-fg-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .nxShortcuts, .nxShortcuts-panel { animation: none; }
+}
+
+/* ---------- MobileReviewBanner — a bottom step-through, phones only ---------- */
+.nxReviewBanner { display: none; }
+@media (max-width: 768px) {
+  .nxReviewBanner {
+    display: flex; flex-direction: column;
+    position: fixed; left: 0; right: 0; z-index: 50;
+    /* sits directly above the bottom tab bar (the app sets --nx-mobilenav-h) */
+    bottom: calc(var(--nx-mobilenav-h, 56px) + env(safe-area-inset-bottom, 0px));
+    background: var(--nx-bg-raised); border-top: 1px solid var(--nx-border);
+    box-shadow: 0 -6px 22px rgb(0 0 0 / 0.12);
+    animation: nxRevUp var(--nx-t-med) var(--nx-ease-settle);
+  }
+  .nxReviewBanner::before {
+    content: ""; position: absolute; top: -1px; left: 0; right: 0; height: 2px;
+    background: var(--nx-accent);
+  }
+  @keyframes nxRevUp { from { transform: translateY(100%); } }
+  .nxReviewBanner-top { display: flex; align-items: stretch; gap: 6px; padding: 9px 8px; }
+  .nxReviewBanner-step {
+    flex: 0 0 auto; display: grid; place-items: center; min-width: 44px; min-height: 44px;
+    background: var(--nx-bg-sunken); border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s);
+    color: var(--nx-fg); cursor: pointer;
+    transition: background var(--nx-t-fast), border-color var(--nx-t-fast), color var(--nx-t-fast);
+  }
+  .nxReviewBanner-step:hover { background: var(--nx-accent-soft); border-color: var(--nx-accent); color: var(--nx-accent); }
+  .nxReviewBanner-step:active { transform: scale(0.92); }
+  .nxReviewBanner-head {
+    flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 9px;
+    background: none; border: 0; cursor: pointer; padding: 0 6px; color: var(--nx-fg);
+  }
+  .nxReviewBanner-head:disabled { cursor: default; }
+  .nxReviewBanner-count { font: var(--nx-text-body); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--nx-accent); }
+  .nxReviewBanner-title {
+    font: var(--nx-text-micro); text-transform: var(--nx-label-transform); letter-spacing: var(--nx-label-tracking);
+    color: var(--nx-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .nxReviewBanner-sub {
+    padding: 0 12px 10px; font: var(--nx-text-meta); color: var(--nx-fg-muted);
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .nxReviewBanner-acts { display: flex; gap: 8px; align-items: stretch; padding: 0 8px 12px; }
+  .nxReviewBanner-act {
+    flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    min-height: 44px; padding: 12px 10px; cursor: pointer; font: var(--nx-text-body); font-weight: 600;
+    background: var(--nx-bg); color: var(--nx-fg);
+    border: 1px solid var(--nx-border-strong); border-radius: var(--nx-radius-s);
+    transition: background var(--nx-t-fast), border-color var(--nx-t-fast), color var(--nx-t-fast);
+  }
+  .nxReviewBanner-act:hover { border-color: var(--nx-accent); }
+  .nxReviewBanner-act.is-accept { color: var(--nx-ok); border-color: var(--nx-ok); background: var(--nx-ok-soft); }
+  .nxReviewBanner-act.is-reject { color: var(--nx-danger); border-color: var(--nx-danger); background: var(--nx-danger-soft); }
+  @media (prefers-reduced-motion: reduce) { .nxReviewBanner { animation: none; } }
+}
