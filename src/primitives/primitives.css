@@ -15,7 +15,7 @@
 .nxSpin {
   width: 12px; height: 12px; border-radius: 50%;
   border: 2px solid currentColor; border-top-color: transparent;
-  animation: nxspin 0.7s linear infinite;
+  animation: nxspin var(--nx-t-spin) linear infinite;
 }
 @keyframes nxspin { to { transform: rotate(360deg); } }
 
@@ -29,10 +29,10 @@
   font: var(--nx-text-body); color: var(--nx-fg);
   background: var(--nx-bg-raised); border: 1px solid var(--nx-border-strong);
   border-radius: var(--nx-radius-s); padding: 6px 10px; width: 100%;
-  transition: border-color var(--nx-t-fast) var(--nx-ease);
+  transition: border-color var(--nx-t-fast) var(--nx-ease), box-shadow var(--nx-t-fast) var(--nx-ease);
 }
 .nxInput::placeholder { color: var(--nx-fg-faint); }
-.nxInput:focus { border-color: var(--nx-accent); outline: none; }
+.nxInput:focus { border-color: var(--nx-accent); outline: none; box-shadow: 0 0 0 3px var(--nx-accent-soft); }
 
 /* shared flex-spacer, used by SettingsTabs + EditableRuleList rows */
 .nxGrow { flex: 1; }
@@ -43,14 +43,22 @@
   position: sticky; top: 0; z-index: 3; background: var(--nx-bg);
 }
 .nxSetTab {
+  position: relative;
   display: inline-flex; align-items: center; gap: 7px; background: none; border: 0;
   border-bottom: 2px solid transparent; padding: 12px 16px; font: var(--nx-text-meta);
   letter-spacing: var(--nx-label-tracking); text-transform: var(--nx-label-transform);
   color: var(--nx-fg-muted); cursor: pointer; margin-bottom: -1px;
-  transition: color var(--nx-t-fast) var(--nx-ease), border-color var(--nx-t-fast) var(--nx-ease);
+  transition: color var(--nx-t-fast) var(--nx-ease);
+}
+/* underline slides in from the left on activation, on the settle curve */
+.nxSetTab::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  background: var(--nx-accent); transform: scaleX(0); transform-origin: left;
+  transition: transform var(--nx-t-med) var(--nx-ease-settle);
 }
 .nxSetTab:hover { color: var(--nx-fg); }
-.nxSetTab.is-on { color: var(--nx-accent); border-bottom-color: var(--nx-accent); }
+.nxSetTab.is-on { color: var(--nx-accent); }
+.nxSetTab.is-on::after { transform: scaleX(1); }
 .nxSetBody { padding-top: 24px; }
 
 /* EditableRuleList */
@@ -60,12 +68,15 @@
   margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
   background: var(--nx-accent); color: var(--nx-accent-fg); border: 0; padding: 9px 15px;
   font: var(--nx-text-meta); letter-spacing: var(--nx-label-tracking); text-transform: var(--nx-label-transform);
-  cursor: pointer; border-radius: var(--nx-radius-s); transition: opacity var(--nx-t-fast) var(--nx-ease);
+  cursor: pointer; border-radius: var(--nx-radius-s);
+  transition: opacity var(--nx-t-fast) var(--nx-ease), transform var(--nx-t-fast) var(--nx-ease);
 }
-.nxRuleAdd:hover { opacity: 0.9; }
+.nxRuleAdd:hover { opacity: 0.92; transform: translateY(-1px); }
+.nxRuleAdd:active { transform: translateY(0); }
 .nxRuleRows { border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m); overflow: hidden; }
-.nxRuleRow { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--nx-border); }
+.nxRuleRow { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--nx-border); transition: opacity var(--nx-t-fast) var(--nx-ease), background var(--nx-t-fast) var(--nx-ease); }
 .nxRuleRow:last-child { border-bottom: 0; }
+.nxRuleRow:hover { background: var(--nx-bg-sunken); }
 .nxRuleRow.is-off { opacity: 0.5; }
 .nxRuleSevChip {
   font: var(--nx-text-micro); letter-spacing: var(--nx-label-tracking); text-transform: var(--nx-label-transform);
@@ -75,12 +86,14 @@
 .nxRuleIco { background: none; border: 0; color: var(--nx-fg-muted); cursor: pointer; padding: 3px; flex: none; transition: color var(--nx-t-fast) var(--nx-ease); }
 .nxRuleIco:hover { color: var(--nx-fg); }
 .nxRuleEmpty { font: var(--nx-text-meta); color: var(--nx-fg-muted); padding: 24px 16px; }
-.nxRuleEditor { padding: 14px 16px; border: 1px solid var(--nx-accent); background: var(--nx-bg-sunken); margin-bottom: 12px; border-radius: var(--nx-radius-m); }
+.nxRuleEditor { padding: 14px 16px; border: 1px solid var(--nx-accent); background: var(--nx-bg-sunken); margin-bottom: 12px; border-radius: var(--nx-radius-m); animation: nxRuleEditIn var(--nx-t-med) var(--nx-ease-settle) both; }
+@keyframes nxRuleEditIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 .nxRuleInput {
   width: 100%; padding: 10px 12px; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s);
   background: var(--nx-bg-raised); font: var(--nx-text-body); color: var(--nx-fg); outline: none; resize: vertical;
+  transition: border-color var(--nx-t-fast) var(--nx-ease), box-shadow var(--nx-t-fast) var(--nx-ease);
 }
-.nxRuleInput:focus { border-color: var(--nx-accent); }
+.nxRuleInput:focus { border-color: var(--nx-accent); box-shadow: 0 0 0 3px var(--nx-accent-soft); }
 .nxRuleEditRow { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
 .nxRuleSev { width: auto; }
 .nxRuleActive { display: inline-flex; align-items: center; gap: 6px; font: var(--nx-text-meta); text-transform: var(--nx-label-transform); color: var(--nx-fg-muted); }
