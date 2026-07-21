@@ -163,19 +163,24 @@ export const patchForDrop = (
   return patch;
 };
 
-/* the patch a RESIZE writes: the end field only, clamped so the stored span can
-   never end before it starts */
+/* the patch a RESIZE writes: BOTH edges, so dragging either the top (start) or the
+   bottom (end) edge persists — resizing from the start moves the start field, and
+   FullCalendar reports the unmoved edge unchanged (an idempotent write). The end is
+   clamped so the stored span can never end before it starts. Needs an end field —
+   a resize is a duration change, impossible without one. */
 export const patchForResize = (
   ev: { startStr: string; endStr: string; allDay: boolean },
   fields: CalendarFields,
 ): Record<string, unknown> => {
   if (!fields.end) return {};
+  const start = dropStart(ev.startStr, ev.allDay, fields.start.type);
+  let end = dropEnd(ev.endStr, ev.allDay, fields.end.type);
   if (ev.allDay) {
-    const start = ev.startStr.slice(0, 10);
-    const end = eventEndToSpan(ev.endStr.slice(0, 10));
-    return { [fields.end.key]: end < start ? start : end };
+    if (end < start) end = start;
+  } else if (Date.parse(end) < Date.parse(start)) {
+    end = start;
   }
-  return { [fields.end.key]: Date.parse(ev.endStr) < Date.parse(ev.startStr) ? ev.startStr : ev.endStr };
+  return { [fields.start.key]: start, [fields.end.key]: end };
 };
 
 /* the draft an empty-day click seeds the create dialog with */

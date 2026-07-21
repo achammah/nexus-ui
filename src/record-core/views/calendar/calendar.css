@@ -132,7 +132,33 @@
 /* ---------- time-grid axis + all-day lane ---------- */
 .nxCalendar .fc-timegrid-axis-cushion { color: var(--nx-fg-muted); font: var(--nx-text-meta); font-weight: 600; }
 .nxCalendar .fc-timegrid-all-day, .nxCalendar .fc-daygrid-body .fc-daygrid-day.fc-day-past { background: transparent; }
-.nxCalendar .fc-timegrid-slot { height: 1.6em; }
+/* comfortable hour rows (~48px/hour) so events read and land on precise times */
+.nxCalendar .fc-timegrid-slot { height: 1.85em; }
+/* hourly labels sit on tabular figures, right-aligned to the axis */
+.nxCalendar .fc-timegrid-slot-label-cushion { padding: 0 8px 0 4px; font-variant-numeric: tabular-nums; }
+/* hour lines read stronger; the minor (half/quarter-hour) lines are dotted + fainter
+   so events snap visibly onto precise sub-hour times */
+.nxCalendar .fc-timegrid-slot-minor { border-top-style: dotted; border-top-color: color-mix(in oklab, var(--nx-border) 55%, transparent); }
+/* a clear divider between the all-day lane and the slots */
+.nxCalendar .fc-timegrid-divider { padding: 0; height: 1px; background: var(--nx-border); border: 0; }
+/* today's COLUMN tint in week/day (the month cell wash is handled above) */
+.nxCalendar .fc-timegrid-col.fc-day-today { background: var(--nx-accent-soft); }
+/* timed event blocks: a hairline inset keeps side-by-side overlaps legible; the
+   time reads bold above the title (FC lays concurrent events out side by side) */
+.nxCalendar .fc-timegrid-event { border-radius: var(--nx-radius-s); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--nx-bg-raised) 55%, transparent); }
+.nxCalendar .fc-timegrid-event .fc-event-main { padding: 1px 5px; }
+.nxCalendar .fc-timegrid-event .fc-event-title { font-weight: 600; }
+
+/* ---------- now-indicator (prominent: a bold current-time rule + a dot on the axis) ---------- */
+.nxCalendar .fc-timegrid-now-indicator-line { border-top-width: 2px; border-top-color: var(--nx-danger); }
+.nxCalendar .fc-timegrid-now-indicator-arrow {
+  border: 0; margin-top: -5px; left: -1px;
+  width: 10px; height: 10px; border-radius: 999px; background: var(--nx-danger);
+}
+
+/* ---------- leading/trailing days of adjacent months (month view) read dimmed ---------- */
+.nxCalendar .fc-daygrid-day.fc-day-other { background: color-mix(in oklab, var(--nx-bg-sunken) 45%, transparent); }
+.nxCalendar .fc-day-other .fc-daygrid-day-number { opacity: 0.5; }
 
 /* ---------- business-hours shading (non-business time dimmed) ---------- */
 .nxCalendar .fc-non-business { background: color-mix(in oklab, var(--nx-fg) 4%, transparent); }
