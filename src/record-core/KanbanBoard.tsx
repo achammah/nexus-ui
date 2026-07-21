@@ -10,6 +10,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { Badge } from "../primitives/fields";
+import { getFieldTypeDefinition } from "./fields/registry";
 import type { ObjectConfig, RecordRow } from "./types";
 import { measurableValue, optionValues } from "./types";
 import { formatCell } from "./DataTable";
@@ -23,8 +24,11 @@ function Card({ row, config, onOpen, groupKey }: { row: RecordRow; config: Objec
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: row.id });
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
   const metaFields = config.fields.filter((f) => !f.primary && f.key !== (groupKey ?? config.stageField)).slice(0, 2);
-  const fmt = (f: (typeof metaFields)[number]) => {
+  const fmt = (f: (typeof metaFields)[number]): React.ReactNode => {
     const v = row[f.key];
+    // installed field types render their own card cell (a whiteboard thumbnail)
+    const Cell = getFieldTypeDefinition(f.type)?.cell;
+    if (Cell) return <Cell field={f} row={row} value={v} />;
     if (["money", "emails", "phones", "links", "address", "fullName"].includes(f.type)) return formatCell(v, f.type);
     return (f.type === "number" || f.type === "currency") && typeof v === "number"
       ? new Intl.NumberFormat("en-US").format(v)

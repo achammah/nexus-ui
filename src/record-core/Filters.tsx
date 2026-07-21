@@ -1,6 +1,7 @@
 import * as React from "react";
 import { X, ChevronDown, ChevronLeft, Search, CornerDownLeft, Type as TypeIcon, Hash, Calendar, User, Tag } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
+import { fieldFilterable } from "./fields/registry";
 
 /* Advanced filter — a COMMAND-style builder AND the object's primary search box in
    one. The add affordance is an always-present input (no "+ Filter" gate): type a
@@ -12,13 +13,14 @@ export type FilterField = { key: string; label: string; type: string; options?: 
 export type FilterCond = { id: string; field: string; op: string; value: string };
 
 /* Map an object's fields to the ones a FilterBar can operate on: everything except
-   free-form json + relation types (which have no meaningful operator set). Feed the
-   result to <FilterBar fields=…> / <FilterChips fields=…>. */
+   free-form json + relation types, and installed field types declaring
+   `filterable: false` (no meaningful operator set — e.g. whiteboard scene JSON).
+   Feed the result to <FilterBar fields=…> / <FilterChips fields=…>. */
 export function filterableFields(
   fields: Array<{ key: string; label: string; type: string; options?: unknown[] }>,
 ): FilterField[] {
   return fields
-    .filter((f) => !["json", "relation"].includes(f.type))
+    .filter((f) => !["json", "relation"].includes(f.type) && fieldFilterable(f.type))
     .map((f) => ({ key: f.key, label: f.label, type: f.type, options: f.options }));
 }
 

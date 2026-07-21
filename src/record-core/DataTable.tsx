@@ -10,6 +10,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { Checkbox } from "../primitives/fields";
+import { fieldBlocksKbEdit, fieldClearValue, fieldPreviewText, getFieldTypeDefinition } from "./fields/registry";
 import type { FieldDef, ObjectConfig, RecordRow } from "./types";
 import { addressLine, formatMoney, hostLabel, isMoneyValue, joinName, optionValues, rowRefs } from "./types";
 import { blocksToMarkdown, type Block } from "./NotionEditor";
@@ -42,6 +43,9 @@ const num = new Intl.NumberFormat("en-US");
 const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const dateTimeFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 export const formatCell = (v: unknown, type: string) => {
+  // installed field types (fields/registry) own their one-line text everywhere
+  const registered = fieldPreviewText(type, v);
+  if (registered !== undefined) return registered;
   if ((type === "number" || type === "currency") && typeof v === "number") return num.format(v);
   if (type === "date" && v) {
     const d = new Date(String(v));
@@ -70,6 +74,8 @@ export const formatCell = (v: unknown, type: string) => {
    Non-shaped types keep their raw String() so existing exports don't shift. */
 export const csvCell = (v: unknown, type: string): string => {
   if (v === null || v === undefined) return "";
+  const registered = fieldPreviewText(type, v);
+  if (registered !== undefined) return registered;
   if (type === "money" && isMoneyValue(v)) return `${v.amount} ${v.code ?? ""}`.trim();
   if ((type === "emails" || type === "phones" || type === "links") && Array.isArray(v)) return v.join("; ");
   if (type === "relation" && Array.isArray(v)) return v.join("; "); // many-relation labels
@@ -389,16 +395,21 @@ export function DataTable({
     "relation", "user", "multiselect", "boolean", "rating", "dateTime", "json", "longText", "array", "select", "date",
     "money", "emails", "phones", "links", "address", "fullName", "richText",
   ];
-  const canKbEdit = (type: string) => !SPECIAL.includes(type);
+  // registry types may declare keyboardEditable:false (a canvas is never type-to-edited)
+  const canKbEdit = (type: string) => !SPECIAL.includes(type) && !fieldBlocksKbEdit(type);
   const CLEARABLE: Record<string, unknown> = {
     number: null, currency: null, boolean: false,
     multiselect: [], array: [], user: "", rating: 0,
     emails: [], phones: [], links: [],
     money: null, address: null, fullName: null,
   };
-  // field-aware: a MANY relation clears to [], any other relation to null
-  const clearValue = (f: FieldDef) =>
-    f.type === "relation" ? (f.multiple ? [] : null) : f.type in CLEARABLE ? CLEARABLE[f.type] : canKbEdit(f.type) ? "" : undefined;
+  // field-aware: a MANY relation clears to [], any other relation to null;
+  // registry types clear to their declared clearValue (undefined = not clearable)
+  const clearValue = (f: FieldDef) => {
+    const registered = getFieldTypeDefinition(f.type);
+    if (registered) return fieldClearValue(f.type);
+    return f.type === "relation" ? (f.multiple ? [] : null) : f.type in CLEARABLE ? CLEARABLE[f.type] : canKbEdit(f.type) ? "" : undefined;
+  };
 
 
   const col = createColumnHelper<RecordRow>();
@@ -430,7 +441,17 @@ export function DataTable({
           size: f.width ?? 160,
           header: () => f.label,
           cell: ({ row }) =>
-            f.type === "relation" ? (
+            // registry cells first: an installed field type's read-only list cell
+            // (e.g. a whiteboard thumbnail); the host supplies the testid wrapper
+            (() => {
+              const Cell = getFieldTypeDefinition(f.type)?.cell;
+              return Cell ? (
+                <span data-testid={`cell-${row.original.id}-${f.key}`}>
+                  <Cell field={f} row={row.original} value={row.original[f.key]} />
+                </span>
+              ) : null;
+            })() ??
+            (f.type === "relation" ? (
               <RelationCell row={row.original} field={f} />
             ) : f.type === "user" ? (
               <UserCell value={row.original[f.key]} />
@@ -481,7 +502,7 @@ export function DataTable({
                   advance({ row: idx < 0 ? 0 : idx, col: f.key }, dir);
                 }}
               />
-            ),
+            )),
         }),
       );
     }
