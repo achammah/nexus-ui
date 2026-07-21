@@ -1,7 +1,9 @@
 /* Pure whiteboard-scene helpers — no excalidraw import (eager-safe, node-testable).
-   The persisted value is plain JSON: { elements: [...], appState?: {scrollX,
-   scrollY, zoom} }. Elements are excalidraw's own flat serializable objects;
-   these helpers only rely on the stable identity fields (id/version/isDeleted). */
+   The persisted value is plain JSON: { elements: [...] }. Elements are excalidraw's
+   own flat serializable objects; these helpers only rely on the stable identity
+   fields (id/version/isDeleted). An `appState` key is TOLERATED on read (older
+   writes) but never written and never restored — scene coordinates absorb the
+   authoring-time canvas offset, so mounts always scroll to content instead. */
 
 export interface SceneViewport {
   scrollX: number;

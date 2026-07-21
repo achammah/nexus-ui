@@ -7,7 +7,7 @@ import { Button } from "../../../primitives/Button";
 import { useDebouncedSave } from "../../../hooks/useDebouncedSave";
 import { useIsMobile } from "../../../hooks/use-mobile";
 import type { FieldRenderProps } from "../types";
-import type { WhiteboardScene, SceneViewport } from "./scene";
+import type { WhiteboardScene } from "./scene";
 import { isScene, liveElements } from "./scene";
 import { useNxTheme } from "./useNxTheme";
 import { Thumbnail } from "./Thumbnail";
@@ -19,8 +19,11 @@ import { Thumbnail } from "./Thumbnail";
 
    Save discipline: onChange fires for every interactive change including pure
    viewport moves; getSceneVersion only advances when ELEMENTS change, so pans/
-   zooms/selection never write (no toast churn, no timeline noise). The viewport
-   snapshot rides the next element save.
+   zooms/selection never write (no toast churn, no timeline noise). The value is
+   ELEMENTS ONLY — a viewport is never persisted: scene coordinates absorb the
+   authoring-time canvas offset, so a stored scroll re-applied on a differently
+   laid-out mount can open on empty space. Every mount scrolls to content instead
+   (a stored appState key from older writes is tolerated and ignored).
 
    Mobile (≤768px): the resting state is a static thumbnail + an Edit affordance —
    the page never traps touch scroll. Editing happens in a fullscreen overlay
@@ -33,16 +36,11 @@ import { Thumbnail } from "./Thumbnail";
    is not a file editor). */
 
 type ExcalidrawElements = readonly { isDeleted?: boolean }[];
-type ExcalidrawAppState = { scrollX: number; scrollY: number; zoom: { value: number } };
 
 const UI_OPTIONS = {
   canvasActions: { loadScene: false, saveToActiveFile: false },
   tools: { image: false },
 } as const;
-
-function viewportOf(v: unknown): Partial<SceneViewport> | undefined {
-  return isScene(v) && v.appState && typeof v.appState.scrollX === "number" ? v.appState : undefined;
-}
 
 export default function WhiteboardField({ field, row, value, readOnly, onSave }: FieldRenderProps) {
   const theme = useNxTheme();
@@ -56,7 +54,7 @@ export default function WhiteboardField({ field, row, value, readOnly, onSave }:
   // moment of a viewport-mode flip are the accepted edge; saves cover the rest).
   const epoch = `${mobile ? "m" : "d"}:${mobileOpen ? "open" : "rest"}`;
   const seed = React.useMemo(
-    () => ({ elements: liveElements(value) as unknown[], viewport: viewportOf(value) }),
+    () => ({ elements: liveElements(value) as unknown[] }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [epoch],
   );
@@ -66,18 +64,11 @@ export default function WhiteboardField({ field, row, value, readOnly, onSave }:
   const { saveState, trigger: saveScene } = useDebouncedSave<WhiteboardScene>((next) => onSave(next), 700);
 
   const onChange = React.useCallback(
-    (elements: ExcalidrawElements, appState: ExcalidrawAppState) => {
+    (elements: ExcalidrawElements) => {
       const v = getSceneVersion(elements as never);
       if (v === lastVersion.current) return; // viewport/selection only — never a write
       lastVersion.current = v;
-      saveScene({
-        elements: elements.filter((e) => !e.isDeleted) as WhiteboardScene["elements"],
-        appState: {
-          scrollX: appState.scrollX,
-          scrollY: appState.scrollY,
-          zoom: appState.zoom?.value ?? 1,
-        },
-      });
+      saveScene({ elements: elements.filter((e) => !e.isDeleted) as WhiteboardScene["elements"] });
     },
     [saveScene],
   );
@@ -113,19 +104,13 @@ export default function WhiteboardField({ field, row, value, readOnly, onSave }:
     </span>
   );
 
-  const viewport = seed.viewport;
   const canvas = (
     <Excalidraw
       key={epoch}
       theme={theme}
       viewModeEnabled={readOnly}
       UIOptions={UI_OPTIONS}
-      initialData={{
-        elements: seed.elements as never,
-        ...(viewport
-          ? { appState: { scrollX: viewport.scrollX, scrollY: viewport.scrollY, zoom: { value: viewport.zoom ?? 1 } } as never }
-          : { scrollToContent: true }),
-      }}
+      initialData={{ elements: seed.elements as never, scrollToContent: true }}
       onChange={onChange as never}
     />
   );
