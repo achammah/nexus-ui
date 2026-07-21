@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { Button } from "../primitives/Button";
 import { ThinkingDots } from "../primitives/ThinkingDots";
+import { useDebouncedSave } from "../hooks/useDebouncedSave";
 import { Badge, Micro, Tabs, TabPanel } from "../primitives/fields";
 import { Calendar } from "../components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
@@ -709,8 +710,8 @@ function DateField({
    state owns the live document, so a concurrent record-poll re-rendering the page can't
    clobber in-progress edits (the mount site keys this by row id, so switching records
    reseeds while a same-record poll does not). A subtle save-state chip mirrors the
-   async status. Swap the local debounce for foundations' useDebouncedSave({saveState})
-   when that lane lands — one debounce implementation, not two. */
+   async status, driven by the shared useDebouncedSave hook — one debounce implementation
+   across the library (idle → saving → saved, coalescing keystrokes into one commit). */
 /* optional inline-suggestions surface — mounted only when the field config carries a
    `suggestTaskId` AND the host supplied the `suggest` bundle. See RichTextField. */
 interface SuggestProps {
@@ -731,15 +732,13 @@ function RichTextField({ fieldKey, label, value, onSave, suggest }: {
     const b = Array.isArray(value) ? (value as Block[]) : [];
     return b.length ? b : textToBlocks(""); // always at least one line to type in
   });
-  const [saveState, setSaveState] = React.useState<"idle" | "saving" | "saved">("idle");
-  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  React.useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  // shared debounce hook: coalesces keystrokes into one onSave commit and exposes the
+  // save-state the chip renders (idle → saving → saved)
+  const { saveState, trigger: saveBlocks } = useDebouncedSave<Block[]>((next) => onSave(next), 700);
   const onChange = React.useCallback((next: Block[]) => {
     setBlocks(next);
-    setSaveState("saving");
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => { onSave(next); setSaveState("saved"); }, 700);
-  }, [onSave]);
+    saveBlocks(next);
+  }, [saveBlocks]);
 
   const saveChip = saveState !== "idle" && (
     <span
