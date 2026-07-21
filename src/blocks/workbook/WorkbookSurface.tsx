@@ -6,9 +6,10 @@ import UniverPresetSheetsCoreEnUS from "@univerjs/preset-sheets-core/locales/en-
 import { createUniver, LocaleType, mergeLocales } from "@univerjs/presets";
 import { defaultTheme } from "@univerjs/themes";
 import { CommandType, ThemeService, type IWorkbookData } from "@univerjs/core";
+import { IRenderManagerService } from "@univerjs/engine-render";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "./workbook.css";
-import { deriveWorkbookTheme, isDarkTheme, skinSignature, themeSignature, useThemeNonce, withLightTokens, type UniverTheme } from "./workbook-theme";
+import { canvasGridTheme, deriveWorkbookTheme, isDarkTheme, skinSignature, themeSignature, useThemeNonce, withLightTokens, type CanvasGridTheme, type UniverTheme } from "./workbook-theme";
 import { seedWorkbook } from "./snapshot";
 
 export interface WorkbookSurfaceProps {
@@ -41,12 +42,60 @@ interface UniverThemeService {
   setTheme: (theme: unknown) => void;
   setDarkMode: (dark: boolean) => void;
 }
+interface HeaderComponent {
+  setCustomHeader: (cfg: { headerStyle: Record<string, string | number> }, sheetId?: string) => void;
+}
+interface GridContext { renderConfig?: Record<string, unknown> }
+interface GridCanvas { getContext?: () => GridContext | null }
+interface RenderUnit {
+  engine?: { getCanvas?: () => GridCanvas | null };
+  /* _cacheCanvas is Univer-internal (per-viewport paint target — the sheet's grid
+     strokes land there, not on the composite canvas); pinned to 0.25.1 and probed
+     defensively, with a journey pixel-asserting the painted result */
+  scene?: { getViewports?: () => Array<{ _cacheCanvas?: GridCanvas | null }> };
+  components?: Map<string, unknown>;
+  mainComponent?: { makeDirty?: (state?: boolean) => void };
+}
+interface RenderManager { getRenderById: (unitId: string) => RenderUnit | null }
 
 /* Builds the light-anchored theme from the live tokens. Univer's canvas derives its
    dark rendering by inverting this palette, and its DOM chrome gets the exact
    per-mode values from workbook.css — so ONE light-anchored object serves both. */
 const derive = () =>
   withLightTokens((resolve) => deriveWorkbookTheme(defaultTheme as unknown as UniverTheme, resolve));
+const deriveGrid = () => withLightTokens((resolve) => canvasGridTheme(resolve));
+
+/* Push the canvas-grid theme into the sheet's render unit: the gridline stroke
+   rides the open `ctx.renderConfig.gridlinesColor` hook, the row/column headers go
+   through their components' `setCustomHeader` (the same surface sheets-ui's own
+   header-size commands use), then a forced dirty repaints. Returns false while the
+   render unit does not exist yet (it is created on the Rendered lifecycle stage,
+   after createWorkbook returns). */
+function applyGridCanvasTheme(injector: Injector, unitId: string, grid: CanvasGridTheme): boolean {
+  const rms = injector.get(IRenderManagerService) as RenderManager | null;
+  const render = rms?.getRenderById(unitId);
+  if (!render) return false;
+  // the grid strokes paint on each VIEWPORT's cache context (main pane + frozen
+  // panes each have one); the engine's composite context is included for the
+  // cache-disabled path
+  const contexts = [
+    render.engine?.getCanvas?.()?.getContext?.(),
+    ...(render.scene?.getViewports?.() ?? []).map((vp) => vp?._cacheCanvas?.getContext?.()),
+  ];
+  for (const ctx of contexts) {
+    if (ctx?.renderConfig) ctx.renderConfig.gridlinesColor = grid.gridlinesColor;
+  }
+  const headerStyle = {
+    backgroundColor: grid.header.backgroundColor,
+    fontColor: grid.header.fontColor,
+    borderColor: grid.header.borderColor,
+    fontFamily: grid.header.fontFamily,
+  };
+  (render.components?.get("__SpreadsheetRowHeader__") as HeaderComponent | undefined)?.setCustomHeader({ headerStyle });
+  (render.components?.get("__SpreadsheetColumnHeader__") as HeaderComponent | undefined)?.setCustomHeader({ headerStyle });
+  render.mainComponent?.makeDirty?.(true);
+  return true;
+}
 
 /* WorkbookSurface — a full Univer workbook (formula bar, 400+ functions, insert
    rows/cols, formatting, multi-sheet, freeze/merge) mounted into a container. It is
@@ -67,6 +116,8 @@ export function WorkbookSurface({
   const hostRef = React.useRef<HTMLDivElement>(null);
   const apiRef = React.useRef<UniverApi | null>(null);
   const themeRef = React.useRef<UniverThemeService | null>(null);
+  const injectorRef = React.useRef<Injector | null>(null);
+  const unitIdRef = React.useRef<string>("");
   const appliedSigRef = React.useRef<string>("");
   const appliedSkinRef = React.useRef<string>("");
   const [phase, setPhase] = React.useState<"loading" | "ready" | "error">("loading");
@@ -84,6 +135,7 @@ export function WorkbookSurface({
     if (!host) return;
     let instance: UniverInstance | null = null;
     let cmdSub: { dispose: () => void } | null = null;
+    let gridRaf = 0;
     try {
       const sig = themeSignature();
       const skinSig = skinSignature();
@@ -95,14 +147,36 @@ export function WorkbookSurface({
       }) as unknown as UniverInstance;
       instance = created;
       apiRef.current = created.univerAPI;
-      themeRef.current = created.univer.__getInjector().get(ThemeService) as UniverThemeService;
+      const injector = created.univer.__getInjector();
+      themeRef.current = injector.get(ThemeService) as UniverThemeService;
       appliedSigRef.current = sig;
       appliedSkinRef.current = skinSig;
-      created.univerAPI.createWorkbook(valueRef.current ?? seedWorkbook());
+      const data = valueRef.current ?? seedWorkbook();
+      created.univerAPI.createWorkbook(data);
       created.univerAPI.toggleDarkMode(isDarkTheme());
-      // persist on data-changing commands only (mutations), not selection/scroll
+      // the render unit lands on the Rendered lifecycle stage (after this effect):
+      // retry the canvas-grid theme for a bounded run of frames, then hand the
+      // applier to the re-theme effect for skin re-derives
+      unitIdRef.current = data.id;
+      injectorRef.current = injector;
+      const grid = deriveGrid();
+      let tries = 0;
+      const tick = () => {
+        if (applyGridCanvasTheme(injector, data.id, grid) || tries++ > 120) return;
+        gridRaf = requestAnimationFrame(tick);
+      };
+      gridRaf = requestAnimationFrame(tick);
+      // persist on data-changing commands only (mutations), not selection/scroll.
+      // A freeze change rebuilds viewports (fresh cache contexts) — re-apply the
+      // grid theme so the new panes keep the themed gridlines.
       cmdSub = created.univerAPI.onCommandExecuted((command) => {
         if (command.type !== CommandType.MUTATION) return;
+        if (command.id.includes("set-frozen") && injectorRef.current && unitIdRef.current) {
+          requestAnimationFrame(() => {
+            if (injectorRef.current && unitIdRef.current)
+              applyGridCanvasTheme(injectorRef.current, unitIdRef.current, deriveGrid());
+          });
+        }
         const fWorkbook = created.univerAPI.getActiveWorkbook();
         if (fWorkbook) onChangeRef.current?.(fWorkbook.save());
       });
@@ -111,10 +185,13 @@ export function WorkbookSurface({
       setPhase("error");
     }
     return () => {
+      cancelAnimationFrame(gridRaf);
       cmdSub?.dispose();
       try { instance?.univer.dispose(); } catch { /* already gone */ }
       apiRef.current = null;
       themeRef.current = null;
+      injectorRef.current = null;
+      unitIdRef.current = "";
       if (host) host.innerHTML = "";
     };
   }, [reloadNonce]);
@@ -140,6 +217,9 @@ export function WorkbookSurface({
     if (skinSig !== appliedSkinRef.current) {
       appliedSkinRef.current = skinSig;
       themeService.setTheme(derive());
+      // the canvas-grid layer (gridlines, headers) re-derives with the skin too
+      if (injectorRef.current && unitIdRef.current)
+        applyGridCanvasTheme(injectorRef.current, unitIdRef.current, deriveGrid());
     }
     const dark = isDarkTheme();
     themeService.setDarkMode(dark);
