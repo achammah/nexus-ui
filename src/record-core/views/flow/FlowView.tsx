@@ -220,7 +220,7 @@ export default function FlowView({ object, rows, readOnly, viewConfig, viewState
 
   return (
     <div
-      className="nxFlowWrap nxCard nx-rise-in"
+      className="nxFlowWrap nx-rise-in"
       data-testid={`flow-${object.key}`}
       role="region"
       aria-label={`${object.label} flow graph`}
@@ -240,14 +240,14 @@ export default function FlowView({ object, rows, readOnly, viewConfig, viewState
         deleteKeyCode={null}
         nodeDragThreshold={6}
         fitView
-        fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
+        fitViewOptions={{ padding: 0.16, maxZoom: 1.4 }}
         minZoom={0.05}
         onlyRenderVisibleElements
         defaultMarkerColor={null}
       >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} />
+        <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
         <div style={{ display: "contents" }} data-testid="flow-controls">
-          <Controls showInteractive={false} />
+          <Controls showInteractive={false} orientation="horizontal" />
         </div>
         <div style={{ display: "contents" }} data-testid="flow-minimap">
           <MiniMap pannable zoomable />
