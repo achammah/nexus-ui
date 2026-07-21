@@ -19,14 +19,14 @@ export function AgendaList({
   anchor,
   events,
   onOpen,
-  onCreate,
+  onCreateDraft,
 }: {
   /* first day of the visible month ("2026-08-01") */
   anchor: string;
   events: CalEvent[];
   onOpen: (id: string) => void;
   /* absent (no create right) → day rows are inert labels */
-  onCreate?: (day: string) => void;
+  onCreateDraft?: (day: string) => void;
 }) {
   const items = React.useMemo<Item[]>(() => {
     const days = monthDays(anchor);
@@ -77,13 +77,13 @@ export function AgendaList({
                 className="nxCalAgendaDay"
                 data-testid={`agenda-day-${item.day}`}
                 data-today={item.day === today ? "true" : undefined}
-                data-creatable={onCreate ? "true" : undefined}
-                aria-label={onCreate ? `Add on ${item.day}` : item.day}
-                disabled={!onCreate}
-                onClick={() => onCreate?.(item.day)}
+                data-creatable={onCreateDraft ? "true" : undefined}
+                aria-label={onCreateDraft ? `Add on ${item.day}` : item.day}
+                disabled={!onCreateDraft}
+                onClick={() => onCreateDraft?.(item.day)}
               >
                 {dayLabel(item.day)}
-                {onCreate && (
+                {onCreateDraft && (
                   <span className="nxCalAgendaAdd" data-testid={`agenda-create-${item.day}`}>
                     <Plus size={13} />
                   </span>

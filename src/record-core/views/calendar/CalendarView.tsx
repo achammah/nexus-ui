@@ -46,7 +46,7 @@ export default function CalendarView({
   onViewState,
   onOpen,
   onPatch,
-  onCreate,
+  onCreateDraft,
 }: ViewProps) {
   const isMobile = useIsMobile();
 
@@ -126,7 +126,7 @@ export default function CalendarView({
   };
 
   const onDateClick = (info: DateClickArg) => {
-    onCreate?.(createPrefill(info.dateStr, fields.start));
+    onCreateDraft?.(createPrefill(info.dateStr, fields.start));
   };
 
   const onEventDrop = (info: EventDropArg) => {
@@ -196,7 +196,7 @@ export default function CalendarView({
       className="nxCalendar"
       data-testid={`calendar-${object.key}`}
       data-cal-mode={mode}
-      data-can-create={onCreate ? "true" : undefined}
+      data-can-create={onCreateDraft ? "true" : undefined}
       onKeyDown={onKeyDown}
     >
       <div className="nxCalHead">
@@ -217,7 +217,7 @@ export default function CalendarView({
       {dated === 0 && (
         <div className="nxCard nxCalEmpty nx-rise-in-sm" data-testid="calendar-empty">
           No {object.label.toLowerCase()} with a {fields.start.label.toLowerCase()} yet
-          {onCreate ? " — click a day to add one" : ""}.
+          {onCreateDraft ? " — click a day to add one" : ""}.
         </div>
       )}
       {isMobile ? (
@@ -225,7 +225,7 @@ export default function CalendarView({
           anchor={agendaAnchor}
           events={events}
           onOpen={onOpen}
-          onCreate={onCreate ? (day) => onCreate(createPrefill(day, fields.start)) : undefined}
+          onCreateDraft={onCreateDraft ? (day) => onCreateDraft(createPrefill(day, fields.start)) : undefined}
         />
       ) : (
         <FullCalendar
@@ -242,7 +242,7 @@ export default function CalendarView({
           eventDurationEditable={!readOnly && !!fields.end}
           datesSet={onDatesSet}
           eventClick={onEventClick}
-          dateClick={onCreate ? onDateClick : undefined}
+          dateClick={onCreateDraft ? onDateClick : undefined}
           eventDrop={onEventDrop}
           eventResize={onEventResize}
           eventDidMount={onEventDidMount}
