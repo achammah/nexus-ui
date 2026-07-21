@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 97,
+  "count": 101,
   "items": [
     {
       "name": "accordion",
@@ -561,6 +561,34 @@
       "kind": "record-core",
       "import": "src/record-core/views/grid/editors.tsx",
       "when": "replacement overlay editors for glide's built-in text/uri/number cells: commit from local state via onFinishedEditing (the library's own commit chain drops values under React 18 StrictMode), guarded blur-commit for click-away",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "flow view definition",
+      "kind": "record-core",
+      "import": "src/record-core/views/flow/definition.tsx",
+      "when": "the flow (node-graph) view registry entry: records-as-graph config (relationField/labelField), plain-language validation, and the relation-picker toolbar; the canvas loads as a lazy chunk",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "FlowView",
+      "kind": "record-core",
+      "import": "src/record-core/views/flow/FlowView.tsx",
+      "when": "the records-as-graph canvas (lazy): record cards + cross-object hub chips as xyflow nodes, one configured relation as edges, pan/zoom/minimap/drag-arrange with per-relation drag positions persisted in the view-state bag",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "buildGraph · resolveRelation · resolveLabelField · positionsFor · positionsPatch",
+      "kind": "record-core",
+      "import": "src/record-core/views/flow/graph.ts",
+      "when": "the flow view's pure core (node-testable, JSX-free): relation resolution, node/edge derivation from the _refs id decoration (self-relation record edges, cross-object/polymorphic hubs), drag-position persistence shapes",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "layoutGraph · bfsGrid",
+      "kind": "record-core",
+      "import": "src/record-core/views/flow/layout.ts",
+      "when": "flow auto-layout: dagre TB up to 2,000 nodes, an O(V+E) BFS-rank grid above it — imported only by the lazy canvas chunk so dagre stays out of the eager bundle",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
