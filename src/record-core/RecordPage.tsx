@@ -1,13 +1,12 @@
 import * as React from "react";
 import {
-  ArrowLeft, CalendarIcon, CalendarClock, ChevronsUpDown, ExternalLink, Eye, EyeOff, Star,
+  ArrowLeft, CalendarClock, ChevronsUpDown, ExternalLink, Eye, EyeOff, Star,
   Flag, Mail, MessageSquare, Paperclip, Pencil, Phone, Plus, Sparkles, Upload,
 } from "lucide-react";
 import { Button } from "../primitives/Button";
 import { ThinkingDots } from "../primitives/ThinkingDots";
 import { useDebouncedSave } from "../hooks/useDebouncedSave";
 import { Badge, Micro, Tabs, TabPanel } from "../primitives/fields";
-import { Calendar } from "../components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import {
   Command,
@@ -19,8 +18,12 @@ import {
 } from "../components/ui/command";
 import { formatCell } from "./DataTable";
 import { fieldIsBlock, getFieldTypeDefinition } from "./fields/registry";
-import type { AddressValue, FieldDef, FileMeta, FullNameValue, MoneyValue, ObjectConfig, RecordRow, RelationItem, TimelineEvent } from "./types";
-import { isMoneyValue, normalizeOption, optionValues, rowRefs } from "./types";
+import type { FieldDef, FileMeta, ObjectConfig, RecordRow, RelationItem, TimelineEvent } from "./types";
+import { normalizeOption, optionValues, rowRefs } from "./types";
+import {
+  AddressField, ArrayField, DateField, FullNameField, ListField, MoneyField, MultiSelectField,
+} from "./fields/editors";
+import { coerceScalar, listValidators } from "./fields/draft";
 import { NotionEditor, textToBlocks, type Block } from "./NotionEditor";
 import { useSuggestions, type Suggestion } from "./useSuggestions";
 import { SuggestionPanel } from "./SuggestionPanel";
@@ -108,302 +111,13 @@ export interface RelatedList {
   onOpen: (id: string) => void;
 }
 
-/* Multiselect editor — chips + a checkbox popover writing string[]. */
-function MultiSelectField({
-  fieldKey,
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  fieldKey: string;
-  label: string;
-  value: unknown;
-  options: import("./types").SelectOption[];
-  onChange: (vals: string[]) => void;
-}) {
-  const vals = Array.isArray(value) ? value.map(String) : [];
-  const meta = new Map(options.map((o) => { const n = normalizeOption(o); return [n.value, n] as const; }));
-  const [open, setOpen] = React.useState(false);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="nxCellEdit"
-          style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", flexWrap: "wrap", textAlign: "left" }}
-          aria-label={label}
-          data-testid={`field-${fieldKey}`}
-        >
-          {vals.length === 0 && <span style={{ color: "var(--nx-fg-faint)" }}>Pick…</span>}
-          {vals.map((t) => (
-            <span key={t} data-testid={`field-${fieldKey}-chip-${t.replaceAll(/\W+/g, "-").toLowerCase()}`}>
-              <OptionChip field={{ key: fieldKey, label, type: "multiselect", options } as never} value={t} />
-            </span>
-          ))}
-          <ChevronsUpDown size={12} style={{ color: "var(--nx-fg-faint)", marginLeft: "auto", flex: "none" }} />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" style={{ width: 240, padding: 0 }}>
-        <Command>
-          <CommandList>
-            <CommandGroup>
-              {options.map((raw) => {
-                const o = normalizeOption(raw);
-                const on = vals.includes(o.value);
-                return (
-                  <CommandItem
-                    key={o.value}
-                    value={o.value}
-                    data-testid={`field-${fieldKey}-opt-${o.value.replaceAll(/\W+/g, "-").toLowerCase()}`}
-                    onSelect={() => onChange(on ? vals.filter((x) => x !== o.value) : [...vals, o.value])}
-                  >
-                    <span style={{ width: 14, textAlign: "center" }}>{on ? "✓" : ""}</span>
-                    {o.label}
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/* Array editor — free-form tags: type + Enter adds, × removes (no fixed vocabulary). */
-function ArrayField({ fieldKey, label, value, onChange }: { fieldKey: string; label: string; value: unknown; onChange: (vals: string[]) => void }) {
-  const vals = Array.isArray(value) ? value.map(String) : [];
-  const [draft, setDraft] = React.useState("");
-  return (
-    <span style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }} data-testid={`field-${fieldKey}`}>
-      {vals.map((v) => (
-        <span key={v} className="nxOptChip" style={{ background: "var(--nx-bg-sunken)", border: "1px solid var(--nx-border)", color: "var(--nx-fg-muted)" }}>
-          {v}
-          <button type="button" aria-label={`Remove ${v}`} data-testid={`field-${fieldKey}-rm-${v.replaceAll(/\W+/g, "-").toLowerCase()}`}
-            style={{ border: 0, background: "none", cursor: "pointer", color: "inherit", padding: 0 }}
-            onClick={() => onChange(vals.filter((x) => x !== v))}>×</button>
-        </span>
-      ))}
-      <input
-        className="nxCellEdit"
-        style={{ minWidth: 80, flex: 1 }}
-        placeholder="Add…"
-        value={draft}
-        aria-label={label}
-        data-testid={`field-${fieldKey}-input`}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && draft.trim()) {
-            if (!vals.includes(draft.trim())) onChange([...vals, draft.trim()]);
-            setDraft("");
-          }
-        }}
-      />
-    </span>
-  );
-}
-
-/* ---- shaped (composite) field editors — each saves ONE patch of the whole value ---- */
-
-const fieldErrStyle: React.CSSProperties = { color: "var(--nx-danger)", font: "var(--nx-text-meta)" };
-/* group editors commit when focus leaves the WHOLE group, not between its inputs */
-const leftGroup = (e: React.FocusEvent<HTMLElement>) => !e.currentTarget.contains(e.relatedTarget as Node | null);
-
-/* Money — amount + ISO 4217 code inputs, one {amount, code} patch (code stored uppercase). */
-export function MoneyField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: MoneyValue | null) => void }) {
-  const cur = isMoneyValue(value) ? value : null;
-  const [amount, setAmount] = React.useState(cur ? String(cur.amount) : "");
-  const [code, setCode] = React.useState(cur?.code ?? "");
-  const [err, setErr] = React.useState<string | null>(null);
-  const commit = () => {
-    const a = amount.trim();
-    if (!a) {
-      if (cur) onSave(null);
-      return;
-    }
-    const n = Number(a);
-    const c = code.trim().toUpperCase();
-    if (Number.isNaN(n)) return setErr(`${label}: amount must be a number`);
-    if (c && !/^[A-Z]{3}$/.test(c)) return setErr(`${label}: code must be a 3-letter currency code`);
-    setErr(null);
-    if (!cur || cur.amount !== n || (cur.code ?? "") !== c) onSave({ amount: n, code: c });
-  };
-  return (
-    <span style={{ display: "flex", flexDirection: "column", gap: 4 }} data-testid={`field-${fieldKey}`} onBlur={(e) => leftGroup(e) && commit()}>
-      <span style={{ display: "flex", gap: 6 }}>
-        <input
-          className="nxCellEdit"
-          type="number"
-          style={{ flex: 1 }}
-          value={amount}
-          placeholder="Amount"
-          aria-label={`${label} amount`}
-          data-testid={`field-${fieldKey}-amount`}
-          onChange={(e) => { setAmount(e.target.value); if (err) setErr(null); }}
-        />
-        <input
-          className="nxCellEdit"
-          style={{ width: 52, textTransform: "uppercase" }}
-          value={code}
-          placeholder="EUR"
-          maxLength={3}
-          aria-label={`${label} currency code`}
-          data-testid={`field-${fieldKey}-code`}
-          onChange={(e) => { setCode(e.target.value); if (err) setErr(null); }}
-        />
-      </span>
-      {err && <span data-testid={`field-${fieldKey}-err`} style={fieldErrStyle}>{err}</span>}
-    </span>
-  );
-}
-
-/* List editor (emails/phones/links) — entry rows with remove, add-on-Enter,
-   per-entry validation surfacing an inline error that NAMES the field. */
-export function ListField({
-  fieldKey,
-  label,
-  value,
-  placeholder,
-  validate,
-  onSave,
-}: {
-  fieldKey: string;
-  label: string;
-  value: unknown;
-  placeholder: string;
-  /* error message (naming the field) or null when the entry is valid */
-  validate: (entry: string) => string | null;
-  onSave: (vals: string[]) => void;
-}) {
-  const vals = Array.isArray(value) ? (value as unknown[]).map(String) : [];
-  const [draft, setDraft] = React.useState("");
-  const [err, setErr] = React.useState<string | null>(null);
-  const add = () => {
-    const v = draft.trim();
-    if (!v) return;
-    const e = validate(v);
-    if (e) return setErr(e);
-    setErr(null);
-    if (!vals.includes(v)) onSave([...vals, v]);
-    setDraft("");
-  };
-  return (
-    <span style={{ display: "flex", flexDirection: "column", gap: 4 }} data-testid={`field-${fieldKey}`}>
-      {vals.map((v, i) => (
-        <span key={`${v}-${i}`} data-testid={`field-${fieldKey}-row-${i}`} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", font: "var(--nx-text-body)" }}>{v}</span>
-          <button
-            type="button"
-            aria-label={`Remove ${v}`}
-            data-testid={`field-${fieldKey}-rm-${i}`}
-            style={{ border: 0, background: "none", cursor: "pointer", color: "var(--nx-fg-faint)", padding: 0 }}
-            onClick={() => onSave(vals.filter((_, j) => j !== i))}
-          >
-            ×
-          </button>
-        </span>
-      ))}
-      <input
-        className="nxCellEdit"
-        placeholder={placeholder}
-        value={draft}
-        aria-label={label}
-        data-testid={`field-${fieldKey}-input`}
-        onChange={(e) => { setDraft(e.target.value); if (err) setErr(null); }}
-        onKeyDown={(e) => { if (e.key === "Enter") add(); }}
-        onBlur={() => { if (draft.trim()) add(); }}
-      />
-      {err && <span data-testid={`field-${fieldKey}-err`} style={fieldErrStyle}>{err}</span>}
-    </span>
-  );
-}
-
-const ADDRESS_PARTS = ["street", "city", "postcode", "country"] as const;
-
-/* Address — inline group of 4 labeled inputs saving as ONE patch. */
-export function AddressField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: AddressValue | null) => void }) {
-  const cur: AddressValue = typeof value === "object" && value !== null && !Array.isArray(value) ? (value as AddressValue) : {};
-  const [d, setD] = React.useState<Record<string, string>>(
-    Object.fromEntries(ADDRESS_PARTS.map((p) => [p, cur[p] ?? ""])),
-  );
-  const commit = () => {
-    const next: AddressValue = {};
-    for (const p of ADDRESS_PARTS) if (d[p].trim()) next[p] = d[p].trim();
-    const changed = ADDRESS_PARTS.some((p) => (cur[p] ?? "") !== (next[p] ?? ""));
-    if (changed) onSave(Object.keys(next).length ? next : null);
-  };
-  return (
-    <span
-      style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}
-      data-testid={`field-${fieldKey}`}
-      aria-label={label}
-      onBlur={(e) => leftGroup(e) && commit()}
-    >
-      {ADDRESS_PARTS.map((p) => (
-        <label key={p} style={{ display: "flex", flexDirection: "column", gap: 2, ...(p === "street" ? { gridColumn: "1 / -1" } : {}) }}>
-          <span style={{ font: "var(--nx-text-meta)", color: "var(--nx-fg-faint)", textTransform: "capitalize" }}>{p}</span>
-          <input
-            className="nxCellEdit"
-            value={d[p]}
-            aria-label={`${label} ${p}`}
-            data-testid={`field-${fieldKey}-${p}`}
-            onChange={(e) => setD((m) => ({ ...m, [p]: e.target.value }))}
-          />
-        </label>
-      ))}
-    </span>
-  );
-}
-
-/* Full name — first/last inputs saving as ONE patch. */
-export function FullNameField({ fieldKey, label, value, onSave }: { fieldKey: string; label: string; value: unknown; onSave: (v: FullNameValue | null) => void }) {
-  const cur: FullNameValue = typeof value === "object" && value !== null && !Array.isArray(value) ? (value as FullNameValue) : {};
-  const [first, setFirst] = React.useState(cur.first ?? "");
-  const [last, setLast] = React.useState(cur.last ?? "");
-  const commit = () => {
-    const f = first.trim();
-    const l = last.trim();
-    if ((cur.first ?? "") === f && (cur.last ?? "") === l) return;
-    if (!f && !l) return onSave(null);
-    const next: FullNameValue = {};
-    if (f) next.first = f;
-    if (l) next.last = l;
-    onSave(next);
-  };
-  return (
-    <span style={{ display: "flex", gap: 6 }} data-testid={`field-${fieldKey}`} onBlur={(e) => leftGroup(e) && commit()}>
-      <input
-        className="nxCellEdit"
-        style={{ flex: 1 }}
-        value={first}
-        placeholder="First"
-        aria-label={`${label} first name`}
-        data-testid={`field-${fieldKey}-first`}
-        onChange={(e) => setFirst(e.target.value)}
-      />
-      <input
-        className="nxCellEdit"
-        style={{ flex: 1 }}
-        value={last}
-        placeholder="Last"
-        aria-label={`${label} last name`}
-        data-testid={`field-${fieldKey}-last`}
-        onChange={(e) => setLast(e.target.value)}
-      />
-    </span>
-  );
-}
-
-/* per-entry validators for the list types — messages NAME the field */
-export const listValidators: Record<string, (label: string) => (entry: string) => string | null> = {
-  emails: (label) => (v) => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : `${label}: "${v}" is not a valid email address`),
-  phones: (label) => (v) => (/^[0-9+()\-\s.]{3,}$/.test(v) ? null : `${label}: "${v}" is not a valid phone number`),
-  links: (label) => (v) =>
-    [v, `https://${v}`].some((u) => { try { new URL(u); return u.includes("."); } catch { return false; } })
-      ? null
-      : `${label}: "${v}" is not a valid URL or domain`,
-};
+/* The per-type field editors (multiselect chips popover, free-tag array editor,
+   the shaped money/list/address/fullName group editors, the calendar date field)
+   live in ./fields/editors and register on the field-type registry; the
+   per-entry list validators live in ./fields/draft. Re-exported here so
+   existing imports of the record page's editors keep resolving. */
+export { AddressField, FullNameField, ListField, MoneyField } from "./fields/editors";
+export { listValidators } from "./fields/draft";
 
 /* type tag rendered after a picker row's label when results span object types */
 function TypeTag({ item }: { item: RelationItem }) {
@@ -655,52 +369,6 @@ function MultiRelationField({
         </PopoverContent>
       </Popover>
     </span>
-  );
-}
-
-/* Date field editor — calendar popover writing yyyy-mm-dd (the wire format). */
-function DateField({
-  fieldKey,
-  label,
-  value,
-  onPick,
-}: {
-  fieldKey: string;
-  label: string;
-  value: unknown;
-  onPick: (iso: string) => void;
-}) {
-  const [open, setOpen] = React.useState(false);
-  const selected = value ? new Date(String(value)) : undefined;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="nxCellEdit"
-          style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }}
-          aria-label={label}
-          data-testid={`field-${fieldKey}`}
-        >
-          <CalendarIcon size={13} style={{ color: "var(--nx-fg-faint)", flex: "none" }} />
-          <span data-testid={`field-${fieldKey}-value`}>{value ? formatCell(value, "date") : "Pick a date"}</span>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" style={{ width: "auto", padding: 0 }}>
-        <Calendar
-          mode="single"
-          selected={selected && !Number.isNaN(selected.getTime()) ? selected : undefined}
-          defaultMonth={selected && !Number.isNaN(selected.getTime()) ? selected : undefined}
-          onSelect={(d) => {
-            if (d) {
-              const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-              onPick(iso);
-              setOpen(false);
-            }
-          }}
-        />
-      </PopoverContent>
-    </Popover>
   );
 }
 
@@ -1174,9 +842,11 @@ export function RecordPage({
           data-testid={`field-${f.key}`}
           onChange={(e) => onPatch(row.id, { [f.key]: e.target.value })}
         >
-          {optionValues(f.options).map((o) => (
-            <option key={o} value={o}>{o}</option>
-          ))}
+          {(f.options ?? []).map((raw) => {
+            // configured {value,label} options render their LABEL (values stay the wire format)
+            const o = normalizeOption(raw);
+            return <option key={o.value} value={o.value}>{o.label}</option>;
+          })}
         </select>
       ) : f.type === "money" ? (
         <MoneyField
@@ -1221,7 +891,7 @@ export function RecordPage({
           aria-label={f.label}
           data-testid={`field-${f.key}`}
           onBlur={(e) => {
-            const v = f.type === "number" || f.type === "currency" ? Number(e.target.value) : e.target.value;
+            const v = coerceScalar(f.type, e.target.value);
             if (v !== row[f.key]) onPatch(row.id, { [f.key]: v });
           }}
         />

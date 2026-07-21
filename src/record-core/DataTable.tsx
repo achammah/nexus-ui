@@ -15,6 +15,8 @@ import type { FieldDef, ObjectConfig, RecordRow } from "./types";
 import { addressLine, formatMoney, hostLabel, isMoneyValue, joinName, optionValues, rowRefs } from "./types";
 import { blocksToMarkdown, type Block } from "./NotionEditor";
 import { OptionChip, activeFields } from "./options";
+// deep import (not the fields barrel) — fields/editors.tsx imports formatCell from here
+import { coerceScalar } from "./fields/draft";
 import "./record-core.css";
 
 /* richText (Block[]) → readable plain text for a truncated table preview: flatten
@@ -256,7 +258,7 @@ function CellEditor({
     return <span data-testid={`cell-${row.id}-${field.key}`}>{formatCell(row[field.key], field.type) || "—"}</span>;
   }
   const commit = () => {
-    if (v !== initial) onPatch(row.id, { [field.key]: field.type === "number" || field.type === "currency" ? Number(v) : v });
+    if (v !== initial) onPatch(row.id, { [field.key]: coerceScalar(field.type, v) });
   };
   if (field.type === "select") {
     const colored = (field.options ?? []).some((o) => typeof o !== "string" && o.color);
