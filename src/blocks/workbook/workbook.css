@@ -1,10 +1,126 @@
-/* Workbook surface chrome — the frame around the Univer host. Colors, radii, font
-   and motion are pure --nx-* tokens so a client re-skin and the dark toggle restyle
-   it with zero code. Univer's own canvas + toolbar are themed through the theme
-   object (accent) and its dark-mode flip (workbook-theme.ts); here we align its font
-   and surface framing to ours and style the states Univer doesn't own (loading,
-   empty, error, save status). */
+/* Workbook surface — deep-native theming for the Univer engine. Two layers:
 
+   1. VALUE REMAP (this file, root scope). Univer's DOM chrome is Tailwind-driven
+      off `--univer-*` vars whose values are injected on :root from the JS theme
+      object; `.univer-dark` swaps ROLE classes (bg-white -> dark:bg-gray-900),
+      never values. So one value-set per mode re-skins ALL of it — toolbar, formula
+      bar, name box, sheet tabs, zoom slider, context menus, dialogs — including
+      the popups portaled to <body> (which is why these blocks sit at :root, not
+      scoped to .nxWorkbook). Our tables beat the injected :root style on
+      specificity and re-derive live on theme/skin changes (pure var() cascade).
+
+   2. FRAME (the .nxWorkbook rules below). The surface is the PAGE, not a card:
+      no border, no radius, no own header strip — the host's actions overlay the
+      right end of Univer's single toolbar row (ribbonType "simple", wired in
+      WorkbookSurface.tsx), and the toolbar sits directly under the app's top bar
+      on the same background + hairline vocabulary.
+
+   The canvas (gridlines, headers, selection) is themed separately through the JS
+   theme object (workbook-theme.ts): light-anchored values Univer inverts for its
+   own dark mode. */
+
+/* ---- light value table (also the base for unstamped hosts on a light OS) ---- */
+:root:not([data-theme="dark"]) {
+  --univer-white: var(--nx-bg-raised);
+  --univer-gray-50: var(--nx-bg);
+  --univer-gray-100: var(--nx-bg-sunken);
+  --univer-gray-200: var(--nx-border);
+  --univer-gray-300: var(--nx-border-strong);
+  --univer-gray-400: var(--nx-fg-faint);
+  --univer-gray-500: var(--nx-fg-muted);
+  --univer-gray-600: color-mix(in srgb, var(--nx-fg) 35%, var(--nx-fg-muted));
+  --univer-gray-700: color-mix(in srgb, var(--nx-fg) 65%, var(--nx-fg-muted));
+  --univer-gray-800: color-mix(in srgb, var(--nx-fg) 85%, var(--nx-fg-muted));
+  --univer-gray-900: var(--nx-fg);
+  --univer-primary-50: color-mix(in srgb, var(--nx-accent) 8%, var(--nx-bg-raised));
+  --univer-primary-100: color-mix(in srgb, var(--nx-accent) 16%, var(--nx-bg-raised));
+  --univer-primary-200: color-mix(in srgb, var(--nx-accent) 30%, var(--nx-bg-raised));
+  --univer-primary-300: color-mix(in srgb, var(--nx-accent) 48%, var(--nx-bg-raised));
+  --univer-primary-400: color-mix(in srgb, var(--nx-accent) 70%, var(--nx-bg-raised));
+  --univer-primary-500: var(--nx-accent);
+  --univer-primary-600: color-mix(in srgb, var(--nx-accent) 86%, black);
+  --univer-primary-700: color-mix(in srgb, var(--nx-accent) 70%, black);
+  --univer-primary-800: color-mix(in srgb, var(--nx-accent) 55%, black);
+  --univer-primary-900: color-mix(in srgb, var(--nx-accent) 42%, black);
+  --univer-red-300: color-mix(in srgb, var(--nx-danger) 55%, white);
+  --univer-red-400: color-mix(in srgb, var(--nx-danger) 78%, white);
+  --univer-red-500: var(--nx-danger);
+  --univer-red-600: color-mix(in srgb, var(--nx-danger) 82%, black);
+  --univer-green-400: color-mix(in srgb, var(--nx-ok) 78%, white);
+  --univer-green-500: var(--nx-ok);
+  --univer-green-600: color-mix(in srgb, var(--nx-ok) 82%, black);
+  --univer-yellow-500: var(--nx-warn);
+}
+
+/* ---- dark value table — the role MIRROR of the light one (in .univer-dark the
+   gray scale flips duty: 900 becomes the surface, 50 the brightest text) ---- */
+:root[data-theme="dark"] {
+  --univer-white: var(--nx-fg);
+  --univer-gray-50: var(--nx-fg);
+  --univer-gray-100: color-mix(in srgb, var(--nx-fg) 88%, var(--nx-fg-muted));
+  --univer-gray-200: color-mix(in srgb, var(--nx-fg) 70%, var(--nx-fg-muted));
+  --univer-gray-300: color-mix(in srgb, var(--nx-fg) 45%, var(--nx-fg-muted));
+  --univer-gray-400: var(--nx-fg-muted);
+  --univer-gray-500: var(--nx-fg-faint);
+  --univer-gray-600: var(--nx-border-strong);
+  --univer-gray-700: var(--nx-border);
+  --univer-gray-800: var(--nx-bg-raised);
+  --univer-gray-900: var(--nx-bg);
+  --univer-primary-50: color-mix(in srgb, var(--nx-accent) 10%, var(--nx-bg));
+  --univer-primary-100: color-mix(in srgb, var(--nx-accent) 18%, var(--nx-bg));
+  --univer-primary-200: color-mix(in srgb, var(--nx-accent) 32%, var(--nx-bg));
+  --univer-primary-300: color-mix(in srgb, var(--nx-accent) 48%, var(--nx-bg));
+  --univer-primary-400: color-mix(in srgb, var(--nx-accent) 70%, var(--nx-bg));
+  --univer-primary-500: var(--nx-accent);
+  --univer-primary-600: color-mix(in srgb, var(--nx-accent) 86%, white);
+  --univer-primary-700: color-mix(in srgb, var(--nx-accent) 70%, white);
+  --univer-primary-800: color-mix(in srgb, var(--nx-accent) 55%, white);
+  --univer-primary-900: color-mix(in srgb, var(--nx-accent) 42%, white);
+  --univer-red-300: color-mix(in srgb, var(--nx-danger) 65%, white);
+  --univer-red-400: color-mix(in srgb, var(--nx-danger) 85%, white);
+  --univer-red-500: var(--nx-danger);
+  --univer-red-600: color-mix(in srgb, var(--nx-danger) 80%, black);
+  --univer-green-400: color-mix(in srgb, var(--nx-ok) 85%, white);
+  --univer-green-500: var(--nx-ok);
+  --univer-green-600: color-mix(in srgb, var(--nx-ok) 80%, black);
+  --univer-yellow-500: var(--nx-warn);
+}
+/* unstamped host on a dark OS: same table as stamped dark (tokens flip the same way) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --univer-white: var(--nx-fg);
+    --univer-gray-50: var(--nx-fg);
+    --univer-gray-100: color-mix(in srgb, var(--nx-fg) 88%, var(--nx-fg-muted));
+    --univer-gray-200: color-mix(in srgb, var(--nx-fg) 70%, var(--nx-fg-muted));
+    --univer-gray-300: color-mix(in srgb, var(--nx-fg) 45%, var(--nx-fg-muted));
+    --univer-gray-400: var(--nx-fg-muted);
+    --univer-gray-500: var(--nx-fg-faint);
+    --univer-gray-600: var(--nx-border-strong);
+    --univer-gray-700: var(--nx-border);
+    --univer-gray-800: var(--nx-bg-raised);
+    --univer-gray-900: var(--nx-bg);
+    --univer-primary-50: color-mix(in srgb, var(--nx-accent) 10%, var(--nx-bg));
+    --univer-primary-100: color-mix(in srgb, var(--nx-accent) 18%, var(--nx-bg));
+    --univer-primary-200: color-mix(in srgb, var(--nx-accent) 32%, var(--nx-bg));
+    --univer-primary-300: color-mix(in srgb, var(--nx-accent) 48%, var(--nx-bg));
+    --univer-primary-400: color-mix(in srgb, var(--nx-accent) 70%, var(--nx-bg));
+    --univer-primary-500: var(--nx-accent);
+    --univer-primary-600: color-mix(in srgb, var(--nx-accent) 86%, white);
+    --univer-primary-700: color-mix(in srgb, var(--nx-accent) 70%, white);
+    --univer-primary-800: color-mix(in srgb, var(--nx-accent) 55%, white);
+    --univer-primary-900: color-mix(in srgb, var(--nx-accent) 42%, white);
+    --univer-red-300: color-mix(in srgb, var(--nx-danger) 65%, white);
+    --univer-red-400: color-mix(in srgb, var(--nx-danger) 85%, white);
+    --univer-red-500: var(--nx-danger);
+    --univer-red-600: color-mix(in srgb, var(--nx-danger) 80%, black);
+    --univer-green-400: color-mix(in srgb, var(--nx-ok) 85%, white);
+    --univer-green-500: var(--nx-ok);
+    --univer-green-600: color-mix(in srgb, var(--nx-ok) 80%, black);
+    --univer-yellow-500: var(--nx-warn);
+  }
+}
+
+/* ---- frame: the sheet IS the page ---- */
 .nxWorkbook {
   position: relative;
   display: flex;
@@ -12,64 +128,12 @@
   height: 100%;
   min-height: 0;
   font-family: var(--nx-font-sans);
-  border: 1px solid var(--nx-border);
-  border-radius: var(--nx-radius-m);
-  overflow: hidden;
-  background: var(--nx-bg);
+  /* geometry the actions overlay + toolbar reservation share */
+  --nxwb-toolbar-h: 40px;
+  --nxwb-actions-w: 178px;
 }
 
-/* Native-not-widget: theme Univer's OWN chrome (ribbon tabs, toolbar, formula bar,
-   sheet bar, menus, buttons, focused controls) to our tokens instead of its stock
-   look. Univer's design system is Tailwind-driven off --univer-primary-* (accent)
-   and --univer-gray-* (neutrals); we remap them by ROLE to our --nx-* ramp, scoped
-   to the surface. Both Univer's scale and our tokens invert with the active theme,
-   so ONE mapping serves light AND dark, and it re-derives on a skin/token change for
-   free (the DOM chrome reads these as var()). Canvas paint (selection, gridlines)
-   comes from the JS theme object at mount; this block owns the DOM chrome. */
-.nxWorkbook {
-  --univer-primary-50: color-mix(in srgb, var(--nx-accent) 8%, var(--nx-bg));
-  --univer-primary-100: color-mix(in srgb, var(--nx-accent) 16%, var(--nx-bg));
-  --univer-primary-200: color-mix(in srgb, var(--nx-accent) 30%, var(--nx-bg));
-  --univer-primary-300: color-mix(in srgb, var(--nx-accent) 48%, var(--nx-bg));
-  --univer-primary-400: color-mix(in srgb, var(--nx-accent) 70%, var(--nx-bg));
-  --univer-primary-500: var(--nx-accent);
-  --univer-primary-600: color-mix(in srgb, var(--nx-accent) 86%, black);
-  --univer-primary-700: color-mix(in srgb, var(--nx-accent) 70%, black);
-  --univer-primary-800: color-mix(in srgb, var(--nx-accent) 55%, black);
-  --univer-primary-900: color-mix(in srgb, var(--nx-accent) 42%, black);
-}
-
-/* the status bar above the sheet: title + live save state + reset */
-.nxWorkbookBar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 12px;
-  border-bottom: 1px solid var(--nx-border);
-  background: var(--nx-bg-raised);
-  flex: 0 0 auto;
-}
-.nxWorkbookBarTitle {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--nx-fg);
-}
-.nxWorkbookBarSpacer { flex: 1 1 auto; }
-
-/* save-state pill — mirrors the app's other in-flight affordances */
-.nxWorkbookSave {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--nx-fg-muted);
-  padding: 2px 8px;
-  border-radius: var(--nx-radius-s);
-  background: var(--nx-bg-sunken);
-}
-.nxWorkbookSave[data-state="saved"] { color: var(--nx-accent); }
-
-/* the Univer mount target fills the remaining space */
+/* the Univer mount target fills the surface */
 .nxWorkbookHost {
   position: relative;
   flex: 1 1 auto;
@@ -86,6 +150,43 @@
   font-family: var(--nx-font-sans);
 }
 
+/* host actions inside the vendor toolbar band: reserve its right end so Univer's
+   overflow math never lays commands under the cluster, then overlay the cluster
+   in the reserved inset. The strip itself stays click-through. */
+.nxWorkbook--hostActions .nxWorkbookMount [data-u-comp="ribbon-toolbar"] {
+  margin-right: var(--nxwb-actions-w);
+}
+.nxWorkbookActions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: var(--nxwb-toolbar-h);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding-right: 10px;
+  /* above Univer's own header (univer-z-10), which spans the full row width with a
+     transparent background and would otherwise swallow the cluster's clicks */
+  z-index: 20;
+  pointer-events: none;
+}
+.nxWorkbookActions > * { pointer-events: auto; }
+
+/* save-state pill — mirrors the app's other in-flight affordances */
+.nxWorkbookSave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--nx-fg-muted);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--nx-bg-sunken);
+}
+.nxWorkbookSave[data-state="saved"] { color: var(--nx-accent); background: var(--nx-accent-soft); }
+.nxWorkbookSave:empty { display: none; }
+
 /* overlay states share one centered layer over the host */
 .nxWorkbookOverlay {
   position: absolute;
@@ -99,7 +200,8 @@
   padding: 24px;
   background: var(--nx-bg);
   color: var(--nx-fg-muted);
-  z-index: 2;
+  /* above Univer's chrome (univer-z-10) so loading/error states fully cover it */
+  z-index: 15;
 }
 .nxWorkbookOverlay--transparent { background: color-mix(in oklab, var(--nx-bg) 70%, transparent); }
 .nxWorkbookOverlayTitle { font-weight: 600; font-size: 14px; color: var(--nx-fg); }
@@ -114,12 +216,13 @@
   :root:not([data-motion="always"]) .nxWorkbookOverlay--loading { transition: none; }
 }
 
-/* Mobile (>=390px): the toolbar/formula-bar stay usable; the canvas scrolls and
-   pinch-zooms but never traps the page. Fill-handle drag is desktop-first — the
-   mobile edit path is tap-a-cell then the formula bar (declared in the T0). */
+/* Mobile (>=390px): the single toolbar row scrolls through its overflow menu, the
+   canvas scrolls and pinch-zooms but never traps the page. The action cluster
+   compacts (icon-only buttons on the page side) so commands keep the row.
+   Fill-handle drag is desktop-first — the mobile edit path is tap-a-cell then the
+   formula bar (declared in the T0). */
 @media (max-width: 560px) {
-  .nxWorkbook { border-radius: var(--nx-radius-s); }
-  .nxWorkbookBar { padding: 6px 10px; gap: 8px; }
-  .nxWorkbookBarTitle { font-size: 12px; }
+  .nxWorkbook { --nxwb-actions-w: 108px; }
+  .nxWorkbookActions { padding-right: 6px; }
   .nxWorkbookHost { touch-action: pan-x pan-y; }
 }

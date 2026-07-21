@@ -15,7 +15,11 @@ export {
 export {
   deriveWorkbookTheme,
   accentScale,
+  neutralScale,
   resolveCssColor,
+  withLightTokens,
+  skinSignature,
+  themeSignature,
   isDarkTheme,
   useThemeNonce,
   type UniverTheme,
