@@ -49,6 +49,11 @@ export interface ViewProps {
      it). Absent when the caller lacks the create permission — such views render
      a designed no-permission state instead of a dead submit. */
   onCreate?: (body: Record<string, unknown>) => Promise<RecordRow>;
+  /* delete a record through the host's store path (soft delete → trash). The
+     VIEW owns the review surface (a confirm before calling this); the host runs
+     the mutation + toast + reload. Absent when the caller lacks the delete
+     permission — such views hide their delete affordance. */
+  onDelete?: (id: string) => void;
 }
 
 /* Props for a definition's optional view-bar controls. The host renders the
@@ -69,10 +74,12 @@ export interface ViewToolbarProps {
 export interface ViewConfigField {
   key: string;
   label: string;
-  kind: "field" | "select" | "text" | "number" | "boolean";
+  kind: "field" | "select" | "multiSelect" | "text" | "number" | "boolean";
   /* kind "field": restrict the pickable field types */
   fieldTypes?: string[];
-  /* kind "select": the fixed option set */
+  /* kind "select" | "multiSelect": the fixed option set. "select" holds one
+     value; "multiSelect" holds an array of the chosen options (e.g. the calendar's
+     enabledViews). */
   options?: string[];
   required?: boolean;
 }

@@ -111,6 +111,60 @@
 .nxCalAgendaTime { color: var(--nx-fg-faint); font: var(--nx-text-meta); font-variant-numeric: tabular-nums; flex: none; }
 .nxCalAgendaTitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ---------- view picker (extends nxSeg; scrolls horizontally when the enabled set is wide) ---------- */
+.nxCalPicker { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.nxCalPicker::-webkit-scrollbar { display: none; }
+
+/* ---------- list views (listWeek / listMonth) — the desktop agenda ---------- */
+.nxCalendar .fc-list { border-radius: var(--nx-radius-m); overflow: hidden; border-color: var(--nx-border); }
+.nxCalendar .fc-list-day-cushion { background: var(--nx-bg-sunken); font: var(--nx-text-meta); font-weight: 600; color: var(--nx-fg-muted); }
+.nxCalendar .fc-list-event td { border-color: var(--nx-border); }
+.nxCalendar .fc-list-event:hover td { background: var(--nx-bg-sunken); }
+.nxCalendar .fc-list-event-title { font: var(--nx-text-body); color: var(--nx-fg); }
+.nxCalendar .fc-list-event-time { font: var(--nx-text-meta); color: var(--nx-fg-muted); font-variant-numeric: tabular-nums; }
+.nxCalendar .fc-list-empty { background: var(--nx-bg-raised); color: var(--nx-fg-muted); font: var(--nx-text-meta); }
+
+/* ---------- multiMonth (year) ---------- */
+.nxCalendar .fc-multimonth { border-color: var(--nx-border); border-radius: var(--nx-radius-m); background: var(--nx-bg-raised); }
+.nxCalendar .fc-multimonth-title { font: var(--nx-text-meta); font-weight: 700; color: var(--nx-fg); padding: 8px 0 6px; }
+.nxCalendar .fc-multimonth-header-week, .nxCalendar .fc-multimonth-daygrid-more { font: var(--nx-text-meta); color: var(--nx-fg-faint); }
+
+/* ---------- time-grid axis + all-day lane ---------- */
+.nxCalendar .fc-timegrid-axis-cushion { color: var(--nx-fg-muted); font: var(--nx-text-meta); font-weight: 600; }
+.nxCalendar .fc-timegrid-all-day, .nxCalendar .fc-daygrid-body .fc-daygrid-day.fc-day-past { background: transparent; }
+.nxCalendar .fc-timegrid-slot { height: 1.6em; }
+
+/* ---------- business-hours shading (non-business time dimmed) ---------- */
+.nxCalendar .fc-non-business { background: color-mix(in oklab, var(--nx-fg) 4%, transparent); }
+
+/* ---------- week-number cells ---------- */
+.nxCalendar .fc-daygrid-week-number { background: var(--nx-bg-sunken); color: var(--nx-fg-muted); font: var(--nx-text-meta); border-radius: var(--nx-radius-s); padding: 1px 6px; }
+.nxCalendar .fc-timegrid-axis .fc-timegrid-axis-cushion.fc-scrollgrid-shrink-cushion { color: var(--nx-fg-faint); }
+
+/* ---------- event edit surface (Dialog on desktop, Drawer at ≤768px) ---------- */
+.nxCalEdit { display: grid; gap: var(--nx-gap-3); }
+.nxCalEditBody { padding: 0 16px 8px; overflow-y: auto; max-height: 68vh; }
+.nxCalEditRow { display: grid; grid-template-columns: 1fr 1fr; gap: var(--nx-gap-3); }
+@media (max-width: 520px) { .nxCalEditRow { grid-template-columns: 1fr; } }
+.nxCalEditField { display: grid; gap: 4px; min-width: 0; }
+.nxCalEditField > span { font: var(--nx-text-meta); font-weight: 600; color: var(--nx-fg-muted); }
+.nxCalEditInput { font: var(--nx-text-body); padding: 7px 10px; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s); background: var(--nx-bg-raised); color: var(--nx-fg); width: 100%; }
+.nxCalEditInput:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; border-color: var(--nx-accent); }
+.nxCalEditInput:disabled { opacity: 0.6; }
+.nxCalEditToggle { display: inline-flex; align-items: center; gap: 8px; font: var(--nx-text-body); color: var(--nx-fg); cursor: pointer; }
+.nxCalEditColors { display: flex; flex-wrap: wrap; gap: 6px; }
+.nxCalEditColor {
+  border: 1px solid transparent; border-radius: 999px; padding: 3px 10px;
+  font: var(--nx-text-meta); font-weight: 600; cursor: pointer;
+  transition: box-shadow var(--nx-t-fast) var(--nx-ease), transform var(--nx-t-fast) var(--nx-ease);
+}
+.nxCalEditColor:hover { transform: translateY(-1px); }
+.nxCalEditColor[data-active="true"] { box-shadow: 0 0 0 2px var(--nx-accent); }
+.nxCalEditColor:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; }
+.nxCalEditActions { display: flex; align-items: center; gap: 8px; width: 100%; flex-wrap: wrap; }
+.nxCalEditSpacer { flex: 1; }
+.nxCalEditConfirm { display: inline-flex; align-items: center; gap: 8px; font: var(--nx-text-meta); color: var(--nx-fg-muted); }
+
 /* ---------- utilities ---------- */
 .nxCalSrOnly { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
@@ -118,4 +172,5 @@
   :root:not([data-motion="always"]) .nxCalendar .fc-popover { animation: none !important; }
   :root:not([data-motion="always"]) .nxCalendar .fc-event { transition: none !important; transform: none !important; }
   :root:not([data-motion="always"]) .nxCalAgendaEvent { transition: none !important; }
+  :root:not([data-motion="always"]) .nxCalEditColor { transition: none !important; transform: none !important; }
 }
