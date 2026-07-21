@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 107,
+  "count": 114,
   "items": [
     {
       "name": "accordion",
@@ -505,6 +505,55 @@
       "kind": "record-core",
       "import": "src/record-core/views/table/definition.tsx",
       "when": "the built-in table view: DataTable behind the ViewProps contract + the Columns visibility menu as its toolbar",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "gallery view definition",
+      "kind": "record-core",
+      "import": "src/record-core/views/gallery/definition.tsx",
+      "when": "the built-in gallery view: cover-card masonry (coverField/titleField/metaFields/cardSize config) — cards open the peek; lazy component",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "packColumns · visibleIndices · cardHeight · columnCountForWidth",
+      "kind": "record-core",
+      "import": "src/record-core/views/gallery/pack.ts",
+      "when": "the gallery's pure masonry math (node-testable): deterministic shortest-column packing over exact card heights + viewport windowing",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "form view definition",
+      "kind": "record-core",
+      "import": "src/record-core/views/form/definition.tsx",
+      "when": "the built-in form view: config-driven fill-one-record intake (fields/requiredOverrides/submitLabel/successMode) submitting through ViewProps.onCreate; lazy component",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "coerceDraft · validateDraft · withStageDefault · requiredKeys · coerceScalar · listValidators · formSupported",
+      "kind": "record-core",
+      "import": "src/record-core/fields/draft.ts",
+      "when": "the draft pure core every create surface shares (dialog, wizard, form): typed-string coercion, config-implied validation mirroring the server, stage defaulting; registered field types plug their coerce/validate slots into the same pipeline",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "Draft* editors · MoneyField · ListField · AddressField · FullNameField · MultiSelectField · ArrayField · DateField",
+      "kind": "record-core",
+      "import": "src/record-core/fields/editors.tsx",
+      "when": "the per-type field editors: draft-mode controlled editors for every built-in type plus the shaped record-page editors (moved here from RecordPage, which re-exports them)",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "fieldDraftEditor",
+      "kind": "record-core",
+      "import": "src/record-core/fields/draft-resolve.ts",
+      "when": "host-side draft-editor lookup over the field-type registry, text-editor fallback for unregistered types",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "built-in field-type definitions (22 folders)",
+      "kind": "record-core",
+      "import": "src/record-core/fields/text/definition.ts",
+      "when": "one fields/<type>/definition.ts per built-in type registering its Draft editor on the field-type registry — the pattern a NEW field type copies",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {

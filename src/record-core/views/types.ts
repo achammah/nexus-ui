@@ -45,6 +45,10 @@ export interface ViewProps {
      selection ignore both */
   selection: Record<string, boolean>;
   onSelectionChange: (sel: Record<string, boolean>) => void;
+  /* create a record through the host's store path (form-style views submit with
+     it). Absent when the caller lacks the create permission — such views render
+     a designed no-permission state instead of a dead submit. */
+  onCreate?: (body: Record<string, unknown>) => Promise<RecordRow>;
 }
 
 /* Props for a definition's optional view-bar controls. The host renders the
