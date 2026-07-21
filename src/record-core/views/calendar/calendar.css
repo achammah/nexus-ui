@@ -1,0 +1,121 @@
+/* Calendar view — FullCalendar bound to the Nexus token canvas. Token-driven only:
+   every FullCalendar CSS variable below resolves to a --nx-* token, so dark/light,
+   skins and live theme flips restyle the grid with zero JS re-derivation.
+
+   --fc-* → --nx-* mapping (scoped under .nxCalendar):
+   | FullCalendar var                  | Nexus token                          | drives |
+   |-----------------------------------|--------------------------------------|--------|
+   | --fc-border-color                 | --nx-border                          | grid + cell hairlines |
+   | --fc-page-bg-color                | --nx-bg-raised                       | grid canvas |
+   | --fc-neutral-bg-color             | --nx-bg-sunken                       | popover header, disabled slices |
+   | --fc-neutral-text-color           | --nx-fg-muted                        | secondary text |
+   | --fc-small-font-size              | 12px (the --nx-text-meta size)       | day numbers, time labels |
+   | --fc-today-bg-color               | --nx-accent-soft                     | today's cell wash |
+   | --fc-event-bg-color               | --nx-accent                          | uncolored event fill |
+   | --fc-event-border-color           | transparent                          | event outline (radius carries the shape) |
+   | --fc-event-text-color             | --nx-accent-fg                       | uncolored event text |
+   | --fc-event-selected-overlay-color | transparent                          | no darkening overlay on selection |
+   | --fc-more-link-bg-color           | --nx-bg-sunken                       | "+N more" chip |
+   | --fc-more-link-text-color         | --nx-fg-muted                        | "+N more" text |
+   | --fc-highlight-color              | --nx-accent-soft                     | drop-target day wash while dragging |
+   | --fc-now-indicator-color          | --nx-danger                          | week-view current-time rule |
+   Per-event colors bypass these defaults: a configured colorField paints each event
+   inline with the SAME chipStyle() formula the table chips and kanban columns use
+   (color-mix over --nx-opt-<name>), so one palette serves every surface. */
+
+.nxCalendar {
+  --fc-border-color: var(--nx-border);
+  --fc-page-bg-color: var(--nx-bg-raised);
+  --fc-neutral-bg-color: var(--nx-bg-sunken);
+  --fc-neutral-text-color: var(--nx-fg-muted);
+  --fc-small-font-size: 12px;
+  --fc-today-bg-color: var(--nx-accent-soft);
+  --fc-event-bg-color: var(--nx-accent);
+  --fc-event-border-color: transparent;
+  --fc-event-text-color: var(--nx-accent-fg);
+  --fc-event-selected-overlay-color: transparent;
+  --fc-more-link-bg-color: var(--nx-bg-sunken);
+  --fc-more-link-text-color: var(--nx-fg-muted);
+  --fc-highlight-color: var(--nx-accent-soft);
+  --fc-now-indicator-color: var(--nx-danger);
+}
+
+/* ---------- view header (prev/today/next + title; shared by grid and agenda) ---------- */
+.nxCalHead { display: flex; align-items: center; gap: var(--nx-gap-2); margin-bottom: var(--nx-gap-3); }
+.nxCalNav { display: inline-flex; align-items: center; gap: 2px; }
+.nxCalTitle { font: var(--nx-text-title); }
+
+/* ---------- grid chrome (density/typography matched to the DataTable header idiom) ---------- */
+.nxCalendar .fc { font: var(--nx-text-body); }
+.nxCalendar .fc-theme-standard td, .nxCalendar .fc-theme-standard th { border-color: var(--nx-border); }
+.nxCalendar .fc-scrollgrid { border-radius: var(--nx-radius-m); overflow: hidden; border-color: var(--nx-border); }
+.nxCalendar .fc-col-header-cell { background: var(--nx-bg-sunken); }
+.nxCalendar .fc-col-header-cell-cushion {
+  font: var(--nx-text-meta); font-weight: 600; color: var(--nx-fg-muted);
+  padding: 8px 12px; text-decoration: none;
+}
+.nxCalendar .fc-daygrid-day-number { font: var(--nx-text-meta); color: var(--nx-fg-muted); padding: 6px 8px; text-decoration: none; }
+.nxCalendar .fc-day-today .fc-daygrid-day-number { color: var(--nx-accent); font-weight: 700; }
+.nxCalendar .fc-daygrid-day.fc-day-today { background: var(--nx-accent-soft); }
+.nxCalendar .fc-timegrid-slot-label-cushion, .nxCalendar .fc-timegrid-axis-cushion { font: var(--nx-text-meta); color: var(--nx-fg-faint); }
+/* clickable day cells advertise the day-click create */
+.nxCalendar[data-can-create="true"] .fc-daygrid-day-frame { cursor: pointer; }
+
+/* ---------- events ---------- */
+.nxCalendar .fc-event {
+  border-radius: var(--nx-radius-s); border: 0;
+  font: var(--nx-text-meta); font-weight: 600;
+  padding: 1px 5px; cursor: pointer;
+  transition: box-shadow var(--nx-t-fast) var(--nx-ease), transform var(--nx-t-fast) var(--nx-ease), filter var(--nx-t-fast) var(--nx-ease);
+}
+.nxCalendar .fc-event:hover { box-shadow: var(--nx-shadow-1); filter: brightness(1.03); }
+.nxCalendar .fc-event:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; }
+/* picked up: reads physically lifted, settle-eased back on release (kanban's drag voice) */
+.nxCalendar .fc-event.fc-event-dragging { box-shadow: var(--nx-shadow-2); transform: scale(1.02); cursor: grabbing; }
+.nxCalendar .fc-event.fc-event-resizing { box-shadow: var(--nx-shadow-2); }
+.nxCalendar .fc-daygrid-event { margin: 1px 4px 0; }
+.nxCalendar .fc-daygrid-more-link { font: var(--nx-text-meta); font-weight: 600; border-radius: 999px; padding: 0 7px; margin: 1px 4px; }
+.nxCalendar .fc-timegrid-event .fc-event-time { font-weight: 700; }
+
+/* "+N more" popover = the house raised card, entering on the established pop */
+.nxCalendar .fc-popover {
+  background: var(--nx-bg-raised); border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m); box-shadow: var(--nx-shadow-2);
+  animation: nxPopIn var(--nx-t-med) var(--nx-ease-spring) both;
+}
+.nxCalendar .fc-popover-header { background: var(--nx-bg-sunken); font: var(--nx-text-meta); font-weight: 600; color: var(--nx-fg-muted); padding: 6px 10px; }
+.nxCalendar .fc-popover-body { padding: 4px 6px 6px; }
+
+/* ---------- empty state ---------- */
+.nxCalEmpty { padding: 10px 14px; margin-bottom: var(--nx-gap-3); display: inline-flex; align-items: center; gap: 8px; color: var(--nx-fg-muted); font: var(--nx-text-meta); }
+
+/* ---------- mobile agenda (the ≤768px render path — a list, never a squeezed grid) ---------- */
+.nxCalAgenda { border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m); background: var(--nx-bg-raised); overflow-y: auto; max-height: 72vh; }
+.nxCalAgendaDay {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 12px; border: 0; border-bottom: 1px solid var(--nx-border); text-align: left;
+  background: var(--nx-bg-sunken); color: var(--nx-fg-muted);
+  font: var(--nx-text-meta); font-weight: 600; cursor: default;
+}
+.nxCalAgendaDay[data-creatable="true"] { cursor: pointer; }
+.nxCalAgendaDay[data-today="true"] { color: var(--nx-accent); }
+.nxCalAgendaDay .nxCalAgendaAdd { margin-left: auto; display: inline-flex; color: var(--nx-fg-faint); }
+.nxCalAgendaEvent {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 11px 12px; border: 0; border-bottom: 1px solid var(--nx-border); text-align: left;
+  background: none; color: var(--nx-fg); font: var(--nx-text-body); font-weight: 500; cursor: pointer;
+  transition: background var(--nx-t-fast) var(--nx-ease);
+}
+.nxCalAgendaEvent:hover, .nxCalAgendaEvent:active { background: var(--nx-bg-sunken); }
+.nxCalAgendaDot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+.nxCalAgendaTime { color: var(--nx-fg-faint); font: var(--nx-text-meta); font-variant-numeric: tabular-nums; flex: none; }
+.nxCalAgendaTitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- utilities ---------- */
+.nxCalSrOnly { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="always"]) .nxCalendar .fc-popover { animation: none !important; }
+  :root:not([data-motion="always"]) .nxCalendar .fc-event { transition: none !important; transform: none !important; }
+  :root:not([data-motion="always"]) .nxCalAgendaEvent { transition: none !important; }
+}

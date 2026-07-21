@@ -36,6 +36,11 @@ export interface ViewProps {
   onOpen: (id: string) => void;
   onPeek: (id: string) => void;
   onPatch: (id: string, patch: Record<string, unknown>) => void;
+  /* open the host's create DIALOG, optionally seeded (the calendar passes the
+     clicked day's date) — the user reviews and confirms. The host supplies it
+     only when the caller may create — absent → the view hides its create
+     affordances. Distinct from a direct-create seam: this never writes itself. */
+  onCreateDraft?: (prefill?: Record<string, unknown>) => void;
   /* bulk-selection state (the host renders the bulk bar); views without row
      selection ignore both */
   selection: Record<string, boolean>;
