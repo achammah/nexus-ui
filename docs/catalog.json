@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 91,
+  "count": 97,
   "items": [
     {
       "name": "accordion",
@@ -519,6 +519,48 @@
       "kind": "record-core",
       "import": "src/record-core/views/chart/definition.tsx",
       "when": "the built-in chart view: ChartView behind the ViewProps contract + measure and group-by pickers as its toolbar",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "grid view definition",
+      "kind": "record-core",
+      "import": "src/record-core/views/grid/definition.tsx",
+      "when": "the Sheet view: Excel-grade bulk editing over an object's records (glide-data-grid) — fill-handle, range select, TSV copy/paste, keyboard cell-nav, frozen primary column; the component ships as a lazy chunk",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "SpreadsheetView",
+      "kind": "record-core",
+      "import": "src/record-core/views/grid/SpreadsheetView.tsx",
+      "when": "the grid view surface: columns from the object's fields, native + custom (select/multiselect/user chip) cells, every commit one merged onPatch per touched row, paste/fill coerced per target field, row markers synced to the host bulk bar",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "cellDescFor · isGridEditable · coerceFromText · textForCopy",
+      "kind": "record-core",
+      "import": "src/record-core/views/grid/cells.ts",
+      "when": "the grid's pure cell-mapping core (no glide, no browser — node-testable): field type → cell kind, the editable set, paste/fill text coercion that rejects impossible values",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "useGridTheme · deriveGridTheme · chipColorLiterals · resolveCssColor",
+      "kind": "record-core",
+      "import": "src/record-core/views/grid/theme.ts",
+      "when": "token → glide Theme derivation for canvas paint: probe-resolved --nx-* literals, chip colors from the exact chipStyle color-mix formula, re-derived on dark-mode flip and skin arrival",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "selectRenderer · multiselectRenderer · userRenderer",
+      "kind": "record-core",
+      "import": "src/record-core/views/grid/renderers.tsx",
+      "when": "custom canvas cells for select/multiselect/user: chip and avatar drawing from pre-resolved literals + DOM overlay editors sharing the DOM chip styling",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "provideGridEditor",
+      "kind": "record-core",
+      "import": "src/record-core/views/grid/editors.tsx",
+      "when": "replacement overlay editors for glide's built-in text/uri/number cells: commit from local state via onFinishedEditing (the library's own commit chain drops values under React 18 StrictMode), guarded blur-commit for click-away",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
