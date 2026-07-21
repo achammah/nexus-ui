@@ -58,6 +58,9 @@
   --nx-ease-spring: cubic-bezier(.34, 1.56, .64, 1);
   --nx-t-fast: 120ms;
   --nx-t-med: 200ms;
+  --nx-t-slow: 320ms;          /* larger entrances, slides, progress fills */
+  --nx-t-spin: 700ms;          /* continuous spinner loop */
+  --nx-stagger: 40ms;          /* per-item delay step for staggered lists */
 }
 
 @media (prefers-color-scheme: dark) {

@@ -8,9 +8,9 @@
 @keyframes nxRiseIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .nx-rise-in { animation: nxRiseIn var(--nx-t-med) var(--nx-ease-settle) both; }
 .nx-rise-in-sm { animation: nxRiseIn var(--nx-t-fast) var(--nx-ease-settle) both; }
-.nx-rise-in-lg { animation: nxRiseIn 320ms var(--nx-ease-settle) both; }
+.nx-rise-in-lg { animation: nxRiseIn var(--nx-t-slow) var(--nx-ease-settle) both; }
 /* stagger children: set --nx-stagger on the parent, index via --i on each child */
-.nx-rise-in[style*="--i"], .nx-rise-in-sm[style*="--i"] { animation-delay: calc(var(--i) * var(--nx-stagger, 40ms)); }
+.nx-rise-in[style*="--i"], .nx-rise-in-sm[style*="--i"] { animation-delay: calc(var(--i) * var(--nx-stagger)); }
 
 /* ---- popIn: scale up with a slight spring overshoot (menus, toasts, chips) ---- */
 @keyframes nxPopIn { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
