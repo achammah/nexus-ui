@@ -770,7 +770,7 @@
       "name": "WorkbookSurface · LazyWorkbookSurface",
       "kind": "wrapper",
       "import": "src/blocks/workbook/WorkbookSurface.tsx",
-      "when": "full spreadsheet workbook (Univer) as a standalone surface: formula bar + 400+ functions, insert/delete rows & columns, cell formatting, multiple sheets, freeze + merge; token-themed chrome, dark-synced to data-theme, free-surface (host owns the snapshot via value/onChange). The engine loads ONLY behind LazyWorkbookSurface (a ~1.6MB-gz lazy chunk), so importing the block adds nothing to the eager bundle",
+      "when": "full spreadsheet workbook (Univer) rendered as a NATIVE page surface: formula bar + 400+ functions, insert/delete rows & columns, cell formatting, multiple sheets, freeze + merge, in a single-row toolbar (ribbonType simple, overflow-managed) with no card frame; host controls ride the toolbar row via the actions prop. Every piece of vendor chrome (toolbar, formula bar, sheet tabs, menus, portaled popups) resolves --nx-* tokens in light AND dark and re-derives live on theme/skin changes; free-surface (host owns the snapshot via value/onChange). The engine loads ONLY behind LazyWorkbookSurface (a ~1.5MB-gz lazy chunk), so importing the block adds nothing to the eager bundle",
       "source": "ours"
     },
     {
@@ -781,10 +781,10 @@
       "source": "ours"
     },
     {
-      "name": "deriveWorkbookTheme · accentScale · useThemeNonce",
+      "name": "deriveWorkbookTheme · accentScale · neutralScale · withLightTokens · themeSignature · useThemeNonce",
       "kind": "wrapper",
       "import": "src/blocks/workbook/workbook-theme.ts",
-      "when": "token → Univer theme derivation: the accent primary scale from --nx-accent, resolved to rgb for Univer's canvas color service and re-derived on a data-theme / skin flip; pairs with the --univer-* chrome overrides in workbook.css that theme Univer's own toolbar and menus",
+      "when": "token → Univer theme derivation: accent, warm neutral and semantic scales from the live --nx-* tokens, resolved LIGHT-anchored to rgb (withLightTokens forces a light-resolution probe; Univer's canvas derives dark by inverting the light palette) and re-set through Univer's ThemeService on a data-theme / skin flip (themeSignature dedupes observer echoes); pairs with the per-mode --univer-* value tables in workbook.css that theme all DOM chrome including portaled menus",
       "source": "ours"
     },
     {
