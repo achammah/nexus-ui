@@ -4,43 +4,52 @@ import type { ViewDefinition, ViewToolbarProps } from "../types";
 import { useIsMobile } from "../../../hooks/use-mobile";
 import { activeFields } from "../../options";
 import { firstDateField, isDateField } from "./events";
+import { ALL_VIEWS, SLOT_VALUES, VIEW_LABELS, WEEKDAYS, defaultView, enabledViews } from "./viewOptions";
 
-/* Calendar view — FullCalendar behind the registry contract. Config keys:
-   `startDateField` (required; a date/dateTime field key — defaults to the first),
-   `endDateField` (optional; events become spans, resizable), `titleField`
-   (defaults to the primary), `colorField` (a select field; events take its own
-   option palette). State keys in the bag: `calMode` ("month" | "week") ·
-   `calDate` (the visible anchor — reload lands where you were). The component is
-   heavy (the FullCalendar engine), so it ships as a lazy chunk. */
+/* Calendar view — the full-fidelity FullCalendar surface behind the registry
+   contract. Config keys (all optional but startDateField):
+   - startDateField (required; a date/dateTime field key — defaults to the first)
+   - endDateField (optional; events become spans, resizable)
+   - titleField (defaults to the primary), colorField (a select field; events take
+     its own option palette), recurrenceField (a text field holding an RRULE string
+     → its rows render as a recurring series, render-only)
+   - defaultView / enabledViews (which of month·week·day·listWeek·listMonth·year the
+     picker offers), editable, selectable, firstDay, slotDuration, slotMinTime,
+     slotMaxTime, weekNumbers, businessHours, nowIndicator, eventOverlap — every one
+     resolved through the pure viewOptions mapping.
+   State keys in the bag: `calView` (the chosen view) · `calDate` (the visible
+   anchor — reload lands where you were). The component is heavy (the FullCalendar
+   engine + plugins), so it ships as a lazy chunk. */
 
 const CalendarView = React.lazy(() => import("./CalendarView"));
 
-/* Month⇄Week segmented toggle — RIGHT of the switcher (side "trail"). Hidden on
-   mobile, where the agenda list replaces both grids. */
-function CalendarToolbar({ viewState, onViewState, side }: ViewToolbarProps) {
+/* View picker — a segmented control RIGHT of the switcher (side "trail") showing
+   only the enabled views; the choice persists in the bag as `calView`. Plain
+   buttons (no floating-ui). Hidden on mobile, where the agenda list replaces the
+   grids. */
+function CalendarToolbar({ viewConfig, viewState, onViewState, side }: ViewToolbarProps) {
   const isMobile = useIsMobile();
   if (side !== "trail" || isMobile) return null;
-  const mode = viewState.calMode === "week" ? "week" : "month";
+  const enabled = enabledViews(viewConfig);
+  if (enabled.length <= 1) return null;
+  const cur =
+    typeof viewState.calView === "string" && enabled.includes(viewState.calView as never)
+      ? viewState.calView
+      : defaultView(viewConfig, enabled);
   return (
-    <div className="nxSeg" role="group" aria-label="Calendar range">
-      <button
-        type="button"
-        className="nxSegBtn"
-        data-active={mode === "month"}
-        data-testid="cal-mode-month"
-        onClick={() => onViewState({ calMode: "month" })}
-      >
-        Month
-      </button>
-      <button
-        type="button"
-        className="nxSegBtn"
-        data-active={mode === "week"}
-        data-testid="cal-mode-week"
-        onClick={() => onViewState({ calMode: "week" })}
-      >
-        Week
-      </button>
+    <div className="nxSeg nxCalPicker" role="group" aria-label="Calendar view">
+      {enabled.map((v) => (
+        <button
+          key={v}
+          type="button"
+          className="nxSegBtn"
+          data-active={cur === v}
+          data-testid={`cal-view-${v}`}
+          onClick={() => onViewState({ calView: v })}
+        >
+          {VIEW_LABELS[v]}
+        </button>
+      ))}
     </div>
   );
 }
@@ -56,6 +65,19 @@ const definition: ViewDefinition = {
     { key: "endDateField", label: "End date", kind: "field", fieldTypes: ["date", "dateTime"] },
     { key: "titleField", label: "Title", kind: "field" },
     { key: "colorField", label: "Color by", kind: "field", fieldTypes: ["select"] },
+    { key: "recurrenceField", label: "Recurrence rule", kind: "field", fieldTypes: ["text"] },
+    { key: "defaultView", label: "Default view", kind: "select", options: [...ALL_VIEWS] },
+    { key: "enabledViews", label: "Views", kind: "multiSelect", options: [...ALL_VIEWS] },
+    { key: "editable", label: "Editable", kind: "boolean" },
+    { key: "selectable", label: "Drag to create", kind: "boolean" },
+    { key: "firstDay", label: "Week starts", kind: "select", options: [...WEEKDAYS] },
+    { key: "slotDuration", label: "Time slot", kind: "select", options: [...SLOT_VALUES] },
+    { key: "slotMinTime", label: "Day starts (HH:MM)", kind: "text" },
+    { key: "slotMaxTime", label: "Day ends (HH:MM)", kind: "text" },
+    { key: "weekNumbers", label: "Week numbers", kind: "boolean" },
+    { key: "businessHours", label: "Shade business hours", kind: "boolean" },
+    { key: "nowIndicator", label: "Now indicator", kind: "boolean" },
+    { key: "eventOverlap", label: "Allow overlap", kind: "boolean" },
   ],
   defaultConfig: (object) => ({ startDateField: firstDateField(activeFields(object.fields))?.key }),
   validateConfig: (object, cfg) => {

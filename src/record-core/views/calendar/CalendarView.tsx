@@ -3,17 +3,21 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import type { DatesSetArg, EventClickArg, EventDropArg, EventInput, EventMountArg } from "@fullcalendar/core";
+import listPlugin from "@fullcalendar/list";
+import multiMonthPlugin from "@fullcalendar/multimonth";
+import rrulePlugin from "@fullcalendar/rrule";
+import type { DateSelectArg, DatesSetArg, EventClickArg, EventDropArg, EventInput, EventMountArg } from "@fullcalendar/core";
 import type { DateClickArg, EventResizeDoneArg } from "@fullcalendar/interaction";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "../../../primitives/Button";
 import { useIsMobile } from "../../../hooks/use-mobile";
-import type { OptionColor } from "../../types";
+import type { OptionColor, RecordRow } from "../../types";
 import { activeFields, chipStyle, optionMeta } from "../../options";
 import { formatCell } from "../../DataTable";
 import type { ViewProps } from "../types";
 import type { CalendarFields } from "./events";
 import {
+  addDays,
   addMonths,
   createPrefill,
   firstDateField,
@@ -21,21 +25,34 @@ import {
   localDay,
   patchForDrop,
   patchForResize,
+  rangePrefill,
   rowsToEvents,
 } from "./events";
+import {
+  configEditable,
+  configSelectable,
+  defaultView,
+  enabledViews,
+  fcViewType,
+  viewOptions,
+} from "./viewOptions";
 import { AgendaList } from "./AgendaList";
+import { EventEditDialog } from "./EventEditDialog";
 import "./calendar.css";
 
-/* CalendarView — FullCalendar (month/week) behind the ViewProps contract. Records
-   with a valid start date render as events (colors from the colorField's own
-   select-option palette — the same chipStyle the table chips and kanban columns
-   use); dragging an event PATCHes the date field(s) through the host's store path
-   (host toasts "Saved" / reverts on failure); clicking an empty day seeds the
-   host's create dialog with that date. On mobile (≤768px) the grid swaps for the
-   AgendaList — a structurally different render path, never a squeezed month.
-   State in the bag: `calMode` ("month" | "week") · `calDate` (visible anchor).
-   Week mode picks its grid by the start field: all-day `date` objects get the
-   one-row dayGridWeek, timed `dateTime` objects get the hourly timeGridWeek. */
+/* CalendarView — the full-fidelity FullCalendar surface behind the ViewProps
+   contract. Records with a valid start render as events (colors from the
+   colorField's own select-option palette — the same chipStyle the table chips and
+   kanban columns use). Every option is config-driven through the pure viewOptions
+   mapping (the single source): the enabled view set + default, editability,
+   range-selection, first day, time slots, week numbers, business hours, the now
+   line, overlap, and a render-only recurrence field (an RRULE string → occurrences
+   expand via FC's rrule plugin). Clicking an event opens a quick edit dialog
+   (title/dates/all-day/color/other fields, open-full-record, delete-with-confirm);
+   a drag-select creates a prefilled range; drag/resize PATCH the date field(s)
+   through the host store. On mobile (≤768px) the grid swaps for the AgendaList (a
+   list, never a squeezed grid) and the edit surface is a bottom sheet.
+   State in the bag: `calView` (the chosen view) · `calDate` (the visible anchor). */
 
 export default function CalendarView({
   object,
@@ -47,6 +64,7 @@ export default function CalendarView({
   onOpen,
   onPatch,
   onCreateDraft,
+  onDelete,
 }: ViewProps) {
   const isMobile = useIsMobile();
 
@@ -57,11 +75,13 @@ export default function CalendarView({
     const start = (isDateField(cfgStart) ? cfgStart : undefined) ?? firstDateField(activeFields(object.fields))!;
     const cfgEnd = byKey(viewConfig.endDateField);
     const cfgColor = byKey(viewConfig.colorField);
+    const cfgRecur = byKey(viewConfig.recurrenceField);
     return {
       start,
       end: isDateField(cfgEnd) ? cfgEnd : undefined,
       title: byKey(viewConfig.titleField) ?? object.fields.find((f) => f.primary) ?? object.fields[0],
       color: cfgColor?.type === "select" ? cfgColor : undefined,
+      recurrence: cfgRecur?.type === "text" ? cfgRecur : undefined,
     };
   }, [object, viewConfig]);
 
@@ -75,36 +95,48 @@ export default function CalendarView({
   );
 
   // engine-agnostic events → FullCalendar inputs; a configured colorField paints
-  // every event with the shared chip formula (uncolored options get the neutral chip)
+  // every event with the shared chip formula. A recurring row carries an rrule
+  // (its DTSTART composed in events.ts) instead of a start/end, and stays
+  // drag-locked (render-only recurrence — per-occurrence edits are out of scope)
   const fcEvents = React.useMemo<EventInput[]>(
     () =>
       events.map((ev) => {
         const style = fields.color ? chipStyle(ev.color as OptionColor | undefined) : undefined;
-        return {
+        const base: EventInput = {
           id: ev.id,
           title: ev.title,
-          start: ev.start,
-          end: ev.end,
           allDay: ev.allDay,
           backgroundColor: (style?.background as string | undefined) ?? undefined,
           textColor: (style?.color as string | undefined) ?? undefined,
           extendedProps: { color: ev.color },
         };
+        if (ev.rrule) return { ...base, rrule: ev.rrule, duration: ev.duration, editable: false };
+        return { ...base, start: ev.start, end: ev.end };
       }),
     [events, fields.color],
   );
 
-  const mode = viewState.calMode === "week" ? "week" : "month";
+  // config-driven view resolution (the single source is viewOptions.ts)
+  const objectAllDay = fields.start.type === "date";
+  const enabled = React.useMemo(() => enabledViews(viewConfig), [viewConfig]);
+  const curView =
+    typeof viewState.calView === "string" && enabled.includes(viewState.calView as never)
+      ? (viewState.calView as ReturnType<typeof defaultView>)
+      : defaultView(viewConfig, enabled);
+  const fcView = fcViewType(curView, objectAllDay);
+  const opts = React.useMemo(() => viewOptions(viewConfig), [viewConfig]);
+  const editable = configEditable(viewConfig) && !readOnly;
+  const selectable = configSelectable(viewConfig) && !!onCreateDraft;
+
   const anchor = typeof viewState.calDate === "string" ? viewState.calDate : undefined;
-  const allDay = fields.start.type === "date";
-  const fcView = mode === "week" ? (allDay ? "dayGridWeek" : "timeGridWeek") : "dayGridMonth";
 
   const fcRef = React.useRef<FullCalendar | null>(null);
   const [title, setTitle] = React.useState("");
   const [announce, setAnnounce] = React.useState("");
+  const [editing, setEditing] = React.useState<RecordRow | null>(null);
 
-  // viewState is the source of truth; the FC API follows it (mode toggle in the
-  // toolbar, saved-view/applyView restores)
+  // viewState is the source of truth; the FC API follows it (picker choice,
+  // saved-view/applyView restores)
   React.useEffect(() => {
     const api = fcRef.current?.getApi();
     if (api && api.view.type !== fcView) api.changeView(fcView);
@@ -120,13 +152,33 @@ export default function CalendarView({
     if (viewState.calDate !== cur) onViewState({ calDate: cur });
   };
 
-  const onEventClick = (info: EventClickArg) => {
-    info.jsEvent.preventDefault();
-    onOpen(info.event.id);
+  const openEditor = (id: string) => {
+    const row = rows.find((r) => String(r.id) === id);
+    if (row) setEditing(row);
   };
 
+  const onEventClick = (info: EventClickArg) => {
+    info.jsEvent.preventDefault();
+    openEditor(info.event.id);
+  };
+
+  // create wiring: a single click seeds a single-day/slot create (dateClick), a
+  // multi-unit drag-select seeds a prefilled RANGE (select). FC fires `select` on a
+  // single click too, so onSelect only acts on a genuine range — otherwise dateClick
+  // owns the point and there is no double-create.
   const onDateClick = (info: DateClickArg) => {
     onCreateDraft?.(createPrefill(info.dateStr, fields.start));
+  };
+  const slotMs = () => {
+    const [h, m] = opts.slotDuration.split(":").map(Number);
+    return ((h || 0) * 60 + (m || 0)) * 60000;
+  };
+  const onSelect = (info: DateSelectArg) => {
+    const isRange = info.allDay
+      ? addDays(info.startStr.slice(0, 10), 1) < info.endStr.slice(0, 10)
+      : Date.parse(info.endStr) - Date.parse(info.startStr) > slotMs();
+    if (isRange) onCreateDraft?.(rangePrefill(info.startStr, info.endStr, fields, info.allDay));
+    fcRef.current?.getApi().unselect();
   };
 
   const onEventDrop = (info: EventDropArg) => {
@@ -150,13 +202,13 @@ export default function CalendarView({
   };
 
   // keyboard path: events are focusable (eventDidMount) and Enter/Space opens the
-  // peek — one delegated listener instead of a handler per event element
+  // edit dialog — one delegated listener instead of a handler per event element
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== "Enter" && e.key !== " ") return;
     const id = (e.target as HTMLElement).closest?.("[data-event-id]")?.getAttribute("data-event-id");
     if (id) {
       e.preventDefault();
-      onOpen(id);
+      openEditor(id);
     }
   };
 
@@ -167,7 +219,8 @@ export default function CalendarView({
     el.setAttribute("data-color", String(info.event.extendedProps.color ?? "none"));
     el.tabIndex = 0;
     el.setAttribute("role", "button");
-    el.setAttribute("aria-label", `${info.event.title}, ${formatCell(info.event.startStr, fields.start.type)}`);
+    const startStr = info.event.startStr || info.event.start ? formatCell(info.event.startStr, fields.start.type) : "";
+    el.setAttribute("aria-label", `${info.event.title}${startStr ? `, ${startStr}` : ""}`);
   };
 
   // desktop nav drives the FC API (datesSet persists the anchor); the agenda has
@@ -191,11 +244,13 @@ export default function CalendarView({
     year: "numeric",
   });
 
+  const timed = fcView.startsWith("timeGrid");
+
   return (
     <div
       className="nxCalendar"
       data-testid={`calendar-${object.key}`}
-      data-cal-mode={mode}
+      data-cal-view={curView}
       data-can-create={onCreateDraft ? "true" : undefined}
       onKeyDown={onKeyDown}
     >
@@ -224,28 +279,55 @@ export default function CalendarView({
         <AgendaList
           anchor={agendaAnchor}
           events={events}
-          onOpen={onOpen}
+          onOpen={openEditor}
           onCreateDraft={onCreateDraft ? (day) => onCreateDraft(createPrefill(day, fields.start)) : undefined}
         />
       ) : (
         <FullCalendar
           ref={fcRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin, multiMonthPlugin, rrulePlugin]}
           initialView={fcView}
           initialDate={anchor}
           headerToolbar={false}
-          firstDay={1}
-          height={fcView === "timeGridWeek" ? 640 : "auto"}
+          firstDay={opts.firstDay}
+          weekNumbers={opts.weekNumbers}
+          nowIndicator={opts.nowIndicator}
+          businessHours={opts.businessHours}
+          eventOverlap={opts.eventOverlap}
+          slotDuration={opts.slotDuration}
+          slotMinTime={opts.slotMinTime}
+          slotMaxTime={opts.slotMaxTime}
+          height={timed ? 640 : "auto"}
           dayMaxEvents
+          navLinks
+          navLinkDayClick={(date) => onViewState({ calView: enabled.includes("day" as never) ? "day" : curView, calDate: localDay(date) })}
+          navLinkWeekClick={(weekStart) => onViewState({ calView: enabled.includes("week" as never) ? "week" : curView, calDate: localDay(weekStart) })}
           events={fcEvents}
-          editable={!readOnly}
-          eventDurationEditable={!readOnly && !!fields.end}
+          editable={editable}
+          eventDurationEditable={editable && !!fields.end}
+          selectable={selectable}
+          selectMirror
           datesSet={onDatesSet}
           eventClick={onEventClick}
           dateClick={onCreateDraft ? onDateClick : undefined}
+          select={selectable ? onSelect : undefined}
           eventDrop={onEventDrop}
           eventResize={onEventResize}
           eventDidMount={onEventDidMount}
+        />
+      )}
+      {editing && (
+        <EventEditDialog
+          key={String(editing.id)}
+          object={object}
+          row={editing}
+          fields={fields}
+          canEdit={editable}
+          canDelete={!!onDelete}
+          onClose={() => setEditing(null)}
+          onPatch={onPatch}
+          onDelete={onDelete}
+          onOpen={onOpen}
         />
       )}
     </div>
