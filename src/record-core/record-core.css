@@ -164,3 +164,45 @@
 /* keyboard grid focus (row → cell) */
 .nxTable tr[data-row-focus] td { background: var(--nx-accent-soft); }
 .nxTable td[data-cell-focus] { box-shadow: inset 0 0 0 2px var(--nx-accent); border-radius: 2px; }
+
+/* ---------- Whiteboard field (fields/whiteboard) ---------- */
+/* record-page canvas block — a bounded drawing surface; the page scrolls around it */
+.nxWbHost { display: flex; flex-direction: column; gap: 4px; }
+.nxWbCanvas {
+  height: clamp(320px, 55vh, 620px);
+  border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m);
+  overflow: hidden; background: var(--nx-bg-raised);
+}
+/* lazy-chunk loading state (the generic Suspense fallback for registry renders) */
+.nxFieldLoading {
+  display: grid; place-items: center; min-height: 180px;
+  border: 1px dashed var(--nx-border); border-radius: var(--nx-radius-m);
+  color: var(--nx-fg-faint); font: var(--nx-text-meta);
+}
+/* list-cell thumbnail: table rows keep their height; kanban cards give it room.
+   The export svg carries only a viewBox (no width/height attrs), so it needs a
+   DEFINITE height — the aspect ratio then derives the width (`auto` alone
+   collapses to 0x0 inside a shrink-to-fit inline context). */
+.nxWbThumb { display: inline-flex; align-items: center; min-width: 0; }
+.nxWbThumb svg { display: block; height: 26px; width: auto; max-width: 132px; opacity: 0; }
+.nxWbThumb[data-ready] svg { opacity: 1; transition: opacity var(--nx-t-med) var(--nx-ease-settle); }
+.nxWbThumb--empty { color: var(--nx-fg-faint); }
+.nxKCard .nxWbThumb svg { height: 64px; max-width: 100%; }
+/* mobile rest state: preview + Edit affordance (never a live canvas in the flow) */
+.nxWbPreview { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.nxWbPreview .nxWbThumb svg { height: 140px; max-width: 100%; }
+/* fullscreen mobile editor overlay (portaled; above peek 40 / copilot 45 / tab bar 60) */
+.nxWbOverlay { position: fixed; inset: 0; z-index: 70; background: var(--nx-bg); display: flex; flex-direction: column; }
+.nxWbOverlayHead {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-bottom: 1px solid var(--nx-border); background: var(--nx-bg-raised);
+}
+.nxWbOverlayTitle { font: var(--nx-text-meta); font-weight: 600; color: var(--nx-fg-muted); flex: 1; }
+.nxWbOverlayBody { flex: 1; min-height: 0; }
+.nxWbOverlayBody .excalidraw { height: 100%; }
+/* invalid-value state: explain + an explicit, labeled replace action */
+.nxWbInvalid {
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  padding: 14px; border: 1px dashed var(--nx-border); border-radius: var(--nx-radius-m);
+  color: var(--nx-fg-muted); font: var(--nx-text-meta);
+}

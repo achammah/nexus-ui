@@ -19,7 +19,8 @@ interface FieldDef {
   type: "text" | "number" | "select" | "date" | "currency" | "email" | "url"
       | "relation" | "user" | "multiselect"
       | "boolean" | "longText" | "dateTime" | "rating" | "array" | "json"
-      | "money" | "emails" | "phones" | "links" | "address" | "fullName";
+      | "money" | "emails" | "phones" | "links" | "address" | "fullName"
+      | "richText" | "whiteboard";
   options?: SelectOption[]; // select | multiselect — a string, or {value, label?, color?}
                             // (colors: gray/blue/green/yellow/orange/red/purple/pink/teal —
                             // chips render the color on every surface via OptionChip)
@@ -64,6 +65,12 @@ Shaped (composite) types carry structured values and edit on the record page as 
 `RecordPage`'s optional blocks all follow the same pattern — pass the prop to enable, omit it and the UI disappears: `watch: { on, count, onToggle }` renders the eye Watch button; `pin: { on, onToggle }` renders a star Favorite button (`data-testid="fav-toggle"`) — presentation only, the host owns storage (the starter keeps pins in localStorage and renders a sidebar shelf from them); `files: { list: FileMeta[], onUpload({name,mime,data}), downloadHref(fileId) }` adds the Files tab (base64 upload via a hidden input, list with size/date, download links); `onLogActivity(kind, text)` adds the segmented call/email/meeting composer to the Timeline tab (events carry `kind:"activity"` + `activity` subkind → per-kind icons); `onEnrich(fieldKey)` arms the sparkle on `primitive`-carrying fields (the consumer owns the actual platform call — the starter ships a labeled mock endpoint as the swap-point).
 
 Every interactive element carries a `data-testid` (`row-<id>`, `card-<id>`, `col-<stage>`, `field-<key>`, `record-name`, `record-stage`, `fav-toggle`, `note-input`, `rel-<id>-<key>`, `group-by-<key>`, `file-input`, `file-row-<id>`, `file-dl-<id>`, `act-kind-<kind>`, `act-input`, `act-log`, `enrich-<key>`, `tl-ic-<kind>`, `chart-<obj>`, `bar-<option>` with `data-value`) — journeys assert on these, never on CSS classes.
+
+## The field-type registry (`src/record-core/fields/`)
+
+Field types are self-registering, the field twin of the view registry: `fields/registry.ts` discovers every `fields/<type>/definition.{ts,tsx}` at build time (`import.meta.glob`), and the hosts — RecordPage's field editor, DataTable's cells + `formatCell`/`csvCell` + keyboard grid, KanbanBoard's card meta, `filterableFields` — consult it BEFORE their built-in switches. A `FieldTypeDefinition` (see `fields/types.ts`) fills only the slots it owns: `render` (record-page surface, `React.lazy` for heavy editors; the host Suspense-wraps with a designed loading state), `cell` (read-only list cell), `previewText` (one-line text), `layout: "block"` (full-width record-page breakout, both layouts), `filterable`/`keyboardEditable`/`clearValue` capabilities, and the editor-side `Draft`/`coerce`/`validate` slots. The pure fold + capability helpers live in `fields/resolve.ts` (node-testable, no vite).
+
+The first registered type is `whiteboard` (`fields/whiteboard/`): a per-record excalidraw canvas persisted as plain scene JSON (`{ elements }` — elements only; mounts scroll to content, a stored `appState` is tolerated and ignored) through ONE debounced store patch — `getSceneVersion` gates saves so viewport moves never write; the Saving…/Saved chip announces via `role="status"`. Cells render a memoized SVG thumbnail (`exportToSvg` behind a dynamic import, cached by scene content + theme, re-derived on a live dark-flip; empty scenes render a static glyph and import nothing). On mobile the field rests as a preview + "Edit canvas" tap that opens a fullscreen overlay editor; the record-page canvas follows the app theme via the `data-theme` attribute on `<html>`. The image tool and file-system canvas actions are disabled — scenes stay lean JSON.
 
 ## Contracts the consumer honors
 - **Optimistic patch + reload-on-error:** apply the patch locally, call the API, reload truth on failure (the starter's ObjectView/RecordView are the reference).

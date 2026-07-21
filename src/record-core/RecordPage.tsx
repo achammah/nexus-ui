@@ -18,6 +18,7 @@ import {
   CommandList,
 } from "../components/ui/command";
 import { formatCell } from "./DataTable";
+import { fieldIsBlock, getFieldTypeDefinition } from "./fields/registry";
 import type { AddressValue, FieldDef, FileMeta, FullNameValue, MoneyValue, ObjectConfig, RecordRow, RelationItem, TimelineEvent } from "./types";
 import { isMoneyValue, normalizeOption, optionValues, rowRefs } from "./types";
 import { NotionEditor, textToBlocks, type Block } from "./NotionEditor";
@@ -985,9 +986,38 @@ export function RecordPage({
   /* the inline editor for ONE field — the config-driven type switch. Identical
      output (+ testids) in both layouts; the hero renders it full-width, the
      details rows render it inside a label/value row. */
+  /* registry-first: an installed field type (fields/registry) owns its WHOLE
+     surface — read and edit modes both — so it renders before the readOnly text
+     fallback; built-in types fall through to the switch unchanged. Keyed by row
+     id like richText: switching records reseeds, a same-record poll does not. */
+  const registryEditor = (f: FieldDef): React.ReactNode => {
+    const Render = getFieldTypeDefinition(f.type)?.render;
+    if (!Render) return null;
+    return (
+      <React.Suspense
+        fallback={
+          <div className="nxFieldLoading" data-testid={`field-loading-${f.key}`}>
+            <ThinkingDots label={`Loading ${f.label}`} />
+          </div>
+        }
+      >
+        <Render
+          key={`${row.id}:${f.key}:field`}
+          field={f}
+          row={row}
+          value={row[f.key]}
+          readOnly={readOnly}
+          onSave={(v) => onPatch(row.id, { [f.key]: v })}
+        />
+      </React.Suspense>
+    );
+  };
+
   const fieldEditor = (f: FieldDef): React.ReactNode => (
     <>
-      {readOnly ? (
+      {getFieldTypeDefinition(f.type)?.render ? (
+        registryEditor(f)
+      ) : readOnly ? (
         <span data-testid={`field-${f.key}`}>{formatCell(row[f.key], f.type) || "—"}</span>
       ) : f.type === "user" ? (
         <RelationPicker
@@ -1484,8 +1514,13 @@ export function RecordPage({
   // DOCUMENT layout — a wide hero editor (the primary richText field) as the main
   // column, everything else (other fields + related + timeline/notes/files) in a
   // compact sidebar. Falls back to standard when the object carries no richText.
+  // Registry block fields (fields/registry `layout:"block"` — a canvas, not a
+  // label/value row) render as their own full-width blocks in the document column
+  // right after the hero; richText's existing placement is byte-unchanged.
   if (layout === "document" && heroField) {
-    const sideFields = activeFields(config.fields).filter((f) => f.key !== heroField.key);
+    const isRegistryBlock = (f: FieldDef) => f.type !== "richText" && fieldIsBlock(f.type);
+    const docBlocks = activeFields(config.fields).filter((f) => f.key !== heroField.key && isRegistryBlock(f));
+    const sideFields = activeFields(config.fields).filter((f) => f.key !== heroField.key && !isRegistryBlock(f));
     return (
       <div data-testid={`record-${row.id}`} data-record-layout="document">
         {head}
@@ -1494,6 +1529,12 @@ export function RecordPage({
             <div className="nxRecordDoc-hero" data-testid={`hero-${heroField.key}`}>
               {fieldEditor(heroField)}
             </div>
+            {docBlocks.map((f) => (
+              <div className="nxCard nxRecordBlock" key={f.key} data-testid={`fieldblock-${f.key}`}>
+                <div className="nxRecordBlock-label">{f.label}</div>
+                {fieldEditor(f)}
+              </div>
+            ))}
             {sideFields.length > 0 && detailsCard(sideFields)}
             {relatedCards}
             {tabsCard}
@@ -1504,10 +1545,12 @@ export function RecordPage({
   }
 
   // STANDARD layout — compact metadata (details card) + timeline tabs on top; any
-  // richText field breaks OUT into a full-width document section below, so the editor
-  // (and its suggestions rail) get the whole record width instead of the narrow column.
-  const stdRich = activeFields(config.fields).filter((f) => f.type === "richText");
-  const stdMeta = activeFields(config.fields).filter((f) => f.type !== "richText");
+  // richText field — and any registry block field (fields/registry `layout:"block"`)
+  // — breaks OUT into a full-width document section below, so the editor (and its
+  // suggestions rail / canvas) get the whole record width instead of the narrow column.
+  const isBlockField = (f: FieldDef) => f.type === "richText" || fieldIsBlock(f.type);
+  const stdBlocks = activeFields(config.fields).filter(isBlockField);
+  const stdMeta = activeFields(config.fields).filter((f) => !isBlockField(f));
   return (
     <div data-testid={`record-${row.id}`} data-record-layout="standard">
       {head}
@@ -1518,8 +1561,12 @@ export function RecordPage({
         </div>
         {tabsCard}
       </div>
-      {stdRich.map((f) => (
-        <div className="nxCard nxRecordBlock" key={f.key} data-testid={`richblock-${f.key}`}>
+      {stdBlocks.map((f) => (
+        <div
+          className="nxCard nxRecordBlock"
+          key={f.key}
+          data-testid={f.type === "richText" ? `richblock-${f.key}` : `fieldblock-${f.key}`}
+        >
           <div className="nxRecordBlock-label">{f.label}</div>
           {fieldEditor(f)}
         </div>
