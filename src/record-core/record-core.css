@@ -291,3 +291,9 @@
 .nxWbOverlayBody .excalidraw .default-sidebar-trigger,
 .nxWbOverlayBody .excalidraw .HintViewer,
 .nxWbOverlayBody .excalidraw .help-icon { display: none !important; }
+/* RecordCard — shared compact record card (map popups, gallery tiles); title/meta
+   typography rides the kanban family (nxKTitle/nxKMeta), chrome stays the host's */
+.nxRecordCard { display: grid; gap: 2px; min-width: 0; }
+.nxRecordCard--link { cursor: pointer; }
+.nxRecordCard .nxKMeta { flex-wrap: wrap; row-gap: 4px; }
+.nxRecordCardChips { display: inline-flex; gap: 4px; }

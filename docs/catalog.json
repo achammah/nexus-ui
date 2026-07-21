@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 114,
+  "count": 118,
   "items": [
     {
       "name": "accordion",
@@ -655,6 +655,27 @@
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
+      "name": "map view definition",
+      "kind": "record-core",
+      "import": "src/record-core/views/map/definition.tsx",
+      "when": "the map view: records with lat/lng as token pins (≤25) or GL clusters, record-card popups into the peek, a without-location count chip; config latField/lngField/titleField/colorField — the heavy component is a lazy chunk, maplibre loads only when a map renders",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "CLUSTER_THRESHOLD · inferCoordFields · splitRows · toFeatureCollection · boundsOf · mapDefaultConfig · mapValidateConfig",
+      "kind": "record-core",
+      "import": "src/record-core/views/map/geo.ts",
+      "when": "the map view's pure geo core (no browser — node-testable): coordinate inference + validity (0 is a valid coordinate), the located/without split, GeoJSON + bounds math, config default/validate",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "RecordCard",
+      "kind": "record-core",
+      "import": "src/record-core/RecordCard.tsx",
+      "when": "shared compact record card (title + meta values over formatCell/OptionChip) for record-as-card surfaces — map popups, gallery tiles; chrome-less, the host provides the card shell",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
       "name": "ObjectConfig · FieldDef · RecordRow · ViewDef · TimelineEvent · FileMeta",
       "kind": "record-core",
       "import": "src/record-core/types.ts",
@@ -764,6 +785,13 @@
       "kind": "tokens",
       "import": "src/tokens/motion.css",
       "when": "riseIn/popIn entrance families + .nx-tap-scale/.nx-hover-lift micro-interactions, tokenized on the ease vars; ONE reduced-motion guard (opt back in with data-motion=\"always\")",
+      "source": "ours"
+    },
+    {
+      "name": "resolveCssColor · resolveTokenColor · useTokenColors · subscribeTokenColors",
+      "kind": "tokens",
+      "import": "src/tokens/resolve.ts",
+      "when": "token → rgba-literal resolution for GL/canvas consumers that cannot read CSS custom properties (maplibre paint, canvas grids); resolves any color expression incl. color-mix chains, re-resolves live on data-theme / skin-tag / OS-scheme changes",
       "source": "ours"
     },
     {
