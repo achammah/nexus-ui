@@ -14,11 +14,11 @@
   font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--nx-accent); flex: none;
 }
 .nxwiz-prog { flex: 1; height: 3px; background: var(--nx-border); overflow: hidden; }
-.nxwiz-prog span { display: block; height: 100%; background: var(--nx-accent); transition: width 0.4s var(--nx-ease-settle); }
+.nxwiz-prog span { display: block; height: 100%; background: var(--nx-accent); transition: width var(--nx-t-slow) var(--nx-ease-settle); }
 .nxwiz-count { font-family: var(--nx-font-mono); font-size: 11px; color: var(--nx-fg-muted); flex: none; }
 
-.nxwiz-card { animation: nxwizCardIn 0.32s var(--nx-ease-settle); }
-.nxwiz-card.in-l { animation: nxwizCardInL 0.32s var(--nx-ease-settle); }
+.nxwiz-card { animation: nxwizCardIn var(--nx-t-slow) var(--nx-ease-settle); }
+.nxwiz-card.in-l { animation: nxwizCardInL var(--nx-t-slow) var(--nx-ease-settle); }
 @keyframes nxwizCardIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
 @keyframes nxwizCardInL { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
 .nxwiz-qn { font-family: var(--nx-font-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--nx-accent); margin-bottom: 14px; }
@@ -30,7 +30,7 @@
 .nxwiz-choice {
   display: flex; flex-direction: column; gap: 10px; text-align: left; padding: 22px;
   border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m); background: var(--nx-bg-raised);
-  cursor: pointer; transition: border-color 0.16s, transform 0.12s; color: var(--nx-fg);
+  cursor: pointer; transition: border-color var(--nx-t-fast), transform var(--nx-t-fast); color: var(--nx-fg);
 }
 .nxwiz-choice:hover:not(:disabled) { border-color: var(--nx-accent); transform: translateY(-2px); }
 .nxwiz-choice:disabled { opacity: 0.6; cursor: default; }
@@ -42,7 +42,7 @@
 .nxwiz-opt {
   text-align: left; padding: 14px 16px; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s);
   background: var(--nx-bg-raised); font-size: 15px; font-weight: 600; cursor: pointer; color: var(--nx-fg);
-  transition: border-color 0.16s, transform 0.12s, background 0.16s;
+  transition: border-color var(--nx-t-fast), transform var(--nx-t-fast), background var(--nx-t-fast);
 }
 .nxwiz-opt:hover { border-color: var(--nx-fg); transform: translateX(3px); }
 .nxwiz-opt.is-on { border-color: var(--nx-accent); background: var(--nx-accent-soft); }
@@ -50,7 +50,7 @@
 .nxwiz-input {
   width: 100%; padding: 12px 14px; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s);
   background: var(--nx-bg-raised); font-family: var(--nx-font-sans); font-size: 15px; color: var(--nx-fg);
-  outline: none; transition: border-color 0.16s;
+  outline: none; transition: border-color var(--nx-t-fast);
 }
 .nxwiz-input:focus { border-color: var(--nx-accent); }
 .nxwiz-area { margin-top: 24px; resize: vertical; line-height: 1.55; }
@@ -60,19 +60,19 @@
 .nxwiz-back {
   display: inline-flex; align-items: center; gap: 6px; background: none; border: 1px solid var(--nx-border);
   border-radius: var(--nx-radius-s); padding: 8px 13px; font-family: var(--nx-font-mono); font-size: 11px;
-  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; color: var(--nx-fg); transition: border-color 0.16s, transform 0.16s;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; color: var(--nx-fg); transition: border-color var(--nx-t-fast), transform var(--nx-t-fast);
 }
 .nxwiz-back:hover { border-color: var(--nx-fg); transform: translateX(-2px); }
 .nxwiz-next, .nxwiz-create {
   display: inline-flex; align-items: center; gap: 8px; background: var(--nx-accent); color: var(--nx-accent-fg);
   border: 0; border-radius: var(--nx-radius-s); padding: 10px 18px; font-family: var(--nx-font-mono);
-  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: background 0.16s, transform 0.12s;
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; transition: background var(--nx-t-fast), transform var(--nx-t-fast);
 }
 .nxwiz-next:hover:not(:disabled), .nxwiz-create:hover:not(:disabled) { background: var(--nx-accent-hover); transform: translateY(-1px); }
 .nxwiz-next:disabled, .nxwiz-create:disabled { opacity: 0.4; cursor: not-allowed; }
 .nxwiz-spin {
   width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent;
-  border-radius: 50%; display: inline-block; animation: nxwizspin 0.7s linear infinite;
+  border-radius: 50%; display: inline-block; animation: nxwizspin var(--nx-t-spin) linear infinite;
 }
 @keyframes nxwizspin { to { transform: rotate(360deg); } }
 
@@ -94,10 +94,10 @@
 .nxwiz-listempty { color: var(--nx-fg-muted); font-family: var(--nx-font-mono); font-size: 12px; }
 .nxwiz-addrow { display: flex; gap: 8px; }
 .nxwiz-addrow .nxwiz-input { font-size: 14px; padding: 10px 12px; }
-.nxwiz-addbtn { width: 40px; flex: none; background: var(--nx-accent); color: var(--nx-accent-fg); border: 0; border-radius: var(--nx-radius-s); cursor: pointer; display: grid; place-items: center; transition: background 0.16s; }
+.nxwiz-addbtn { width: 40px; flex: none; background: var(--nx-accent); color: var(--nx-accent-fg); border: 0; border-radius: var(--nx-radius-s); cursor: pointer; display: grid; place-items: center; transition: background var(--nx-t-fast); }
 .nxwiz-addbtn:hover { background: var(--nx-accent-hover); }
 .nxwiz-suggest { display: flex; flex-wrap: wrap; gap: 8px; }
-.nxwiz-sugchip { display: inline-flex; align-items: center; gap: 5px; background: var(--nx-bg-sunken); border: 1px dashed var(--nx-border); border-radius: var(--nx-radius-s); color: var(--nx-fg-muted); padding: 6px 10px; font-size: 12.5px; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+.nxwiz-sugchip { display: inline-flex; align-items: center; gap: 5px; background: var(--nx-bg-sunken); border: 1px dashed var(--nx-border); border-radius: var(--nx-radius-s); color: var(--nx-fg-muted); padding: 6px 10px; font-size: 12.5px; cursor: pointer; transition: border-color var(--nx-t-fast), color var(--nx-t-fast); }
 .nxwiz-sugchip:hover { border-color: var(--nx-accent); color: var(--nx-accent); }
 
 /* SourcesInput */
@@ -106,7 +106,7 @@
 .nxwiz-srclabel { display: inline-flex; align-items: center; gap: 7px; font-family: var(--nx-font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--nx-fg-muted); }
 .nxwiz-srcdrop {
   display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 22px; border: 1.5px dashed var(--nx-border);
-  border-radius: var(--nx-radius-m); background: var(--nx-bg-sunken); cursor: pointer; color: var(--nx-fg); transition: border-color 0.16s, background 0.16s;
+  border-radius: var(--nx-radius-m); background: var(--nx-bg-sunken); cursor: pointer; color: var(--nx-fg); transition: border-color var(--nx-t-fast), background var(--nx-t-fast);
 }
 .nxwiz-srcdrop:hover { border-color: var(--nx-accent); background: var(--nx-accent-soft); }
 .nxwiz-srcdrophint { font-family: var(--nx-font-mono); font-size: 11px; color: var(--nx-fg-muted); }
@@ -121,19 +121,19 @@
 .nxwiz-overlay {
   position: fixed; inset: 0; z-index: 120; background: rgb(0 0 0 / 0.42); backdrop-filter: blur(3px);
   display: flex; align-items: flex-start; justify-content: center; padding: 6vh 20px; overflow-y: auto;
-  animation: nxwizFade 0.18s ease;
+  animation: nxwizFade var(--nx-t-fast) var(--nx-ease);
 }
 @keyframes nxwizFade { from { opacity: 0; } to { opacity: 1; } }
 .nxwiz-modal {
   position: relative; width: min(760px, 100%); background: var(--nx-bg-raised); border: 1px solid var(--nx-border);
-  border-radius: var(--nx-radius-l); box-shadow: var(--nx-shadow-2); animation: nxwizPop 0.22s var(--nx-ease-settle);
+  border-radius: var(--nx-radius-l); box-shadow: var(--nx-shadow-2); animation: nxwizPop var(--nx-t-med) var(--nx-ease-settle);
   padding: 36px clamp(20px, 4vw, 40px) 32px;
 }
 @keyframes nxwizPop { from { opacity: 0; transform: translateY(14px) scale(0.985); } to { opacity: 1; transform: none; } }
 .nxwiz-modal-x {
   position: absolute; top: 14px; right: 14px; z-index: 2; width: 30px; height: 30px; display: grid; place-items: center;
   border: 0; border-radius: var(--nx-radius-s); background: var(--nx-bg-sunken); color: var(--nx-fg-muted); cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--nx-t-fast), color var(--nx-t-fast);
 }
 .nxwiz-modal-x:hover { background: var(--nx-border); color: var(--nx-fg); }
 

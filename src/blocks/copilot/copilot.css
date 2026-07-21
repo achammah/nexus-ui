@@ -45,7 +45,8 @@
 }
 .nxCopilot-chip:hover { border-color: var(--nx-accent); background: var(--nx-accent-soft); }
 
-.nxCopilot-msg { display: flex; gap: 10px; align-items: flex-start; }
+.nxCopilot-msg { display: flex; gap: 10px; align-items: flex-start; animation: nxCopilotMsgIn var(--nx-t-med) var(--nx-ease-settle) both; }
+@keyframes nxCopilotMsgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .nxCopilot-msg.is-user { justify-content: flex-end; }
 .nxCopilot-avatar {
   width: 24px; height: 24px; flex: none; margin-top: 2px; border-radius: var(--nx-radius-s);
@@ -66,6 +67,7 @@
   border: 1px solid var(--nx-accent); background: var(--nx-accent-soft);
   border-radius: var(--nx-radius-s); padding: 3px 8px;
   display: inline-flex; align-items: center; gap: 4px;
+  animation: nxPopIn var(--nx-t-med) var(--nx-ease-spring) both;
 }
 
 .nxCopilot-inputbar {
@@ -77,15 +79,16 @@
   border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m);
   background: var(--nx-bg); color: var(--nx-fg);
   padding: 11px 13px; font: var(--nx-text-body); outline: none;
-  transition: border-color var(--nx-t-fast);
+  transition: border-color var(--nx-t-fast), box-shadow var(--nx-t-fast);
 }
-.nxCopilot-input:focus { border-color: var(--nx-accent); }
+.nxCopilot-input:focus { border-color: var(--nx-accent); box-shadow: 0 0 0 3px var(--nx-accent-soft); }
 .nxCopilot-send {
   width: 40px; height: 40px; flex: none; cursor: pointer; border: 0;
   border-radius: var(--nx-radius-m); background: var(--nx-accent); color: var(--nx-accent-fg);
-  display: grid; place-items: center; transition: background var(--nx-t-fast);
+  display: grid; place-items: center; transition: background var(--nx-t-fast), transform var(--nx-t-fast);
 }
 .nxCopilot-send:hover:not(:disabled) { background: var(--nx-accent-hover); }
+.nxCopilot-send:active:not(:disabled) { transform: scale(0.94); }
 .nxCopilot-send:disabled { opacity: 0.4; cursor: default; }
 
 /* toggle / launch button — host places it in the chrome */
