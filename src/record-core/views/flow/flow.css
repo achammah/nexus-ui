@@ -1,39 +1,83 @@
-/* Flow view — records-as-graph canvas. Token-driven only: xyflow draws its own
-   chrome (edges, minimap, controls, background, selection) from --xy-* variables,
-   and this scope derives every one of them from the live --nx-* canvas — dark
-   mode and runtime skins re-theme the whole surface through plain CSS
-   inheritance, no JS re-derivation. Record cards and hubs are our own markup
-   styled directly on tokens. */
+/* Flow view — records-as-graph canvas, styled to read as a first-class app view,
+   not an embedded widget. The canvas is an inset WELL (bg-sunken) that record
+   cards (bg-raised) sit above — the same depth the kanban uses (sunken columns,
+   raised cards). xyflow's own chrome (controls, minimap, attribution, edges,
+   background) is restyled to our --nx-* button/surface treatment, not merely
+   recolored through --xy-* vars. Dark mode and runtime skins re-theme the whole
+   surface through plain CSS inheritance — no JS re-derivation. flow.css loads
+   after xyflow's stylesheet, so these overrides win on equal specificity. */
 
+/* ---------- the canvas well (frame integration) ---------- */
 .nxFlowWrap {
   position: relative;
-  height: clamp(360px, calc(100vh - 250px), 760px);
-  padding: 0;
+  height: clamp(320px, calc(100vh - 300px), 540px);
   overflow: hidden;
+  background: var(--nx-bg-sunken);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
 
-  /* xyflow chrome → tokens */
+  /* xyflow canvas vars → tokens (background grid, edges, handles, selection) */
   --xy-background-color: transparent;
-  --xy-background-pattern-color: var(--nx-border-strong);
+  --xy-background-pattern-color: color-mix(in oklab, var(--nx-border-strong) 55%, transparent);
   --xy-edge-stroke: var(--nx-border-strong);
   --xy-edge-stroke-selected: var(--nx-accent);
   --xy-edge-stroke-width: 1.5;
   --xy-connectionline-stroke: var(--nx-accent);
   --xy-handle-background-color: transparent;
   --xy-handle-border-color: transparent;
-  --xy-minimap-background-color: var(--nx-bg-sunken);
-  --xy-minimap-mask-background-color: color-mix(in oklab, var(--nx-bg) 55%, transparent);
-  --xy-minimap-mask-stroke-color: var(--nx-border);
+  --xy-minimap-mask-background-color: color-mix(in oklab, var(--nx-bg-sunken) 60%, transparent);
   --xy-minimap-node-background-color: var(--nx-border-strong);
-  --xy-attribution-background-color: color-mix(in oklab, var(--nx-bg-raised) 65%, transparent);
-  --xy-controls-box-shadow: var(--nx-shadow-1);
-  --xy-controls-button-background-color: var(--nx-bg-raised);
-  --xy-controls-button-background-color-hover: var(--nx-bg-sunken);
-  --xy-controls-button-color: var(--nx-fg-muted);
-  --xy-controls-button-color-hover: var(--nx-fg);
-  --xy-controls-button-border-color: var(--nx-border);
   --xy-selection-background-color: var(--nx-accent-soft);
   --xy-selection-border: 1px dashed var(--nx-accent);
 }
+
+/* ---------- xyflow chrome → native (restyled classes) ---------- */
+/* every floating panel (controls · minimap · attribution) sits on our gap scale */
+.nxFlowWrap .react-flow__panel { margin: var(--nx-gap-3); }
+
+/* control cluster reads as an app toolbar card (horizontal orientation set in FlowView) */
+.nxFlowWrap .react-flow__controls {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  padding: 3px;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-1);
+}
+.nxFlowWrap .react-flow__controls .react-flow__controls-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--nx-radius-s);
+  color: var(--nx-fg-muted);
+  transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease);
+}
+.nxFlowWrap .react-flow__controls .react-flow__controls-button:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxFlowWrap .react-flow__controls .react-flow__controls-button:disabled { opacity: 0.4; cursor: default; }
+.nxFlowWrap .react-flow__controls .react-flow__controls-button svg {
+  width: 14px; height: 14px; max-width: none; max-height: none; fill: currentColor;
+}
+
+/* minimap reads as a native inset panel, not a stock rectangle */
+.nxFlowWrap .react-flow__minimap {
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-1);
+  overflow: hidden;
+}
+.nxFlowWrap .react-flow__minimap-svg { display: block; border-radius: var(--nx-radius-m); }
+
+/* attribution: kept (xyflow MIT requires it), reduced to a faint micro label */
+.nxFlowWrap .react-flow__attribution { background: transparent; padding: 0 4px; }
+.nxFlowWrap .react-flow__attribution a { color: var(--nx-fg-faint); font: var(--nx-text-micro); }
+
+/* the arrow markers on edges follow the edge color (set per-edge in FlowView) */
+.nxFlowWrap .react-flow__edge .react-flow__edge-path { stroke-linecap: round; }
 
 /* ---------- record-card node ---------- */
 .nxFlowCard {
@@ -65,17 +109,18 @@
   gap: 7px;
   max-width: 168px;
   padding: 7px 13px;
-  background: var(--nx-bg-sunken);
+  background: var(--nx-bg-raised);
   border: 1px solid var(--nx-border-strong);
   border-radius: 999px;
   font: var(--nx-text-meta);
   font-weight: 600;
   color: var(--nx-fg-muted);
   box-shadow: var(--nx-shadow-1);
-  transition: box-shadow var(--nx-t-fast) var(--nx-ease), border-color var(--nx-t-fast) var(--nx-ease);
+  transition: box-shadow var(--nx-t-fast) var(--nx-ease), border-color var(--nx-t-fast) var(--nx-ease), transform var(--nx-t-fast) var(--nx-ease);
   animation: nxPopIn var(--nx-t-med) var(--nx-ease-spring) both;
   animation-delay: calc(var(--i, 0) * var(--nx-stagger));
 }
+.react-flow__node:hover .nxFlowHub { box-shadow: var(--nx-shadow-2); transform: translateY(-1px); }
 .nxFlowHubLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .react-flow__node.selectable.selected .nxFlowHub,
 .react-flow__node:focus-visible .nxFlowHub { border-color: var(--nx-accent); box-shadow: 0 0 0 3px var(--nx-accent-soft); }
@@ -106,6 +151,7 @@
 
 @media (max-width: 760px) {
   .nxFlowWrap { height: clamp(320px, calc(100vh - 230px), 560px); }
+  .nxFlowWrap .react-flow__minimap { display: none; } /* minimap is desktop-only at 390px — reclaim canvas */
 }
 
 /* mirror the motion.css blanket for this file's own animations/transitions */
