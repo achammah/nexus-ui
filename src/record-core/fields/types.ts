@@ -31,9 +31,13 @@ export interface FieldCellProps {
    commit semantics belong to the host). Filled by the editor unification. */
 export interface FieldDraftProps {
   field: FieldDef;
+  /* surface-prefixed testid key ("new-city", "form-city"); defaults to field.key */
+  fieldKey?: string;
   value: unknown;
   onChange: (value: unknown) => void;
   autoFocus?: boolean;
+  /* the app users directory — user-type drafts pick from it */
+  users?: string[];
   /* host-surfaced validation message for this field */
   error?: string | null;
 }
