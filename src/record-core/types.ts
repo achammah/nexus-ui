@@ -7,7 +7,7 @@ export type FieldType =
   | "relation" | "user" | "multiselect"
   | "boolean" | "longText" | "dateTime" | "rating" | "array" | "json"
   | "money" | "emails" | "phones" | "links" | "address" | "fullName"
-  | "richText";
+  | "richText" | "whiteboard";
 
 /* richText value = Block[] — the Notion-grade editor's block array, stored as
    JSON in the record store (edits on the record page, truncated preview in tables).

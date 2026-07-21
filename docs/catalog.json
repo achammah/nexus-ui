@@ -599,6 +599,34 @@
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
+      "name": "FieldTypeDefinition · FieldRenderProps · FieldCellProps · FieldDraftProps",
+      "kind": "record-core",
+      "import": "src/record-core/fields/types.ts",
+      "when": "the field-type contract: what a fields/<type>/definition.tsx default-exports — record-page render, list cell, previewText, layout/filterable/keyboard capabilities, plus the Draft/coerce/validate editor slots",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "fieldTypeDefinitions · getFieldTypeDefinition · fieldPreviewText · fieldIsBlock",
+      "kind": "record-core",
+      "import": "src/record-core/fields/registry.ts",
+      "when": "build-time self-registering field-type registry (import.meta.glob over fields/*/definition) — hosts consult it BEFORE their built-in switches, so a new field type is a dropped folder, zero switch edits",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "buildFieldRegistry · registry capability helpers",
+      "kind": "record-core",
+      "import": "src/record-core/fields/resolve.ts",
+      "when": "the field registry's pure core (no browser, no vite — node-testable): fold glob modules into the type map + one-line capability reads that tolerate unregistered types",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "whiteboard field type",
+      "kind": "record-core",
+      "import": "src/record-core/fields/whiteboard/definition.tsx",
+      "when": "a per-record excalidraw canvas as a FIELD: lazy full editor on the record page (debounced one-patch saves, theme-follow, mobile tap-to-edit overlay), memoized theme-aware SVG thumbnails in cells, scene JSON through the normal store path",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
       "name": "Wizard",
       "kind": "wrapper",
       "import": "src/blocks/wizard/Wizard.tsx",

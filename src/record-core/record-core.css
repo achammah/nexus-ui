@@ -179,15 +179,18 @@
   border: 1px dashed var(--nx-border); border-radius: var(--nx-radius-m);
   color: var(--nx-fg-faint); font: var(--nx-text-meta);
 }
-/* list-cell thumbnail: table rows keep their height; kanban cards give it room */
+/* list-cell thumbnail: table rows keep their height; kanban cards give it room.
+   The export svg carries only a viewBox (no width/height attrs), so it needs a
+   DEFINITE height — the aspect ratio then derives the width (`auto` alone
+   collapses to 0x0 inside a shrink-to-fit inline context). */
 .nxWbThumb { display: inline-flex; align-items: center; min-width: 0; }
-.nxWbThumb svg { display: block; max-height: 26px; width: auto; max-width: 132px; opacity: 0; }
+.nxWbThumb svg { display: block; height: 26px; width: auto; max-width: 132px; opacity: 0; }
 .nxWbThumb[data-ready] svg { opacity: 1; transition: opacity var(--nx-t-med) var(--nx-ease-settle); }
 .nxWbThumb--empty { color: var(--nx-fg-faint); }
-.nxKCard .nxWbThumb svg { max-height: 64px; max-width: 100%; }
+.nxKCard .nxWbThumb svg { height: 64px; max-width: 100%; }
 /* mobile rest state: preview + Edit affordance (never a live canvas in the flow) */
 .nxWbPreview { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.nxWbPreview .nxWbThumb svg { max-height: 140px; max-width: 100%; }
+.nxWbPreview .nxWbThumb svg { height: 140px; max-width: 100%; }
 /* fullscreen mobile editor overlay (portaled; above peek 40 / copilot 45 / tab bar 60) */
 .nxWbOverlay { position: fixed; inset: 0; z-index: 70; background: var(--nx-bg); display: flex; flex-direction: column; }
 .nxWbOverlayHead {
