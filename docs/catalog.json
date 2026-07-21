@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 118,
+  "count": 119,
   "items": [
     {
       "name": "accordion",
@@ -592,10 +592,17 @@
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
-      "name": "useGridTheme · deriveGridTheme · chipColorLiterals · resolveCssColor",
+      "name": "deriveSelectionText · relLuminance · contrastRatio",
+      "kind": "record-core",
+      "import": "src/record-core/views/grid/contrast.ts",
+      "when": "the grid's pure selection-contrast core (no glide, no browser — node-testable): when a skin or theme leaves the selection background too close to the base ink, derive the flipped text ramp (WCAG luminance, white/black pole) that SpreadsheetView applies as a per-cell themeOverride on selected cells",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "useGridTheme · deriveGridTheme · deriveSelectionText · chipColorLiterals · resolveCssColor",
       "kind": "record-core",
       "import": "src/record-core/views/grid/theme.ts",
-      "when": "token → glide Theme derivation for canvas paint: probe-resolved --nx-* literals, chip colors from the exact chipStyle color-mix formula, re-derived on dark-mode flip and skin arrival",
+      "when": "token → glide Theme derivation for canvas paint: probe-resolved --nx-* literals, chip colors from the exact chipStyle color-mix formula, and the selected-cell contrast text ramp — all re-derived on dark-mode flip and skin arrival",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
