@@ -10,7 +10,9 @@ import { GroupByMenu, SortMenu } from "../controls";
    a missing/broken one falls back to an initials placeholder) · `coverFit`
    ("cover" default | "contain") · `titleField` (defaults to the primary) ·
    `cardFields` (ordered field keys rendered on each card through the field
-   registry; supersedes the legacy `metaFields`) · `groupField` (a select/user
+   registry; supersedes the legacy `metaFields`) · `cardFieldLabels` (false by
+   default — cards show dense label-less values, the Airtable look; true prefixes
+   each value with its field label) · `groupField` (a select/user
    field — cards split into collapsible sections; also runtime via the toolbar,
    shared with the board) · `sortField` + `sortDir` · `cardSize` ("s"|"m"|"l") ·
    `cardClick` ("peek" default | "open"). The component is lazy. */
@@ -41,6 +43,7 @@ const definition: ViewDefinition = {
     { key: "coverFit", label: "Cover fit", kind: "select", options: ["cover", "contain"] },
     { key: "titleField", label: "Title", kind: "field" },
     { key: "cardFields", label: "Card fields", kind: "text" },
+    { key: "cardFieldLabels", label: "Field labels on cards", kind: "boolean" },
     { key: "groupField", label: "Group by", kind: "field", fieldTypes: ["select", "user"] },
     { key: "sortField", label: "Sort by", kind: "field" },
     { key: "sortDir", label: "Sort direction", kind: "select", options: ["asc", "desc"] },
@@ -79,6 +82,8 @@ const definition: ViewDefinition = {
       return `sortDir must be "asc" or "desc"`;
     if (cfg.cardClick !== undefined && cfg.cardClick !== "peek" && cfg.cardClick !== "open")
       return `cardClick must be "peek" or "open"`;
+    if (cfg.cardFieldLabels !== undefined && typeof cfg.cardFieldLabels !== "boolean")
+      return `cardFieldLabels must be true or false`;
     return null;
   },
 };

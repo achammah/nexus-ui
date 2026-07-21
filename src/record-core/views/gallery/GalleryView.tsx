@@ -47,7 +47,11 @@ export const galleryConfigOf = (object: ObjectConfig, viewConfig: Record<string,
   const cardFields = raw.map((k) => fields.find((f) => f.key === String(k))).filter((f): f is FieldDef => !!f);
   const size = typeof viewConfig.cardSize === "string" && viewConfig.cardSize in MIN_COL ? (viewConfig.cardSize as string) : "m";
   const cardClick: "peek" | "open" = viewConfig.cardClick === "open" ? "open" : "peek";
-  return { coverField, coverFit, titleField, cardFields, minCol: MIN_COL[size], cardClick };
+  // Airtable-parity default: card fields render label-less (the value alone —
+  // a colored chip for select, quiet text otherwise). Set cardFieldLabels:true
+  // to prefix each value with its field label (the form-like look).
+  const cardFieldLabels = viewConfig.cardFieldLabels === true;
+  return { coverField, coverFit, titleField, cardFields, minCol: MIN_COL[size], cardClick, cardFieldLabels };
 };
 
 const initialsOf = (title: string): string =>
@@ -59,10 +63,10 @@ const shownCardFields = (row: RecordRow, cardFields: FieldDef[]) =>
     .filter(({ f, v }) => v !== null && v !== undefined && formatCell(v, f.type) !== "");
 
 function GalleryCard({
-  object, row, titleField, cardFields, coverField, coverFit, colWidth, x, y, height,
+  object, row, titleField, cardFields, cardFieldLabels, coverField, coverFit, colWidth, x, y, height,
   entranceIndex, selectable, selected, onToggleSelect, cardClick, onPeek,
 }: {
-  object: ObjectConfig; row: RecordRow; titleField: FieldDef; cardFields: FieldDef[];
+  object: ObjectConfig; row: RecordRow; titleField: FieldDef; cardFields: FieldDef[]; cardFieldLabels: boolean;
   coverField?: FieldDef; coverFit: "cover" | "contain"; colWidth: number; x: number; y: number; height: number;
   entranceIndex: number; selectable: boolean; selected: boolean; onToggleSelect: () => void;
   cardClick: "peek" | "open"; onPeek: (id: string) => void;
@@ -123,11 +127,11 @@ function GalleryCard({
             {initialsOf(title)}
           </span>
         ))}
-      <span className="nxGCard-body">
+      <span className={`nxGCard-body${cardFieldLabels ? "" : " nxGCard-body--dense"}`}>
         <span className="nxGCard-title">{title}</span>
         {shown.map(({ f, v }) => (
           <span key={f.key} className="nxGCard-field" data-field={f.key}>
-            <span className="nxGCard-fieldLabel">{f.label}</span>
+            {cardFieldLabels && <span className="nxGCard-fieldLabel">{f.label}</span>}
             <span className="nxGCard-fieldVal">
               {f.type === "select" || f.type === "multiselect" ? (
                 (Array.isArray(v) ? v.slice(0, 3) : [v]).map((one) => (
@@ -147,7 +151,7 @@ function GalleryCard({
 export default function GalleryView({
   object, rows, users, readOnly, viewConfig, viewState, onViewState, onPeek, selection, onSelectionChange,
 }: ViewProps) {
-  const { coverField, coverFit, titleField, cardFields, minCol, cardClick } = galleryConfigOf(object, viewConfig);
+  const { coverField, coverFit, titleField, cardFields, minCol, cardClick, cardFieldLabels } = galleryConfigOf(object, viewConfig);
   const groupKey = resolveOptionalGroupBy(object, viewConfig, viewState);
   const groupField = groupKey ? object.fields.find((f) => f.key === groupKey) : undefined;
   const { key: sortKey, dir: sortDir } = resolveSort(object, viewConfig, viewState);
@@ -265,6 +269,7 @@ export default function GalleryView({
                     row={row}
                     titleField={titleField}
                     cardFields={cardFields}
+                    cardFieldLabels={cardFieldLabels}
                     coverField={coverField}
                     coverFit={coverFit}
                     colWidth={colWidth}
@@ -314,8 +319,9 @@ const GALLERY_CSS = `
   background:linear-gradient(135deg,var(--nx-accent-soft),var(--nx-bg-sunken));
   color:var(--nx-accent);font:700 22px/1 var(--nx-font-sans);letter-spacing:.04em}
 .nxGCard-body{display:flex;flex-direction:column;gap:5px;padding:10px 12px;min-height:0}
-.nxGCard-title{font:600 13px/19px var(--nx-font-sans);display:-webkit-box;-webkit-line-clamp:2;
-  -webkit-box-orient:vertical;overflow:hidden;max-height:38px}
+.nxGCard-body--dense{gap:6px}
+.nxGCard-title{font:600 13.5px/19px var(--nx-font-sans);letter-spacing:-.01em;color:var(--nx-fg);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-height:38px}
 .nxGCard-field{display:flex;align-items:center;gap:6px;height:22px;overflow:hidden;white-space:nowrap}
 .nxGCard-fieldLabel{color:var(--nx-fg-faint);font:var(--nx-text-meta);flex:none}
 .nxGCard-fieldVal{color:var(--nx-fg-muted);font:var(--nx-text-meta);overflow:hidden;text-overflow:ellipsis;
