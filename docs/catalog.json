@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 119,
+  "count": 122,
   "items": [
     {
       "name": "accordion",
@@ -764,6 +764,27 @@
       "kind": "wrapper",
       "import": "src/blocks/mobile/MobileReviewBanner.tsx",
       "when": "generic phone bottom step-through: prev / index-of-total / next over a set of N items plus per-item action buttons (accept/reject/default tones); pure presentation, fixed above a bottom tab bar (--nx-mobilenav-h), hidden on desktop — e.g. stepping a record set or suggestions on mobile",
+      "source": "ours"
+    },
+    {
+      "name": "WorkbookSurface · LazyWorkbookSurface",
+      "kind": "wrapper",
+      "import": "src/blocks/workbook/WorkbookSurface.tsx",
+      "when": "full spreadsheet workbook (Univer) as a standalone surface: formula bar + 400+ functions, insert/delete rows & columns, cell formatting, multiple sheets, freeze + merge; token-themed chrome, dark-synced to data-theme, free-surface (host owns the snapshot via value/onChange). The engine loads ONLY behind LazyWorkbookSurface (a ~1.6MB-gz lazy chunk), so importing the block adds nothing to the eager bundle",
+      "source": "ours"
+    },
+    {
+      "name": "workbookStoreKey · isWorkbookSnapshot · seedWorkbook · seedLargeWorkbook",
+      "kind": "wrapper",
+      "import": "src/blocks/workbook/snapshot.ts",
+      "when": "the workbook block's pure core (no @univerjs runtime, node-testable): app_state store-key namespacing, snapshot validation for a stored workbook blob, and the demo + 10k scale seed generators",
+      "source": "ours"
+    },
+    {
+      "name": "deriveWorkbookTheme · accentScale · useThemeNonce",
+      "kind": "wrapper",
+      "import": "src/blocks/workbook/workbook-theme.ts",
+      "when": "token → Univer theme derivation: the accent primary scale from --nx-accent, resolved to rgb for Univer's canvas color service and re-derived on a data-theme / skin flip; pairs with the --univer-* chrome overrides in workbook.css that theme Univer's own toolbar and menus",
       "source": "ours"
     },
     {

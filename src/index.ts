@@ -48,3 +48,6 @@ export * from "./blocks/copilot";
 
 /* blocks — mobile chrome: keyboard-shortcuts overlay + phone review banner */
 export * from "./blocks/mobile";
+
+/* blocks — full spreadsheet workbook (Univer) as a standalone surface (lazy engine) */
+export * from "./blocks/workbook";

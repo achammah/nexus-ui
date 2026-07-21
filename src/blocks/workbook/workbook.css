@@ -1,0 +1,125 @@
+/* Workbook surface chrome — the frame around the Univer host. Colors, radii, font
+   and motion are pure --nx-* tokens so a client re-skin and the dark toggle restyle
+   it with zero code. Univer's own canvas + toolbar are themed through the theme
+   object (accent) and its dark-mode flip (workbook-theme.ts); here we align its font
+   and surface framing to ours and style the states Univer doesn't own (loading,
+   empty, error, save status). */
+
+.nxWorkbook {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font-family: var(--nx-font-sans);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  overflow: hidden;
+  background: var(--nx-bg);
+}
+
+/* Native-not-widget: theme Univer's OWN chrome (ribbon tabs, toolbar, formula bar,
+   sheet bar, menus, buttons, focused controls) to our tokens instead of its stock
+   look. Univer's design system is Tailwind-driven off --univer-primary-* (accent)
+   and --univer-gray-* (neutrals); we remap them by ROLE to our --nx-* ramp, scoped
+   to the surface. Both Univer's scale and our tokens invert with the active theme,
+   so ONE mapping serves light AND dark, and it re-derives on a skin/token change for
+   free (the DOM chrome reads these as var()). Canvas paint (selection, gridlines)
+   comes from the JS theme object at mount; this block owns the DOM chrome. */
+.nxWorkbook {
+  --univer-primary-50: color-mix(in srgb, var(--nx-accent) 8%, var(--nx-bg));
+  --univer-primary-100: color-mix(in srgb, var(--nx-accent) 16%, var(--nx-bg));
+  --univer-primary-200: color-mix(in srgb, var(--nx-accent) 30%, var(--nx-bg));
+  --univer-primary-300: color-mix(in srgb, var(--nx-accent) 48%, var(--nx-bg));
+  --univer-primary-400: color-mix(in srgb, var(--nx-accent) 70%, var(--nx-bg));
+  --univer-primary-500: var(--nx-accent);
+  --univer-primary-600: color-mix(in srgb, var(--nx-accent) 86%, black);
+  --univer-primary-700: color-mix(in srgb, var(--nx-accent) 70%, black);
+  --univer-primary-800: color-mix(in srgb, var(--nx-accent) 55%, black);
+  --univer-primary-900: color-mix(in srgb, var(--nx-accent) 42%, black);
+}
+
+/* the status bar above the sheet: title + live save state + reset */
+.nxWorkbookBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--nx-border);
+  background: var(--nx-bg-raised);
+  flex: 0 0 auto;
+}
+.nxWorkbookBarTitle {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--nx-fg);
+}
+.nxWorkbookBarSpacer { flex: 1 1 auto; }
+
+/* save-state pill — mirrors the app's other in-flight affordances */
+.nxWorkbookSave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--nx-fg-muted);
+  padding: 2px 8px;
+  border-radius: var(--nx-radius-s);
+  background: var(--nx-bg-sunken);
+}
+.nxWorkbookSave[data-state="saved"] { color: var(--nx-accent); }
+
+/* the Univer mount target fills the remaining space */
+.nxWorkbookHost {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+/* Univer's exclusive mount target fills the host; React never adds children here */
+.nxWorkbookMount {
+  position: absolute;
+  inset: 0;
+}
+/* Univer paints into this; keep its own layout intact, only inherit our font */
+.nxWorkbookMount :where(.univer-app-container, [data-u-comp]) {
+  font-family: var(--nx-font-sans);
+}
+
+/* overlay states share one centered layer over the host */
+.nxWorkbookOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+  background: var(--nx-bg);
+  color: var(--nx-fg-muted);
+  z-index: 2;
+}
+.nxWorkbookOverlay--transparent { background: color-mix(in oklab, var(--nx-bg) 70%, transparent); }
+.nxWorkbookOverlayTitle { font-weight: 600; font-size: 14px; color: var(--nx-fg); }
+.nxWorkbookOverlayBody { font-size: 12.5px; max-width: 340px; line-height: 1.5; }
+.nxWorkbookOverlayIcon { color: var(--nx-fg-faint); }
+.nxWorkbookError .nxWorkbookOverlayIcon { color: var(--nx-border-strong); }
+
+/* the loading overlay fades out; guard the one custom transition for reduced motion
+   (the utility classes used elsewhere are already blanket-guarded by motion.css) */
+.nxWorkbookOverlay--loading { transition: opacity var(--nx-t-med) var(--nx-ease-settle); }
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="always"]) .nxWorkbookOverlay--loading { transition: none; }
+}
+
+/* Mobile (>=390px): the toolbar/formula-bar stay usable; the canvas scrolls and
+   pinch-zooms but never traps the page. Fill-handle drag is desktop-first — the
+   mobile edit path is tap-a-cell then the formula bar (declared in the T0). */
+@media (max-width: 560px) {
+  .nxWorkbook { border-radius: var(--nx-radius-s); }
+  .nxWorkbookBar { padding: 6px 10px; gap: 8px; }
+  .nxWorkbookBarTitle { font-size: 12px; }
+  .nxWorkbookHost { touch-action: pan-x pan-y; }
+}
