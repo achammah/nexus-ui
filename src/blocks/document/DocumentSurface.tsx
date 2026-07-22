@@ -174,6 +174,19 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
     if (mode === "suggest") captureSuggestion(next); else setBlocks(next);
   }, [mode, captureSuggestion, setBlocks]);
 
+  /* the LIVE tracked-change channel: the editor owns the in-block edit and reports the change on
+     every keystroke, so the del/ins is already on screen — this only persists it. Keyed per block
+     (`sug-<blockId>`) so repeated keystrokes replace rather than stack. */
+  const onLiveSuggest = React.useCallback((blockId: string, change: { original: string; replacement: string; offset: number } | null) => {
+    const sid = `sug-${blockId}`;
+    const cur = snapRef.current.suggestions ?? [];
+    const rest = cur.filter((c) => c.id !== sid);
+    const next: Suggestion[] = change
+      ? [...rest, { id: sid, blockId, offset: change.offset, original: change.original, replacement: change.replacement, status: "pending", author: whoName, authorColor: whoColor, createdAt: Date.now() } as Suggestion]
+      : rest;
+    patch({ suggestions: next });
+  }, [patch, whoName, whoColor]);
+
   // when a change resolves the panel may empty; open it whenever there is something to review
   React.useEffect(() => { if (mode === "suggest" || suggestions.length) setSugOpen(true); }, [mode, suggestions.length]);
 
@@ -404,6 +417,8 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
             )}
             <NotionEditor blocks={snap.blocks} onChange={onEditorChange} readOnly={readOnly} config={cfg.editor} pageContext={pageContext}
               changes={mode === "suggest" || suggestions.length ? pendingSug : undefined}
+              suggesting={mode === "suggest"} suggestAuthor={{ name: whoName, color: whoColor }}
+              onSuggestChange={onLiveSuggest}
               hoveredChange={hoveredChange} onHoverChange={setHoveredChange} />
             {footer}
           </div>

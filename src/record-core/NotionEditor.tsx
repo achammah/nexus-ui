@@ -320,6 +320,12 @@ export interface InlineChange { id: string; original: string; replacement: strin
 
 export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/* the cid carried by the LIVE tracked-change widget while a block is being edited in suggesting
+   mode. It is deliberately not a real change id: serializeBlock falls back to the <del> text for
+   an unknown cid, which is exactly the committed original — so any stray serialization of a
+   half-typed suggestion still yields the untouched text. */
+const LIVE_CID = "__live__";
+
 /* A dependency-free lightweight code highlighter — enough to READ as highlighted across
    common languages, zero bundle weight. Comments + strings are STASHED behind ASCII
    sentinels FIRST so the keyword/number passes never scan the markup they insert (the
@@ -424,11 +430,17 @@ function serializeBlock(el: HTMLElement, chs: InlineChange[]): string {
   return Array.from(el.childNodes).map(walk).join("").replace(/^\n/, "").replace(/ /g, " ");
 }
 
-export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChange, onHoverChange, config, pageContext }: {
+export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChange, onHoverChange, config, pageContext, suggesting, suggestAuthor, onSuggestChange }: {
   blocks: Block[]; onChange: (b: Block[]) => void; readOnly?: boolean;
   changes?: InlineChange[]; hoveredChange?: string | null; onHoverChange?: (id: string | null) => void;
   config?: EditorConfig;
   pageContext?: PageContext;
+  /* Suggesting mode — when true, inline text edits are captured as tracked changes rendered
+     LIVE (mid-keystroke) via a beforeinput controller, instead of committing. The del/ins
+     appears instantly as the user types; `onSuggestChange` reports the change per block. */
+  suggesting?: boolean;
+  suggestAuthor?: { name: string; color?: string };
+  onSuggestChange?: (blockId: string, change: { original: string; replacement: string; offset: number } | null) => void;
 }) {
   const cfg = config || {};
   const slashOn = cfg.slashMenu !== false && !readOnly;
@@ -590,6 +602,181 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
     if (target) range.setStart(target, pos); else { range.selectNodeContents(el); range.collapse(false); }
     range.collapse(true); sel.removeAllRanges(); sel.addRange(range);
   };
+
+  /* ── LIVE TRACKED CHANGES (suggesting mode) ────────────────────────────────────────────
+     Word/Google-Docs suggest-mode renders the strikethrough + coloured insertion INSTANTLY as
+     you type — not on blur, not debounced. A contenteditable can't do that by itself: letting
+     the browser edit the DOM would drop the removed text (nothing left to strike) and rewriting
+     innerHTML afterwards destroys the caret. So this OWNS the edit: every text input is
+     intercepted at `beforeinput`, applied to an explicit model, re-rendered, and the caret is
+     restored synchronously in the same event — zero deferral, zero debounce.
+
+     The model for the block being edited, where prefix + deleted + suffix === the COMMITTED
+     text (never mutated) and prefix + inserted + suffix === the suggested text:
+       prefix | <del>deleted</del><ins>inserted</ins> | suffix        caret = index in `inserted`
+     React never fights this: the block is focused, so the render guard leaves its DOM alone. */
+  const sEdit = React.useRef<{ blockId: string; prefix: string; deleted: string; inserted: string; suffix: string; caret: number } | null>(null);
+
+  const trackedHtml = (st: { prefix: string; deleted: string; inserted: string; suffix: string }) => {
+    const who = suggestAuthor?.name ? esc(suggestAuthor.name) : "";
+    const kind = st.deleted && st.inserted ? " · edit" : st.inserted ? " · insertion" : " · deletion";
+    const attrs = who ? ` data-author="${who}" title="${who}${kind}"` : "";
+    /* NO contenteditable=false here (unlike the settled widget): a nested editable island loses
+       focus the moment innerHTML is replaced, which would swallow every keystroke after the
+       first. This controller intercepts every edit anyway, so the block stays ONE editable host
+       and the caret can sit naturally inside the <ins>. */
+    const chg = st.deleted || st.inserted
+      ? `<span class="ne-chg is-live" data-cid="${LIVE_CID}"${attrs}><del>${inlineMd(esc(st.deleted))}</del><ins>${inlineMd(esc(st.inserted))}</ins></span>`
+      : "";
+    return inlineMd(esc(st.prefix)) + chg + inlineMd(esc(st.suffix));
+  };
+
+  // put the caret back exactly where the edit left it: inside <ins> at `caret`, or — when there
+  // is no insertion (a pure deletion) — immediately after the struck text, at the suffix start.
+  const placeTrackedCaret = (el: HTMLElement, st: { inserted: string; caret: number }) => {
+    const sel = window.getSelection(); if (!sel) return;
+    const range = document.createRange();
+    const ins = el.querySelector("ins");
+    const span = el.querySelector(".ne-chg");
+    if (st.inserted.length > 0 && ins?.firstChild) {
+      const t = ins.firstChild as Text;
+      range.setStart(t, Math.max(0, Math.min(st.caret, (t.textContent || "").length)));
+    } else if (span) {
+      const after = span.nextSibling;
+      if (after && after.nodeType === Node.TEXT_NODE) range.setStart(after, 0);
+      else range.setStartAfter(span);
+    } else { range.selectNodeContents(el); range.collapse(false); }
+    range.collapse(true); sel.removeAllRanges(); sel.addRange(range);
+  };
+
+  // start (or resume) tracking this block: seed the model from the committed text + any change
+  // already pending on it, and map the live caret into `inserted`
+  const ensureSuggestEdit = (blockId: string, el: HTMLElement) => {
+    if (sEdit.current?.blockId === blockId) return;
+    const b = blocks.find((x) => x.id === blockId);
+    const text = b && "text" in b ? (b as { text: string }).text : "";
+    const existing = pendingChanges.find((c) => c.blockId === blockId);
+    const caretAt = caretText(el).before.length;
+    if (existing) {
+      const prefix = text.slice(0, existing.offset ?? 0);
+      const deleted = existing.original;
+      const inserted = existing.replacement;
+      const suffix = text.slice((existing.offset ?? 0) + existing.original.length);
+      const insStart = prefix.length + deleted.length;
+      sEdit.current = { blockId, prefix, deleted, inserted, suffix, caret: Math.max(0, Math.min(inserted.length, caretAt - insStart)) };
+    } else {
+      sEdit.current = { blockId, prefix: text.slice(0, caretAt), deleted: "", inserted: "", suffix: text.slice(caretAt), caret: 0 };
+    }
+  };
+
+  // render + restore caret + report the change — all synchronously inside the input event
+  const commitSuggest = (el: HTMLElement) => {
+    const st = sEdit.current; if (!st) return;
+    el.innerHTML = trackedHtml(st);
+    // replacing innerHTML can drop focus; take it back BEFORE restoring the caret so the next
+    // keystroke lands in this block (otherwise only the first character is ever captured)
+    if (document.activeElement !== el) el.focus({ preventScroll: true });
+    placeTrackedCaret(el, st);
+    onSuggestChange?.(st.blockId, st.deleted || st.inserted ? { original: st.deleted, replacement: st.inserted, offset: st.prefix.length } : null);
+  };
+
+  /* keep the model's caret in step with where the user actually clicked: the caret is only
+     authoritative while it sits inside the insertion — before anything is typed we re-split the
+     committed text at the live caret so the edit starts where they put it. */
+  const syncSuggestCaret = (el: HTMLElement, st: NonNullable<typeof sEdit.current>) => {
+    const caretAt = caretText(el).before.length;
+    if (!st.deleted && !st.inserted) {
+      const full = st.prefix + st.suffix;
+      const at = Math.max(0, Math.min(full.length, caretAt));
+      st.prefix = full.slice(0, at); st.suffix = full.slice(at); st.caret = 0;
+      return;
+    }
+    const insStart = st.prefix.length + st.deleted.length;
+    st.caret = Math.max(0, Math.min(st.inserted.length, caretAt - insStart));
+  };
+
+  /* fold a non-collapsed selection into the model as a deletion, so "select some words and type"
+     (the substitution case) strikes the old text and colours the new one in one gesture */
+  const foldSelection = (el: HTMLElement, st: NonNullable<typeof sEdit.current>) => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    const r = sel.getRangeAt(0);
+    const pre = r.cloneRange(); pre.selectNodeContents(el); pre.setEnd(r.startContainer, r.startOffset);
+    const start = pre.toString().length;
+    const end = start + r.toString().length;
+    const insStart = st.prefix.length + st.deleted.length;
+    const insEnd = insStart + st.inserted.length;
+    // the part of the selection inside the insertion is simply removed (it was never committed)
+    const iFrom = Math.max(0, Math.min(st.inserted.length, start - insStart));
+    const iTo = Math.max(0, Math.min(st.inserted.length, end - insStart));
+    if (iTo > iFrom) { st.inserted = st.inserted.slice(0, iFrom) + st.inserted.slice(iTo); st.caret = iFrom; }
+    // committed text caught on either side becomes struck-through
+    if (start < st.prefix.length) {
+      const cut = st.prefix.slice(start);
+      st.deleted = cut + st.deleted; st.prefix = st.prefix.slice(0, start); st.caret = Math.min(st.caret, st.inserted.length);
+    }
+    if (end > insEnd) {
+      const take = Math.min(st.suffix.length, end - insEnd);
+      st.deleted = st.deleted + st.suffix.slice(0, take); st.suffix = st.suffix.slice(take);
+    }
+    if (st.inserted.length === 0) st.caret = 0;
+  };
+
+  /* the interception itself — one delegated native listener (React's synthetic onBeforeInput
+     does not carry a reliable inputType). Only text-bearing edits are taken over. */
+  React.useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !suggesting || readOnly) return;
+    const onBeforeInput = (ev: Event) => {
+      const e = ev as InputEvent;
+      const target = e.target as HTMLElement | null;
+      const el = target?.closest?.(".ne-block") as HTMLElement | null;
+      if (!el || !root.contains(el)) return;
+      const blockId = Object.keys(elRefs.current).find((k) => elRefs.current[k] === el);
+      if (!blockId) return;
+      const b = blocks.find((x) => x.id === blockId);
+      if (!b || !TEXTLIKE.has(b.type)) return;   // code/table/image keep their own editing
+      const it = e.inputType;
+
+      if (it === "insertParagraph" || it === "insertLineBreak") {
+        // finalise the tracked edit and open a fresh line (structural edits are not tracked in v1)
+        e.preventDefault();
+        sEdit.current = null;
+        const idx = blocks.findIndex((x) => x.id === b.id);
+        const nb: Block = { id: bid(), type: "p", text: "" };
+        const next = [...blocks]; next.splice(idx + 1, 0, nb); update(next); focusBlock(nb.id);
+        return;
+      }
+      const isInsert = it === "insertText" || it === "insertFromPaste" || it === "insertReplacementText";
+      const isDelBack = it === "deleteContentBackward" || it === "deleteWordBackward";
+      const isDelFwd = it === "deleteContentForward" || it === "deleteWordForward";
+      if (!isInsert && !isDelBack && !isDelFwd) return;   // composition & the rest fall through
+
+      const data = it === "insertFromPaste" ? (e.dataTransfer?.getData("text/plain") ?? "") : (e.data ?? "");
+      e.preventDefault();
+      ensureSuggestEdit(blockId, el);
+      const st = sEdit.current!;
+      syncSuggestCaret(el, st);
+      foldSelection(el, st);
+      if (isInsert) {
+        if (!data) { commitSuggest(el); return; }
+        st.inserted = st.inserted.slice(0, st.caret) + data + st.inserted.slice(st.caret);
+        st.caret += data.length;
+      } else if (isDelBack) {
+        if (st.caret > 0) { st.inserted = st.inserted.slice(0, st.caret - 1) + st.inserted.slice(st.caret); st.caret -= 1; }
+        else if (st.prefix.length > 0) { st.deleted = st.prefix.slice(-1) + st.deleted; st.prefix = st.prefix.slice(0, -1); }
+      } else {
+        if (st.caret < st.inserted.length) st.inserted = st.inserted.slice(0, st.caret) + st.inserted.slice(st.caret + 1);
+        else if (st.suffix.length > 0) { st.deleted = st.deleted + st.suffix.slice(0, 1); st.suffix = st.suffix.slice(1); }
+      }
+      commitSuggest(el);
+    };
+    root.addEventListener("beforeinput", onBeforeInput);
+    return () => root.removeEventListener("beforeinput", onBeforeInput);
+  });
+
+  // leaving the block ends the tracked edit; the change already lives in the model
+  React.useEffect(() => { if (!suggesting) sEdit.current = null; }, [suggesting]);
 
   // anchor the slash menu to the caret (the "/"), and keep it inside the viewport
   function caretAnchor(blockId: string) {
