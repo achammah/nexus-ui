@@ -327,10 +327,10 @@ import { SEED_CONTRACT_NAME, SEED_CONTRACT_PDF_BASE64 } from "./seed-pdf";
  *  first-time visitor staring at a greyed-out palette with nothing to do. */
 export type EsignSeedState = "draft" | "sent" | "completed";
 
-export const ESIGN_SEED_STATES: Array<{ id: EsignSeedState; label: string; hint: string }> = [
-  { id: "draft", label: "Draft", hint: "Editable — place fields, edit signers, send" },
-  { id: "sent", label: "Partially signed", hint: "Provider signed; the client's turn" },
-  { id: "completed", label: "Completed", hint: "Both signed, certificate issued" },
+export const ESIGN_SEED_STATES: Array<{ id: EsignSeedState; label: string; short: string; hint: string }> = [
+  { id: "draft", label: "Draft", short: "Draft", hint: "Editable — place fields, edit signers, send" },
+  { id: "sent", label: "Partially signed", short: "Signing", hint: "Provider signed; the client's turn" },
+  { id: "completed", label: "Completed", short: "Done", hint: "Both signed, certificate issued" },
 ];
 
 /** seedEnvelope — the flagship demo AND deterministic journey fixture: a real

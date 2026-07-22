@@ -562,6 +562,9 @@ export default function ESignSurface({
             onChange={(e) => commit((cur) => ({ ...cur, name: e.target.value }))}
           />
           <span className={`nxEsStatus is-${env.status}`} data-testid="esign-status">{STATUS_LABEL[env.status]}</span>
+          {signer && tab === "sign" && (
+            <span className="nxEsSigningAs">Signing as <strong>{signer.name}</strong></span>
+          )}
         </div>
         <nav className="nxEsTabsNav" role="tablist" aria-label="E-signature stages">
           {(["prepare", "sign", "audit"] as Tab[]).map((t) => (
@@ -602,7 +605,8 @@ export default function ESignSurface({
                   onClick={() => loadSeedState(s.id)}
                   data-testid={`esign-demo-${s.id}`}
                 >
-                  {s.label}
+                  <span className="nxEsSegFull">{s.label}</span>
+                  <span className="nxEsSegShort">{s.short}</span>
                 </button>
               ))}
             </div>
@@ -934,21 +938,25 @@ export default function ESignSurface({
 
         {/* document canvas */}
         <div className="nxEsCanvasWrap">
-          <div className="nxEsCanvasBar">
-            <div className="nxEsPageNav">
-              <button type="button" className="nxEsIconBtn" aria-label="Previous page" disabled={pageIndex <= 0} onClick={() => gotoPage(pageIndex - 1)}><ChevronLeft size={16} /></button>
-              <span className="nxEsPageLabel">Page {Math.min(pageIndex + 1, Math.max(pages.length, 1))} / {Math.max(pages.length, env.document?.pageCount ?? 0, 1)}</span>
-              <button type="button" className="nxEsIconBtn" aria-label="Next page" disabled={pageIndex >= pages.length - 1} onClick={() => gotoPage(pageIndex + 1)}><ChevronRight size={16} /></button>
+          {/* viewer controls ride OVER the document instead of taking a
+              full-width band of their own — they govern the page, not the
+              surface, and a third stacked header bar is what makes an embedded
+              surface read as a widget dropped into the page */}
+          {env.document && (
+            <div className="nxEsViewerBar" role="toolbar" aria-label="Document view">
+              <div className="nxEsPageNav">
+                <button type="button" className="nxEsIconBtn" aria-label="Previous page" disabled={pageIndex <= 0} onClick={() => gotoPage(pageIndex - 1)}><ChevronLeft size={16} /></button>
+                <span className="nxEsPageLabel">Page {Math.min(pageIndex + 1, Math.max(pages.length, 1))} / {Math.max(pages.length, env.document?.pageCount ?? 0, 1)}</span>
+                <button type="button" className="nxEsIconBtn" aria-label="Next page" disabled={pageIndex >= pages.length - 1} onClick={() => gotoPage(pageIndex + 1)}><ChevronRight size={16} /></button>
+              </div>
+              <span className="nxEsViewerSep" aria-hidden />
+              <div className="nxEsZoom">
+                <button type="button" className="nxEsIconBtn" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoomManual((z) => Math.max(ZOOM_MIN, +(z - 0.15).toFixed(2)))}><Minus size={15} /></button>
+                <span className="nxEsPageLabel">{Math.round(zoom * 100)}%</span>
+                <button type="button" className="nxEsIconBtn" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoomManual((z) => Math.min(ZOOM_MAX, +(z + 0.15).toFixed(2)))}><Plus size={15} /></button>
+              </div>
             </div>
-            {signer && tab === "sign" && (
-              <span className="nxEsSigningAs">Signing as <strong>{signer.name}</strong></span>
-            )}
-            <div className="nxEsZoom">
-              <button type="button" className="nxEsIconBtn" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoomManual((z) => Math.max(ZOOM_MIN, +(z - 0.15).toFixed(2)))}><Minus size={15} /></button>
-              <span className="nxEsPageLabel">{Math.round(zoom * 100)}%</span>
-              <button type="button" className="nxEsIconBtn" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoomManual((z) => Math.min(ZOOM_MAX, +(z + 0.15).toFixed(2)))}><Plus size={15} /></button>
-            </div>
-          </div>
+          )}
           <div className="nxEsScroll" ref={scrollRef} data-testid="esign-scroll">
             {!env.document && (
               <div className="nxEsEmpty">
