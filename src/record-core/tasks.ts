@@ -137,7 +137,7 @@ export function taskObjectConfig(opts: TaskConfigOptions = {}): ObjectConfig {
     views: opts.views ?? [
       { type: "focus", newTaskStatus: "Todo" },
       { type: "table" },
-      { type: "kanban", groupField: TASK_KEYS.status },
+      { type: "kanban", groupField: TASK_KEYS.status, cardFields: [TASK_KEYS.assignee, TASK_KEYS.priority, TASK_KEYS.dueDate] },
       { type: "timeline" },
       { type: "calendar", startDateField: TASK_KEYS.startDate, endDateField: TASK_KEYS.dueDate },
     ],
