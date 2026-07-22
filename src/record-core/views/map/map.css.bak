@@ -985,7 +985,7 @@
 }
 
 @media (max-width: 768px) {
-  /* a sheet must sit above the map chrome — the collapsed legend chip was
+  /* a sheet覆 must sit above the map chrome — the collapsed legend chip was
      painting over the basemap sheet */
   .nxMapTypePanel, .nxMapLayersPanel { z-index: 60; }
   .nxMapLegend { z-index: 3; }
