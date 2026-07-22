@@ -4,7 +4,6 @@ import {
   Background,
   BackgroundVariant,
   ConnectionMode,
-  Controls,
   MarkerType,
   MiniMap,
   Panel,
@@ -63,6 +62,7 @@ import {
   FlowActionsContext,
   GroupNodeData,
   HubNodeData,
+  inlineTitleType,
   nodeAccent,
   nodeTitle,
   RecordNodeData,
@@ -71,6 +71,8 @@ import {
   type FlowNode,
 } from "./nodes";
 import { optionMeta } from "../../options";
+import FlowContextMenu, { type FlowMenuState } from "./FlowContextMenu";
+import FlowControls from "./FlowControls";
 import NodeDetailPanel from "./NodeDetailPanel";
 
 /* FlowView — an object's records as a full-fidelity node graph. Builds ON the v1
@@ -123,7 +125,7 @@ export default function FlowView(props: ViewProps) {
 }
 
 function FlowCanvas({ object, rows, readOnly, viewConfig, viewState, onViewState, onOpen, onPatch, onCreateDraft, onCreate, onDelete }: ViewProps) {
-  const { fitView, setCenter, getNode } = useReactFlow();
+  const { fitView, setCenter, getNode, screenToFlowPosition } = useReactFlow();
   const isMobile = useIsMobile();
   // the canvas pane's REAL pixel size (0 until it mounts + lays out — the flow
   // view often mounts below the fold on mobile, so a fit fired too early runs
@@ -157,6 +159,11 @@ function FlowCanvas({ object, rows, readOnly, viewConfig, viewState, onViewState
   const activeField = object.fields.find((f) => f.key === relationKey);
   const selfRelation = !!activeField && (activeField.relation === object.key);
   const connectable = configEdgeDraw(viewConfig) && !readOnly && selfRelation;
+
+  /* layout lock (the zoom cluster's toggle): pan/zoom/open stay live, moving
+     nodes + drawing edges pause — rendered only when it governs something */
+  const [locked, setLocked] = React.useState(false);
+  const lockable = (!readOnly && !grouped) || connectable;
 
   const secondaryKey = typeof viewConfig.secondaryRelationField === "string" ? viewConfig.secondaryRelationField : "";
   // skip the overlay when it names the ACTIVE relation (else the same links draw twice)
@@ -467,9 +474,106 @@ function FlowCanvas({ object, rows, readOnly, viewConfig, viewState, onViewState
     else if (onCreate) void onCreate(prefill);
   }, [onCreateDraft, onCreate, labelField, object]);
 
+  /* ---- right-click editor menu (canvas add-typed-node · node edit actions) ---- */
+  const typeField = shapeField ?? colorField; // the select field that DEFINES a node's "type"
+  const [menu, setMenu] = React.useState<FlowMenuState>(null);
+  const closeMenu = React.useCallback(() => setMenu(null), []);
+  const [renameRequest, setRenameRequest] = React.useState<string | null>(null);
+  const onRenameHandled = React.useCallback(() => setRenameRequest(null), []);
+
+  /* persist a created node's position so its card centers on the cursor —
+     the same viewState path node-drag persists through (flat mode only:
+     grouped positions are derived) */
+  const persistPosAt = React.useCallback(
+    (id: string, at: { x: number; y: number }) => {
+      if (grouped) return;
+      const p = screenToFlowPosition(at);
+      onViewState(positionsPatch(viewState, relationKey, { [id]: { x: Math.round(p.x - NODE_W / 2), y: Math.round(p.y - NODE_H / 2) } }));
+    },
+    [grouped, screenToFlowPosition, onViewState, viewState, relationKey],
+  );
+
+  const menuAdd = React.useCallback(
+    async (at: { x: number; y: number }, type?: string) => {
+      const prefill: Record<string, unknown> = { [labelField.key]: `New ${type ?? object.labelOne}` };
+      if (type && typeField) prefill[typeField.key] = type;
+      if (onCreateDraft) { onCreateDraft(prefill); return; } // record-view draft path (addNode's preference)
+      if (!onCreate) return;
+      const row = await onCreate(prefill);
+      if (row && row.id != null) {
+        persistPosAt(String(row.id), at);
+        setAnnounced(`${String(prefill[labelField.key])} added`);
+      }
+    },
+    [labelField, object, typeField, onCreateDraft, onCreate, persistPosAt],
+  );
+
+  const menuChangeType = React.useCallback(
+    (id: string, value: string) => {
+      if (!typeField || !onPatch) return;
+      onPatch(id, { [typeField.key]: value });
+      setAnnounced(`${typeField.label} set to ${value}`);
+    },
+    [typeField, onPatch],
+  );
+
+  const menuDuplicate = React.useCallback(
+    async (id: string) => {
+      const row = rows.find((r) => String(r.id) === id);
+      if (!row) return;
+      const body: Record<string, unknown> = {};
+      for (const f of object.fields) {
+        if (f.isActive === false) continue;
+        if (f.type === "relation") {
+          const refs = row._refs && (row._refs as Record<string, unknown>)[f.key];
+          if (refs !== undefined) body[f.key] = refs;
+        } else if (row[f.key] !== undefined) body[f.key] = row[f.key];
+      }
+      body[labelField.key] = `${nodeTitle({ row, labelField, metaFields, i: 0, shape: "rounded" })} copy`;
+      if (!onCreate) { onCreateDraft?.(body); return; } // draft-prefilled duplicate on the record view
+      const created = await onCreate(body);
+      if (created && created.id != null && !grouped) {
+        const src = persisted[id] ?? flatLayout[id];
+        if (src) onViewState(positionsPatch(viewState, relationKey, { [String(created.id)]: { x: src.x + 28, y: src.y + 28 } }));
+      }
+      setAnnounced(`${String(body[labelField.key])} created`);
+    },
+    [rows, object, labelField, metaFields, onCreate, onCreateDraft, grouped, persisted, flatLayout, onViewState, viewState, relationKey],
+  );
+
+  /* create a node pre-linked to the right-clicked one (self-relation graphs):
+     the child ranks under the parent exactly as a drawn edge would */
+  const menuAddConnected = React.useCallback(
+    async (parentId: string, at: { x: number; y: number }) => {
+      if (!onCreate || !onPatch || !activeField) return;
+      const prefill: Record<string, unknown> = { [labelField.key]: `New ${object.labelOne}` };
+      const parent = rows.find((r) => String(r.id) === parentId);
+      if (typeField && parent && parent[typeField.key] !== undefined) prefill[typeField.key] = parent[typeField.key];
+      const row = await onCreate(prefill);
+      if (!row || row.id == null) return;
+      onPatch(String(row.id), { [relationKey]: activeField.multiple ? [parentId] : parentId });
+      if (!grouped) {
+        const src = persisted[parentId] ?? flatLayout[parentId];
+        if (src) onViewState(positionsPatch(viewState, relationKey, { [String(row.id)]: { x: src.x, y: src.y + NODE_H + 64 } }));
+        else persistPosAt(String(row.id), at);
+      }
+      setAnnounced("Connected node added");
+    },
+    [onCreate, onPatch, activeField, labelField, object, rows, typeField, relationKey, grouped, persisted, flatLayout, onViewState, viewState, persistPosAt],
+  );
+
+  const menuDelete = React.useCallback(
+    (id: string) => {
+      if (!onDelete) return;
+      onDelete(id);
+      setAnnounced("Deleted");
+    },
+    [onDelete],
+  );
+
   const actions = React.useMemo<FlowActions>(
-    () => ({ editable: handEdit, connectable, colorField, onCommitTitle, onResize, onOpenDetail: openTarget, onToggleGroup }),
-    [handEdit, connectable, colorField, onCommitTitle, onResize, openTarget, onToggleGroup],
+    () => ({ editable: handEdit, connectable, colorField, onCommitTitle, onResize, onOpenDetail: openTarget, onToggleGroup, renameRequest, onRenameHandled }),
+    [handEdit, connectable, colorField, onCommitTitle, onResize, openTarget, onToggleGroup, renameRequest, onRenameHandled],
   );
 
   /* keyboard: Enter/Space on a focused node opens it; arrows move focus to the
@@ -540,8 +644,8 @@ function FlowCanvas({ object, rows, readOnly, viewConfig, viewState, onViewState
           onNodeDragStop={onNodeDragStop}
           onConnect={onConnect}
           connectionMode={ConnectionMode.Loose}
-          nodesDraggable={!readOnly && !grouped}
-          nodesConnectable={connectable}
+          nodesDraggable={!readOnly && !grouped && !locked}
+          nodesConnectable={connectable && !locked}
           elementsSelectable
           selectNodesOnDrag={false}
           multiSelectionKeyCode="Shift"
@@ -555,6 +659,25 @@ function FlowCanvas({ object, rows, readOnly, viewConfig, viewState, onViewState
           onlyRenderVisibleElements
           proOptions={{ hideAttribution: true }}
           defaultMarkerColor={null as unknown as string}
+          onPaneContextMenu={(e) => {
+            if (!handEdit || !canAdd) return; // read-only canvas keeps the browser menu
+            e.preventDefault();
+            setMenu({ kind: "pane", x: (e as React.MouseEvent).clientX, y: (e as React.MouseEvent).clientY });
+          }}
+          onNodeContextMenu={(e, node) => {
+            if (!handEdit || node.type !== "record") return;
+            e.preventDefault();
+            const row = rows.find((r) => String(r.id) === node.id);
+            setMenu({
+              kind: "node",
+              x: e.clientX,
+              y: e.clientY,
+              nodeId: node.id,
+              nodeTitle: nodeTitle(node.data as RecordNodeData),
+              typeValue: typeField && row ? String(row[typeField.key] ?? "") : undefined,
+            });
+          }}
+          onMoveStart={() => setMenu(null)}
         >
           <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
 
@@ -641,9 +764,7 @@ function FlowCanvas({ object, rows, readOnly, viewConfig, viewState, onViewState
             </Panel>
           )}
 
-          <div style={{ display: "contents" }} data-testid="flow-controls">
-            <Controls showInteractive={false} orientation="horizontal" />
-          </div>
+          <FlowControls fitOpts={fitOpts} lockable={lockable} locked={locked} onToggleLock={() => setLocked((v) => !v)} />
           <div style={{ display: "contents" }} data-testid="flow-minimap">
             <MiniMap
               pannable
@@ -659,6 +780,23 @@ function FlowCanvas({ object, rows, readOnly, viewConfig, viewState, onViewState
             />
           </div>
         </ReactFlow>
+
+        <FlowContextMenu
+          menu={menu}
+          onClose={closeMenu}
+          typeField={typeField}
+          canAdd={canAdd}
+          canRename={handEdit && inlineTitleType(labelField.type)}
+          canDuplicate={handEdit && (!!onCreate || !!onCreateDraft)}
+          canConnect={handEdit && selfRelation && !!onCreate && !!onPatch}
+          canDelete={handEdit && !!onDelete}
+          onAddNode={(at, type) => void menuAdd(at, type)}
+          onChangeType={menuChangeType}
+          onRename={setRenameRequest}
+          onDuplicate={(id) => void menuDuplicate(id)}
+          onAddConnected={(id, at) => void menuAddConnected(id, at)}
+          onDelete={menuDelete}
+        />
 
         {detailRow && (
           <NodeDetailPanel

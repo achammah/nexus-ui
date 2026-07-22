@@ -153,9 +153,14 @@
 /* host actions inside the vendor toolbar band: reserve its right end so Univer's
    overflow math never lays commands under the cluster, then overlay the cluster
    in the reserved inset. The strip itself stays click-through. */
-.nxWorkbook--hostActions .nxWorkbookMount [data-u-comp="ribbon-toolbar"] {
+.nxWorkbook--hostActions .nxWorkbookMount [data-u-comp="ribbon-toolbar"],
+.nxWorkbook--io .nxWorkbookMount [data-u-comp="ribbon-toolbar"] {
   margin-right: var(--nxwb-actions-w);
 }
+/* the import/export cluster widens the reserved inset (each combo gets exactly the
+   room its band needs, so Univer's overflow math never lays commands underneath) */
+.nxWorkbook--io:not(.nxWorkbook--hostActions) { --nxwb-actions-w: 186px; }
+.nxWorkbook--io.nxWorkbook--hostActions { --nxwb-actions-w: 364px; }
 .nxWorkbookActions {
   position: absolute;
   top: 0;
@@ -186,6 +191,104 @@
 }
 .nxWorkbookSave[data-state="saved"] { color: var(--nx-accent); background: var(--nx-accent-soft); }
 .nxWorkbookSave:empty { display: none; }
+
+/* import/export cluster — sits at the left of the actions band, in the app's icon
+   language; the buttons are the house ghost buttons so they read as native chrome */
+.nxWorkbookIO {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.nxWorkbookIOItem { display: inline-flex; align-items: center; gap: 8px; }
+
+/* toolbar-native ghost button — transparent at rest, sunken on hover, accent focus
+   ring; icon-left + label inline, sized to sit inside the 40px toolbar band */
+.nxWorkbookIOBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--nx-fg-muted);
+  font-family: var(--nx-font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.nxWorkbookIOBtn:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxWorkbookIOBtn:active { background: color-mix(in srgb, var(--nx-fg) 8%, var(--nx-bg-sunken)); }
+.nxWorkbookIOBtn:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; color: var(--nx-fg); }
+.nxWorkbookIOBtn svg { width: 15px; height: 15px; flex: none; }
+.nxWorkbookIOBtn .nxSpin { width: 14px; height: 14px; }
+
+/* transient result of an import/export — a quiet pill, colored by outcome, that
+   auto-dismisses; role="status" announces it to assistive tech */
+.nxWorkbookIOStatus {
+  /* detached from the button row (so a long result never pushes the buttons over the
+     vendor toolbar) — a transient pill just under the toolbar, right-aligned */
+  position: absolute;
+  top: calc(var(--nxwb-toolbar-h) + 4px);
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--nx-bg-sunken);
+  color: var(--nx-fg-muted);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  z-index: 25;
+  animation: nxRiseIn 0.18s ease both;
+}
+.nxWorkbookIOStatus[data-kind="ok"] { color: var(--nx-ok, var(--nx-accent)); background: color-mix(in srgb, var(--nx-ok, var(--nx-accent)) 12%, var(--nx-bg-raised)); }
+.nxWorkbookIOStatus[data-kind="err"] { color: var(--nx-danger); background: color-mix(in srgb, var(--nx-danger) 12%, var(--nx-bg-raised)); }
+/* inline import-confirm strip (replaces the Import/Export cluster while a file waits).
+   A floating opaque pill so it never visually collides with the vendor toolbar it
+   overlaps while open. */
+.nxWorkbookIO--confirm {
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: 10px;
+  box-shadow: var(--nx-shadow-md, 0 4px 14px rgba(0, 0, 0, 0.12));
+  animation: nxPopIn 0.16s ease both;
+}
+.nxWorkbookIOConfirmText {
+  font-size: 12px;
+  color: var(--nx-fg);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nxWorkbookIOBtn--primary {
+  color: var(--nx-accent-fg, white);
+  background: var(--nx-accent);
+  font-weight: 600;
+  padding: 0 12px;
+}
+.nxWorkbookIOBtn--primary:hover { background: color-mix(in srgb, var(--nx-accent) 88%, black); color: var(--nx-accent-fg, white); }
+
+/* the export menu portals to <body> and drops OVER Univer's formula-bar band, whose
+   editor canvas sits in Univer's own stacking context (z ~8) and would otherwise
+   swallow the menu-item clicks. Radix leaves the popper wrapper at z:auto, so lift it
+   above Univer's inline chrome (still below Univer's own high-z popups, which never
+   co-occur with this menu). Present only while the workbook block's CSS is loaded. */
+[data-radix-popper-content-wrapper] { z-index: 60 !important; }
+
+/* on a phone the labels would crowd the toolbar — collapse the IO buttons to icons */
+@media (max-width: 640px) {
+  .nxWorkbookIOLabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+}
 
 /* overlay states share one centered layer over the host */
 .nxWorkbookOverlay {
@@ -228,6 +331,154 @@
 }
 .nxWorkbook .nxWorkbookMount [data-u-comp="ribbon-toolbar"] button:not(:hover):not([data-state="on"]) svg {
   color: var(--nx-fg-muted);
+}
+
+/* ---- native chrome: the icon swap's DOM counterpart ----
+   workbook-icons.tsx re-registers every registry-resolved glyph in the app's icon
+   language; the rules below finish the job on the CHROME around them. Popups
+   portal to <body>, so the few rules that must reach them sit at global scope
+   (same contract as the --univer-* value tables above). */
+
+/* toolbar buttons: app hit-area vocabulary — small radius, raised hover (the
+   sidebar pattern: sunken chrome, raised active), fast transitions */
+.nxWorkbook .nxWorkbookMount [data-u-comp="ribbon-toolbar"] button {
+  border-radius: var(--nx-radius-s);
+  transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease);
+}
+.nxWorkbook .nxWorkbookMount [data-u-comp="ribbon-toolbar"] button:hover {
+  background: var(--nx-bg-raised);
+}
+
+/* Hardwired stock glyphs (direct imports the registry swap cannot reach): repaint
+   each as a currentColor STENCIL — original paths hidden, the element itself
+   becomes the glyph via mask — so the dropdown carets (the single most repeated
+   mark on the surface), ±, ×, ✓, ⋯/⋮, the sheet-list and lock all speak the same
+   stroke grammar as the swapped set. Global scope: several live in portaled
+   popups/dialogs (the univerjs-icon-* classes are unambiguous). The one keeper is
+   the formula bar's "fx" — universal spreadsheet vocabulary, restyled not
+   reshaped. */
+svg.univerjs-icon-more-down-icon,
+svg.univerjs-icon-dropdown-icon,
+svg.univerjs-icon-more-left-icon,
+svg.univerjs-icon-more-right-icon,
+svg.univerjs-icon-more-icon,
+svg.univerjs-icon-more-function-icon,
+svg.univerjs-icon-check-mark-icon,
+svg.univerjs-icon-close-icon,
+svg.univerjs-icon-increase-icon,
+svg.univerjs-icon-reduce-icon,
+svg.univerjs-icon-convert-icon,
+svg.univerjs-icon-protect-icon {
+  background-color: currentColor;
+  -webkit-mask: var(--nxwb-mask) center / 100% 100% no-repeat;
+          mask: var(--nxwb-mask) center / 100% 100% no-repeat;
+}
+svg.univerjs-icon-more-down-icon > *,
+svg.univerjs-icon-dropdown-icon > *,
+svg.univerjs-icon-more-left-icon > *,
+svg.univerjs-icon-more-right-icon > *,
+svg.univerjs-icon-more-icon > *,
+svg.univerjs-icon-more-function-icon > *,
+svg.univerjs-icon-check-mark-icon > *,
+svg.univerjs-icon-close-icon > *,
+svg.univerjs-icon-increase-icon > *,
+svg.univerjs-icon-reduce-icon > *,
+svg.univerjs-icon-convert-icon > *,
+svg.univerjs-icon-protect-icon > * { display: none; }
+/* chevrons (dropdown carets, sheet-bar scroll) */
+svg.univerjs-icon-more-down-icon,
+svg.univerjs-icon-dropdown-icon {
+  --nxwb-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+svg.univerjs-icon-more-left-icon {
+  --nxwb-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 18-6-6 6-6'/%3E%3C/svg%3E");
+}
+svg.univerjs-icon-more-right-icon {
+  --nxwb-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
+}
+/* overflow dots */
+svg.univerjs-icon-more-icon {
+  --nxwb-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='5' cy='12' r='1'/%3E%3Ccircle cx='12' cy='12' r='1'/%3E%3Ccircle cx='19' cy='12' r='1'/%3E%3C/svg%3E");
+}
+svg.univerjs-icon-more-function-icon {
+  --nxwb-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='5' r='1'/%3E%3Ccircle cx='12' cy='12' r='1'/%3E%3Ccircle cx='12' cy='19' r='1'/%3E%3C/svg%3E");
+}
+/* confirm / cancel / zoom steps */
+svg.univerjs-icon-check-mark-icon {
+  --nxwb-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+}
+svg.univerjs-icon-close-icon {
+  --nxwb-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E");
+}
+svg.univerjs-icon-increase-icon {
+  --nxwb-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14'/%3E%3Cpath d='M12 5v14'/%3E%3C/svg%3E");
+}
+svg.univerjs-icon-reduce-icon {
+  --nxwb-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
+}
+/* sheet list (footer) + protected marker */
+svg.univerjs-icon-convert-icon {
+  --nxwb-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12h.01'/%3E%3Cpath d='M3 18h.01'/%3E%3Cpath d='M3 6h.01'/%3E%3Cpath d='M8 12h13'/%3E%3Cpath d='M8 18h13'/%3E%3Cpath d='M8 6h13'/%3E%3C/svg%3E");
+}
+svg.univerjs-icon-protect-icon {
+  --nxwb-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='18' height='11' x='3' y='11' rx='2' ry='2'/%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'/%3E%3C/svg%3E");
+}
+
+/* formula bar: the cell-ref name box is a real input — give it the app's data
+   voice (mono refs, muted); the fx marker and the confirm/cancel cluster read
+   quiet until hovered */
+.nxWorkbook [data-u-comp="defined-name"] input {
+  font: 500 11.5px/1.2 var(--nx-font-mono);
+  letter-spacing: 0.02em;
+  color: var(--nx-fg-muted);
+}
+.nxWorkbook [data-u-comp="formula-bar"] svg.univerjs-icon-fx-icon { color: var(--nx-fg-faint); }
+.nxWorkbook [data-u-comp="formula-bar"] :is(a, span, div):has(> svg.univerjs-icon) {
+  border-radius: var(--nx-radius-s);
+  transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease);
+}
+.nxWorkbook [data-u-comp="formula-bar"] :is(a, span, div):has(> svg.univerjs-icon):hover {
+  background: var(--nx-bg-sunken);
+}
+
+/* sheet tabs: the app's underline-tab vocabulary (SettingsTabs family) instead of
+   the stock white pill — quiet meta type, accent underline on the active sheet */
+.nxWorkbook [data-u-comp="slide-tab-item"] {
+  position: relative;
+  font: var(--nx-text-meta);
+  color: var(--nx-fg-muted);
+  border-radius: var(--nx-radius-s);
+  transition: color var(--nx-t-fast) var(--nx-ease), background var(--nx-t-fast) var(--nx-ease);
+}
+.nxWorkbook [data-u-comp="slide-tab-item"]:hover { color: var(--nx-fg); background: var(--nx-bg-sunken); }
+.nxWorkbook [data-u-comp="slide-tab-item"][aria-selected="true"] {
+  color: var(--nx-fg);
+  font-weight: 600;
+  background: transparent;
+}
+.nxWorkbook [data-u-comp="slide-tab-item"][aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--nx-accent);
+}
+
+/* footer controls (add sheet, sheet list, zoom, gridline toggle): ghost buttons
+   on the app grid — muted, small radius, sunken hover */
+.nxWorkbook [data-u-comp="sheet-bar-append-button"],
+.nxWorkbook [data-u-comp="button"] {
+  border-radius: var(--nx-radius-s);
+  color: var(--nx-fg-muted);
+  transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease);
+}
+.nxWorkbook [data-u-comp="sheet-bar-append-button"]:hover,
+.nxWorkbook [data-u-comp="button"]:hover {
+  background: var(--nx-bg-sunken);
+  color: var(--nx-fg);
 }
 
 /* Mobile (>=390px): the single toolbar row scrolls through its overflow menu, the

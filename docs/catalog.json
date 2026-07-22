@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 126,
+  "count": 136,
   "items": [
     {
       "name": "accordion",
@@ -424,10 +424,10 @@
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
-      "name": "NotionEditor",
+      "name": "NotionEditor · textToBlocks · markdownToBlocks · htmlToBlocks · blocksToMarkdown · highlightCode",
       "kind": "record-core",
       "import": "src/record-core/NotionEditor.tsx",
-      "when": "Notion-grade block editor for the richText field type: hand-rolled contenteditable blocks (p/h/quote/list/divider/image/table), slash menu, drag-reorder, inline markdown, image-drop; controlled (blocks/onChange) + inline-change props for a suggestions layer",
+      "when": "Notion×Google-Docs block editor for the richText field type AND the document surface: contenteditable blocks (p/h1-3/quote/list/divider/image/table + to-do/toggle/callout/code + nested lists via a flat indent level), a slash command menu, block drag-reorder (mouse + touch), an inline formatting toolbar on selection (bold/italic/underline/strike/code/link/highlight/color), markdown shortcuts (# ▸ - [] ``` …), a dependency-free code highlighter, and Word/Google-Docs PASTE normalization (clipboard HTML → clean blocks, foreign styles stripped); config-composable (EditorConfig: which blocks/toolbar/shortcuts/slash), controlled (blocks/onChange) + inline-change props for the suggestions layer. Additive over the original Block union — every existing consumer keeps working",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
@@ -435,6 +435,20 @@
       "kind": "record-core",
       "import": "src/record-core/useSuggestions.ts",
       "when": "the accept/reject/undo engine for inline tracked changes over a Block[] document: folds an accepted change's original into replacement in the doc, tracks each change's status; entity-agnostic (no object/api coupling), pairs with SuggestionPanel + NotionEditor's inline-change props",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "DocumentOutline · outlineFromBlocks",
+      "kind": "record-core",
+      "import": "src/record-core/DocumentOutline.tsx",
+      "when": "a live table-of-contents derived from a document's headings (h1-3): click-to-scroll, active-section highlight tracked on scroll, collapsible, updates live as you edit; reads block rows by data-testid inside a passed scroll container, so it needs no editor coupling",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "blocksToHtml · inlineToHtml · exportMarkdown · exportHtml · exportPdf · exportDocx · docxBlob · importFile",
+      "kind": "record-core",
+      "import": "src/record-core/editor-io.ts",
+      "when": "import/export for the block model — all client-side, CSP-safe, MIT/permissive: export to Markdown, self-contained HTML, print-to-PDF, and Word .docx (lazy `docx`); import .docx (lazy `mammoth` → HTML → blocks), .html, and markdown. The heavy libs load ONLY on export/import, never in the base bundle",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
@@ -770,14 +784,70 @@
       "name": "WorkbookSurface · LazyWorkbookSurface",
       "kind": "wrapper",
       "import": "src/blocks/workbook/WorkbookSurface.tsx",
-      "when": "full spreadsheet workbook (Univer) rendered as a NATIVE page surface: formula bar + 400+ functions, insert/delete rows & columns, cell formatting, multiple sheets, freeze + merge, in a single-row toolbar (ribbonType simple, overflow-managed) with no card frame; host controls ride the toolbar row via the actions prop. Every piece of vendor chrome (toolbar, formula bar, sheet tabs, menus, portaled popups) resolves --nx-* tokens in light AND dark and re-derives live on theme/skin changes; free-surface (host owns the snapshot via value/onChange). The engine loads ONLY behind LazyWorkbookSurface (a ~1.5MB-gz lazy chunk), so importing the block adds nothing to the eager bundle",
+      "when": "full spreadsheet workbook (Univer) rendered as a NATIVE page surface: formula bar + 400+ functions, insert/delete rows & columns, cell formatting, multiple sheets, freeze + merge, in a single-row toolbar (ribbonType simple, overflow-managed) with no card frame; host controls ride the toolbar row via the actions prop. Every piece of vendor chrome (toolbar, formula bar, sheet tabs, menus, portaled popups) resolves --nx-* tokens in light AND dark, re-derives live on theme/skin changes, and renders the app's OWN icon language (lucide + generated stroke glyphs re-registered over Univer's registry names — workbook-icons.tsx); free-surface (host owns the snapshot via value/onChange). Excel depth is CONFIG-COMPOSABLE via the config prop (WorkbookConfig): autofilter, sort, conditional formatting, data validation, find & replace and cell notes each mount their Univer preset only when enabled, and XLSX+CSV import/export ride the toolbar band as built actions. The engine loads ONLY behind LazyWorkbookSurface (a ~1.5MB-gz lazy chunk), so importing the block adds nothing to the eager bundle",
       "source": "ours"
     },
     {
       "name": "workbookStoreKey · isWorkbookSnapshot · seedWorkbook · seedLargeWorkbook",
       "kind": "wrapper",
       "import": "src/blocks/workbook/snapshot.ts",
-      "when": "the workbook block's pure core (no @univerjs runtime, node-testable): app_state store-key namespacing, snapshot validation for a stored workbook blob, and the demo + 10k scale seed generators",
+      "when": "the workbook block's pure core (no @univerjs runtime, node-testable): app_state store-key namespacing, snapshot validation for a stored workbook blob, and the demo + 10k scale seed generators. The demo seed is 4 sheets that demonstrate the feature set on load — a Q1 budget model, an Ops table carrying the live data features (autofilter, Status dropdown, Spend colour scale, date + currency formats), a Summary sheet touring the formula library (SUMIF/COUNTIF/VLOOKUP/INDEX+MATCH/IF/TEXT/percentages, cross-sheet refs) and Notes; plugin state rides IWorkbookData.resources with payload shapes captured from Univer's own facade",
+      "source": "ours"
+    },
+    {
+      "name": "WorkbookConfig · DEFAULT_WORKBOOK_CONFIG · MINIMAL_WORKBOOK_CONFIG · resolveWorkbookConfig",
+      "kind": "wrapper",
+      "import": "src/blocks/workbook/config.ts",
+      "when": "the workbook's composability contract: one flag per Excel capability (filters, sort, conditionalFormatting, dataValidation, findReplace, notes, importExport) so a company dials the same surface from a bare grid up to full Excel. Each enabled flag adds its Univer preset (and locale) to the mount; importExport adds the built toolbar actions instead. Full-Excel defaults, a MINIMAL preset for a plain grid, and resolveWorkbookConfig() to merge a partial over the defaults",
+      "source": "ours"
+    },
+    {
+      "name": "exportWorkbookToXlsx · importXlsxToWorkbook · exportSheetToCsv · importCsvToWorkbook · triggerDownload",
+      "kind": "wrapper",
+      "import": "src/blocks/workbook/xlsx-io.ts",
+      "when": "the XLSX/CSV bridge between Univer's IWorkbookData and exceljs (MIT), lazy-loaded so the library only enters the bundle when a user actually imports or exports. Round-trips values, formulas, bold/italic/underline/strike, font size + family + colour, fill, number format, alignment, wrap, merges, column widths, row heights and frozen panes; CSV uses RFC-4180 quoting. Univer's OSS engine ships no client-side xlsx exchange, so this is the whole import/export path",
+      "source": "ours"
+    },
+    {
+      "name": "WorkbookIO · WorkbookIOController",
+      "kind": "wrapper",
+      "import": "src/blocks/workbook/workbook-actions.tsx",
+      "when": "the import/export controls that ride the workbook's own toolbar band in the app's icon language: Export drops a format menu (Excel/CSV), Import routes a picked file through an inline confirm (it REPLACES the open workbook) and both report a transient result pill positioned clear of the vendor toolbar. Talks to the engine only through a WorkbookIOController (getSnapshot / replaceWorkbook / getActiveSheetId), so the surface owns the Univer lifecycle and this stays presentational",
+      "source": "ours"
+    },
+    {
+      "name": "DocumentSurface · DocumentConfig",
+      "kind": "wrapper",
+      "import": "src/blocks/document/DocumentSurface.tsx",
+      "when": "a Notion×Google-Docs DOCUMENT as a native page surface: cover + icon + title header, a live outline rail, word/char count, page-width toggle, find & replace, and an export/import menu (Markdown / HTML / PDF / Word), wrapping the NotionEditor. Free-surface (host owns the snapshot via value/onChange), config-composable (DocumentConfig toggles every affordance), both themes, mobile-aware. Exported EAGERLY (the surface is light; its only heavy deps — docx/mammoth — are lazy inside editor-io), so a Pages host can mount a kind:document page with near-zero wiring — the same contract as WorkbookSurface",
+      "source": "ours"
+    },
+    {
+      "name": "documentStoreKey · isDocumentSnapshot · seedDocument · coverBackground · COVER_PRESETS",
+      "kind": "wrapper",
+      "import": "src/blocks/document/snapshot.ts",
+      "when": "the document block's pure core (no editor runtime, node-testable): DocumentSnapshot shape ({id,title,blocks,icon?,cover?,pageWidth?}), app_state store-key namespacing, snapshot validation for a stored blob, cover-preset gradients, and the rich demo seed (every block type + inline mark, several headings for the outline)",
+      "source": "ours"
+    },
+    {
+      "name": "PageWorkspace",
+      "kind": "wrapper",
+      "import": "src/blocks/document/PageWorkspace.tsx",
+      "when": "the standalone LINKED PAGE WORKSPACE — Notion's \"everything is a page; pages nest + reference each other\". Free-surface (value = the whole PageStore); renders the page-tree sidebar + breadcrumbs + Cmd-K quick-switcher (full-text search) + backlinks (linked references), and mounts a DocumentSurface for the active page, wiring the pageContext seam so sub-page blocks + [[page:]] links resolve/open/create against the store. This is what a Pages host mounts for a kind:document page",
+      "source": "ours"
+    },
+    {
+      "name": "PageTree",
+      "kind": "wrapper",
+      "import": "src/blocks/document/PageTree.tsx",
+      "when": "the workspace sidebar: the page hierarchy derived live from the flat store, with expand/collapse, drag-to-move (before/after/inside a target via the store's movePage), per-node actions (new sub-page, favorite, duplicate, delete) and a Favorites shelf; presentation only, host owns every mutation via callbacks",
+      "source": "ours"
+    },
+    {
+      "name": "PageStore · PageNode · createPage · movePage · duplicatePage · deletePage · breadcrumb · backlinksOf · searchPages · seedPageStore",
+      "kind": "wrapper",
+      "import": "src/blocks/document/page-store.ts",
+      "when": "the SPINE of the page workspace — a FLAT adjacency-list store (pages keyed by id, each with a parentId + fractional order + Block[] body). External-writer-tolerant (a concurrent writer patches ONE page); the tree, breadcrumbs, backlinks (link + sub-page + child kinds) and full-text search are all DERIVED by scanning the map. Links live as an inline [[page:id]] token + a `page` block. Pure + node-testable",
       "source": "ours"
     },
     {

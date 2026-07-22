@@ -20,6 +20,7 @@ export interface SuggestionPanelProps {
   onUndo: (id: string) => void;
   onAcceptAll: () => void;
   onRejectAll: () => void;
+  onComment?: (id: string, note: string) => void;   // add/replace a note on a change (optional)
   title?: string;
 }
 
@@ -33,6 +34,7 @@ export function SuggestionPanel({
   onUndo,
   onAcceptAll,
   onRejectAll,
+  onComment,
   title = "Suggestions",
 }: SuggestionPanelProps) {
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
@@ -65,7 +67,7 @@ export function SuggestionPanel({
           data-testid={`suggest-card-${ch.id}`}
         >
           <div className="nxSug-card-top">
-            <span className="nxSug-n">{String(i + 1).padStart(2, "0")}</span>
+            <span className="nxSug-n">{String(i + 1).padStart(2, "0")}{ch.author ? <span className="nxSug-author" style={ch.authorColor ? { color: ch.authorColor } : undefined}> · {ch.author}</span> : null}</span>
             {ch.kind && <span className="nxSug-kind">{ch.kind}</span>}
           </div>
           <div className="nxSug-diff">
@@ -80,6 +82,12 @@ export function SuggestionPanel({
             <button className="nxSug-more" data-testid={`suggest-more-${ch.id}`} onClick={(e) => { e.stopPropagation(); toggle(ch.id); }}>
               {expanded.has(ch.id) ? "Show less" : "Show more"}
             </button>
+          )}
+          {onComment && ch.status === "pending" && (
+            <input className="nxSug-comment" data-testid={`suggest-comment-${ch.id}`} defaultValue={ch.reason || ""}
+              placeholder="Add a note…" onClick={(e) => e.stopPropagation()}
+              onBlur={(e) => { const v = e.target.value.trim(); if (v !== (ch.reason || "")) onComment(ch.id, v); }}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
           )}
           {ch.status === "pending" ? (
             <div className="nxSug-acts">
@@ -131,6 +139,9 @@ const SUG_CSS = `
 .nxSug-more{background:none;border:0;color:var(--nx-accent);font:var(--nx-text-micro);letter-spacing:var(--nx-tracking-micro);
   text-transform:uppercase;cursor:pointer;padding:0;margin-bottom:12px}
 .nxSug-more:hover{text-decoration:underline}
+.nxSug-author{color:var(--nx-fg-muted);font-weight:600}
+.nxSug-comment{width:100%;box-sizing:border-box;margin-bottom:10px;padding:6px 9px;border:1px solid var(--nx-border);background:var(--nx-bg);color:var(--nx-fg);border-radius:var(--nx-radius-s);font:var(--nx-text-meta);outline:none;transition:border-color var(--nx-t-fast)}
+.nxSug-comment:focus{border-color:var(--nx-accent);box-shadow:0 0 0 3px var(--nx-accent-soft)}
 .nxSug-acts{display:flex;gap:7px}
 .nxSug-btn{display:inline-flex;align-items:center;gap:5px;font:var(--nx-text-micro);letter-spacing:var(--nx-tracking-micro);
   text-transform:uppercase;padding:6px 11px;border:1px solid var(--nx-border);background:var(--nx-bg-raised);color:var(--nx-fg);
