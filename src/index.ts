@@ -86,6 +86,8 @@ export * from "./blocks/mobile";
 /* blocks — full spreadsheet workbook (Univer) as a standalone surface (lazy engine) */
 export * from "./blocks/workbook";
 
+/* blocks — 3D object / floor-plan viewer (three.js) as a standalone surface (lazy engine) */
+export * from "./blocks/viewer3d";
 /* blocks — Notion×Google-Docs document as a standalone surface (light editor + outline;
    docx/mammoth lazy-loaded only on export/import) */
 export * from "./blocks/document";
