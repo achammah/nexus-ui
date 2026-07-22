@@ -1,6 +1,28 @@
 # Self-review — e-signature surface
 
-Reference products: DocuSeal (open-source, docusealco/docuseal) and DocuSign. Verified against the dev harness on port 5441 at `reducedMotion: "no-preference"`; 51/51 journeys green.
+Reference products: DocuSeal (open-source, docusealco/docuseal) and DocuSign. Verified against the dev harness on port 5441 at `reducedMotion: "no-preference"`; 51/51 base journeys + 24/24 drafting journeys green.
+
+## Round 3 — "you can't edit the document" (the toy verdict, and what changed)
+
+The user's second verdict: *"it still feels partially like a toy, because ideally you can edit a word doc directly there, same as a pdf before sending."* Accurate again — the document itself was read-only; any wording fix meant a round-trip through Word. What changed:
+
+- **DRAFTING** — the envelope now composes the document block (`DocumentSurface`: the repo's Notion×Word editor with tracked changes and docx import/export) as an Edit tab. A `.docx` dropped on the intake imports straight into it (mammoth); "Draft a document in the editor" starts from blank; the seed envelope ships with the MSA as editable text.
+- **FREEZE** — "Freeze & place fields" renders the draft to real PDF bytes (a pdf-lib paginator) and makes it the signing base. Verified end-to-end by editing "thirty (30) days" → "twenty (20) days" in the editor and extracting the text back out of the frozen PDF (pdfjs `getTextContent`): the edit is in the bytes. Pending tracked changes block the freeze; editing after a freeze marks it stale and BLOCKS SEND until re-frozen.
+- **PDF amend/redact** — for an uploaded PDF with no source, White-out + Correction tools place paper-real overlays that are baked into the PDF bytes at send (verified: bytes change, overlay list clears, `document_amended` lands in the audit, the baked PDF parses). The boundary is stated in the UI: this covers and corrects, it does not reflow the PDF's own text — full rewording needs the source document.
+- **SENT freeze** — the state machine is DRAFTING → PREPARING → SENT: after send the Edit tab flips to a read-only "Document" view (asserted: zero contenteditable regions, no freeze button, document bytes byte-identical across further UI activity). Honest limit: this freeze is CLIENT-side discipline over a client-side snapshot — anyone holding the blob can alter it. Verifiable immutability (hashing at send, sealed storage) belongs to the `onSend` backend, same as the audit record (Limits §1).
+
+Honest fidelity note: the freeze renderer is print-class (headings, lists, todos, quotes, callouts, code, simple tables, bold), deliberately not Word-identical — no columns, images as placeholders, single font family. The UI says "print-class layout, not Word-identical" rather than pretending.
+
+| New feature | Verdict | Evidence |
+|---|---|---|
+| .docx import → edit in place | ✓ verified | real docx fixture (built with `docx`) imports; heading + fee clause present; `esign-draft-docx-light.png` |
+| Edit the contract text, no Word round-trip | ✓ verified | 45→30 days edit landed in the draft, then in the frozen PDF's extracted text |
+| Freeze → signing base | ✓ verified | render + page open + fields survive (page-filtered), values/statuses reset; `esign-frozen-prepare-light.png` |
+| Stale-freeze send gate | ✓ verified | edit-after-freeze disables Send with the reason on the button title |
+| Tracked changes gate | ✓ verified | a pending suggestion blocks the freeze with a count and no `document_frozen` event lands; `esign-freeze-blocked-suggestions-light.png` |
+| PDF white-out + correction | ✓ verified | placed, typed, review discloses "2 document amendments", baked at send; `esign-amend-pdf-light.png`, `esign-amend-baked-sent-light.png` |
+| SENT immutability (client-side) | ✓ verified | read-only editor, no freeze, byte-identical document after further activity; `esign-sent-locked-draft-light.png` |
+| Draft pane light/dark/mobile | ✓ verified | `esign-draft-seed-{light,dark}.png`, `esign-draft-mobile-light.png` (0px page overflow) |
 
 The user's verdict on the first version was that it felt like a widget with all the features missing. That was accurate, and the cause was a single defect described below. This review is written after the rework, and does not claim the verdict is resolved — the user judges that.
 

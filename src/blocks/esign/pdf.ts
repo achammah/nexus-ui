@@ -255,3 +255,162 @@ export function downloadBytes(bytes: Uint8Array, filename: string): void {
 export function fieldRect(f: EsignField, pageW: number, pageH: number) {
   return { left: f.x * pageW, top: f.y * pageH, width: f.w * pageW, height: f.h * pageH };
 }
+
+/* --------------------------------------------------- drafting: blocks -> pdf */
+
+type DocBlock = import("../document/snapshot").DocumentSnapshot["blocks"][number];
+
+/** Strip the editor's inline mark syntax to plain segments, keeping BOLD as a
+ *  flag (the one mark worth carrying into the frozen render). Everything else
+ *  (links, highlight, underline, code) flattens to its text. */
+function inlineSegments(text: string): Array<{ text: string; bold: boolean }> {
+  const cleaned = text
+    .replace(/\[\[[ch]:[a-z]+\|([^\]]*)\]\]/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/(==|\+\+|~~|`)/g, "");
+  const segs: Array<{ text: string; bold: boolean }> = [];
+  let bold = false;
+  for (const part of cleaned.split(/\*\*/)) {
+    if (part) segs.push({ text: part, bold });
+    bold = !bold;
+  }
+  return segs.length ? segs : [{ text: "", bold: false }];
+}
+
+/** Render a document-block draft to real PDF bytes (the FREEZE step of the
+ *  drafting -> preparing transition). Print-class fidelity on our own layout:
+ *  headings, paragraphs, lists, todos, quotes, callouts, code, dividers and
+ *  simple tables paginate over US-Letter pages. It is deliberately NOT a
+ *  Word-identical renderer — that boundary is surfaced in the UI. */
+export async function blocksToPdfBytes(blocks: DocBlock[], title: string): Promise<Uint8Array> {
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const mono = await pdf.embedFont(StandardFonts.Courier);
+  const ink = rgb(0.11, 0.15, 0.2);
+  const soft = rgb(0.42, 0.45, 0.5);
+  const line = rgb(0.78, 0.8, 0.83);
+  const W = 612, H = 792, M = 64;
+  let page = pdf.addPage([W, H]);
+  let y = H - 76;
+  const pageNum = () => pdf.getPageCount();
+  const need = (h: number) => {
+    if (y - h < 56) {
+      page.drawText(`Page ${pageNum()}`, { x: W / 2 - 18, y: 40, size: 9, font, color: soft });
+      page = pdf.addPage([W, H]);
+      y = H - 76;
+    }
+  };
+  /** wrap + draw mixed bold/regular segments; returns nothing, advances y */
+  const drawRich = (segs: Array<{ text: string; bold: boolean }>, size: number, opts?: { x?: number; color?: ReturnType<typeof rgb>; lh?: number; useFont?: typeof font }) => {
+    const x0 = opts?.x ?? M;
+    const lh = opts?.lh ?? size * 1.45;
+    const color = opts?.color ?? ink;
+    const maxW = W - M - x0;
+    // tokenize into words carrying their bold flag
+    const words: Array<{ w: string; b: boolean }> = [];
+    for (const s of segs) for (const w of s.text.split(/\s+/)) if (w) words.push({ w, b: s.bold });
+    if (!words.length) { y -= lh; return; }
+    let lineWords: Array<{ w: string; b: boolean }> = [];
+    const widthOf = (ws: typeof lineWords) =>
+      ws.reduce((acc, t, i) => acc + (t.b ? bold : (opts?.useFont ?? font)).widthOfTextAtSize((i ? " " : "") + t.w, size), 0);
+    const flush = () => {
+      need(lh);
+      let cx = x0;
+      lineWords.forEach((t, i) => {
+        const f = t.b ? bold : (opts?.useFont ?? font);
+        const txt = (i ? " " : "") + t.w;
+        page.drawText(txt, { x: cx, y, size, font: f, color });
+        cx += f.widthOfTextAtSize(txt, size);
+      });
+      y -= lh;
+      lineWords = [];
+    };
+    for (const t of words) {
+      if (lineWords.length && widthOf([...lineWords, t]) > maxW) flush();
+      lineWords.push(t);
+    }
+    if (lineWords.length) flush();
+  };
+
+  if (title) { need(30); drawRich([{ text: title, bold: true }], 19, { lh: 30 }); y -= 8; }
+  let olCounter = 0;
+  for (const b of blocks) {
+    if (b.type !== "ol") olCounter = 0;
+    switch (b.type) {
+      case "h1": y -= 6; drawRich(inlineSegments(b.text).map((s) => ({ ...s, bold: true })), 16, { lh: 24 }); break;
+      case "h2": y -= 5; drawRich(inlineSegments(b.text).map((s) => ({ ...s, bold: true })), 13.5, { lh: 21 }); break;
+      case "h3": y -= 4; drawRich(inlineSegments(b.text).map((s) => ({ ...s, bold: true })), 12, { lh: 19 }); break;
+      case "p": drawRich(inlineSegments(b.text), 10.5); y -= 4; break;
+      case "quote": {
+        const yTop = y;
+        drawRich(inlineSegments(b.text), 10.5, { x: M + 14, color: soft });
+        page.drawLine({ start: { x: M + 4, y: yTop + 10 }, end: { x: M + 4, y: y + 6 }, thickness: 2, color: line });
+        y -= 4; break;
+      }
+      case "callout": drawRich([{ text: `${("emoji" in b && b.emoji) || "💡"} `, bold: false }, ...inlineSegments(b.text)], 10.5, { x: M + 10 }); y -= 4; break;
+      case "ul": need(15); page.drawText("•", { x: M + 6, y, size: 10.5, font, color: ink }); drawRich(inlineSegments(b.text), 10.5, { x: M + 18 }); break;
+      case "ol": { olCounter++; need(15); page.drawText(`${olCounter}.`, { x: M + 4, y, size: 10.5, font, color: ink }); drawRich(inlineSegments(b.text), 10.5, { x: M + 20 }); break; }
+      case "todo": { need(15); const box = ("checked" in b && b.checked) ? "[x]" : "[ ]"; page.drawText(box, { x: M + 2, y, size: 10, font: mono, color: soft }); drawRich(inlineSegments(b.text), 10.5, { x: M + 24 }); break; }
+      case "toggle": drawRich([{ text: "▸ ", bold: false }, ...inlineSegments(b.text)], 10.5); break;
+      case "code": for (const ln of (b.text || "").split("\n")) drawRich([{ text: ln || " ", bold: false }], 9, { useFont: mono, lh: 13 }); y -= 4; break;
+      case "divider": need(16); page.drawLine({ start: { x: M, y: y + 4 }, end: { x: W - M, y: y + 4 }, thickness: 1, color: line }); y -= 14; break;
+      case "table": {
+        const rows = b.rows || [];
+        const cols = Math.max(1, ...rows.map((r) => r.length));
+        const cw = (W - 2 * M) / cols;
+        for (let ri = 0; ri < rows.length; ri++) {
+          need(18);
+          for (let ci = 0; ci < rows[ri].length; ci++) {
+            const f = ri === 0 ? bold : font;
+            let txt = rows[ri][ci];
+            while (txt && f.widthOfTextAtSize(txt, 9.5) > cw - 8) txt = txt.slice(0, -1);
+            page.drawText(txt, { x: M + ci * cw + 3, y, size: 9.5, font: f, color: ink });
+          }
+          page.drawLine({ start: { x: M, y: y - 4 }, end: { x: W - M, y: y - 4 }, thickness: 0.5, color: line });
+          y -= 17;
+        }
+        y -= 6; break;
+      }
+      case "image": drawRich([{ text: `[image: ${("caption" in b && b.caption) || "figure"}]`, bold: false }], 9.5, { color: soft }); break;
+      case "page": drawRich([{ text: `→ ${("title" in b && b.title) || "sub-page"}`, bold: false }], 10.5, { color: soft }); break;
+    }
+  }
+  page.drawText(`Page ${pageNum()}`, { x: W / 2 - 18, y: 40, size: 9, font, color: soft });
+  return pdf.save();
+}
+
+/* --------------------------------------------- preparing: bake pdf amendments */
+
+/** Bake owner amendments (white-outs + text corrections) INTO the PDF bytes.
+ *  Runs at send time so the signing base is immutable from SENT onward. This
+ *  covers/overlays; it does not reflow the PDF's own text (that boundary is
+ *  stated in the UI — reflow needs the source document / DRAFTING). */
+export async function bakeAnnotations(
+  doc: EsignDocument,
+  annotations: import("./snapshot").EsignAnnotation[],
+): Promise<EsignDocument> {
+  if (!annotations.length || !doc.mime.includes("pdf")) return doc;
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const pdf = await PDFDocument.load(base64ToBytes(doc.dataBase64));
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  for (const a of annotations) {
+    if (a.page >= pdf.getPageCount()) continue;
+    const page = pdf.getPage(a.page);
+    const { width: pw, height: ph } = page.getSize();
+    const x = a.x * pw, wf = a.w * pw, hf = a.h * ph;
+    const yBox = ph - a.y * ph - hf;
+    page.drawRectangle({ x, y: yBox, width: wf, height: hf, color: rgb(1, 1, 1) });
+    if (a.kind === "text" && a.text) {
+      const size = Math.min(hf * 0.7, 11);
+      let ty = yBox + hf - size * 1.15;
+      for (const ln of a.text.split("\n")) {
+        page.drawText(ln, { x: x + 2, y: ty, size, font, color: rgb(0.11, 0.15, 0.2) });
+        ty -= size * 1.3;
+      }
+    }
+  }
+  const bytes = await pdf.save();
+  return { ...doc, dataBase64: bytesToBase64(bytes) };
+}

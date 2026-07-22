@@ -8,19 +8,21 @@ import * as React from "react";
 import {
   Baseline, Calendar, CheckSquare, ChevronDownSquare, Signature, Type,
   ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Copy, CopyPlus, GripVertical,
-  LayoutTemplate, Mail, Minus, Plus, Trash2, X,
+  Eraser, FilePenLine, LayoutTemplate, Lock, Mail, Minus, Plus, Snowflake, Trash2, X,
   type LucideIcon,
 } from "lucide-react";
+import { DocumentSurface } from "../document/DocumentSurface";
+import type { DocumentSnapshot } from "../document/snapshot";
 import "./esign.css";
 import {
   activeSignerIds, appendEvent, computeCertificateId, envelopeStatusAfterSign,
   esignId, fieldDefaultSize, FIELD_TYPE_LABEL, FIELD_FORMAT_LABEL, fieldFormatError,
   isEsignSnapshot, isFieldFilled,
   seedEnvelope, SIGNER_COLOR_COUNT, ESIGN_SEED_STATES, DEFAULT_REMINDER_POLICY,
-  type ESignConfig, type EsignEnvelope, type EsignField, type EsignFieldType,
-  type EsignCcRecipient, type EsignFieldFormat, type EsignFieldValue, type EsignSeedState, type EsignSendRequest, type EsignSignatureValue, type EsignSigner,
+  type ESignConfig, type EsignAnnotation, type EsignEnvelope, type EsignField, type EsignFieldType,
+  type EsignCcRecipient, type EsignFieldFormat, type EsignFieldValue, type EsignSeedState, type EsignSendRequest, type EsignSignatureValue, type EsignSigner, type EsignSource,
 } from "./snapshot";
-import { downloadBytes, fileToEsignDocument, flattenEnvelope, openDocument, type PdfDocHandle, type PdfPageHandle } from "./pdf";
+import { bakeAnnotations, blocksToPdfBytes, bytesToBase64, downloadBytes, fileToEsignDocument, flattenEnvelope, openDocument, type PdfDocHandle, type PdfPageHandle } from "./pdf";
 import { initialsOf, SignatureDialog, signatureFontCss } from "./SignatureDialog";
 
 export interface ESignSurfaceProps {
@@ -37,7 +39,9 @@ export interface ESignSurfaceProps {
   "data-testid"?: string;
 }
 
-type Tab = "prepare" | "sign" | "audit";
+type Tab = "draft" | "prepare" | "sign" | "audit";
+/** a placement tool: a signing field OR an owner amendment on the pdf */
+type ArmedTool = EsignFieldType | "ann-whiteout" | "ann-text";
 
 /** which demo state the current envelope reads as (the switcher's active seg) */
 function envMatchesSeed(env: EsignEnvelope, state: EsignSeedState): boolean {
@@ -85,6 +89,7 @@ export default function ESignSurface({
   onChangeRef.current = onChange;
 
   const [tab, setTab] = React.useState<Tab>(env.status === "draft" ? "prepare" : "sign");
+  const [selectedAnnId, setSelectedAnnId] = React.useState<string | null>(null);
   const [zoom, setZoom] = React.useState(1);
   /* once the user works the zoom control we stop auto-fitting under them */
   const zoomTouched = React.useRef(false);
@@ -94,7 +99,7 @@ export default function ESignSurface({
   }, []);
   const [pageIndex, setPageIndex] = React.useState(0);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [armedType, setArmedType] = React.useState<EsignFieldType | null>(null);
+  const [armedType, setArmedType] = React.useState<ArmedTool | null>(null);
   const [sendOpen, setSendOpen] = React.useState(false);
   const [tplOpen, setTplOpen] = React.useState(false);
   const [signingAs, setSigningAs] = React.useState<string | null>(null);
@@ -176,6 +181,27 @@ export default function ESignSurface({
   /* ---- intake */
   const loadFile = async (file: File) => {
     try {
+      // a .docx routes to DRAFTING: import → edit in place → freeze → fields →
+      // send, with no round-trip through Word (the document block's mammoth
+      // import does the conversion; its editor owns the editing)
+      if (/\.docx$/i.test(file.name) || file.type.includes("wordprocessingml")) {
+        const { importFile } = await import("../../record-core/editor-io");
+        const res = await importFile(file);
+        const title = file.name.replace(/\.docx$/i, "");
+        const source: EsignSource = {
+          kind: "document",
+          snapshot: { id: esignId(), title, blocks: res.blocks, pageWidth: "narrow" },
+          dirtySinceFreeze: true,
+        };
+        commit((cur) => appendEvent(
+          { ...cur, source, status: "draft" },
+          "document_loaded", "Owner",
+          `${file.name} imported for editing${res.warnings.length ? ` (${res.warnings.length} import notes)` : ""}`,
+        ));
+        setTab("draft");
+        if (res.warnings.length) setNotice(`Imported with ${res.warnings.length} conversion note${res.warnings.length === 1 ? "" : "s"} — review the draft before freezing.`);
+        return;
+      }
       const doc = await fileToEsignDocument(file);
       // a new base document starts a fresh signing round: statuses, values and
       // completion facts reset; layout (fields on surviving pages) is kept
@@ -192,6 +218,88 @@ export default function ESignSurface({
     } catch (err) {
       setDocError(err instanceof Error ? err.message : "Could not open the file.");
     }
+  };
+
+  /* ---- drafting (the editable document behind the signing base) */
+  const [freezing, setFreezing] = React.useState(false);
+
+  const startDraft = () => {
+    const source: EsignSource = {
+      kind: "document",
+      snapshot: { id: esignId(), title: env.name || "Untitled agreement", blocks: [{ id: esignId(), type: "p", text: "" }], pageWidth: "narrow" },
+      dirtySinceFreeze: true,
+    };
+    commit((cur) => appendEvent({ ...cur, source }, "document_loaded", "Owner", "New draft started in the editor"));
+    setTab("draft");
+  };
+
+  const onDraftChange = (snapshot: DocumentSnapshot) =>
+    commit((cur) => (cur.source ? { ...cur, source: { ...cur.source, snapshot, dirtySinceFreeze: true } } : cur));
+
+  /** DRAFTING -> PREPARING: render the draft to real PDF bytes and make it the
+   *  signing base. Field layout survives (pages that fall away drop their
+   *  fields); values/statuses reset because the text changed under them. */
+  const freezeDraft = async () => {
+    const src = envRef.current.source;
+    if (!src || freezing) return;
+    const pending = src.snapshot.suggestions?.filter((s) => s.status === "pending").length ?? 0;
+    if (pending > 0) {
+      setNotice(`${pending} tracked change${pending === 1 ? "" : "s"} still pending — accept or reject them before freezing (the signing base must be settled text).`);
+      return;
+    }
+    setFreezing(true);
+    try {
+      const bytes = await blocksToPdfBytes(src.snapshot.blocks, src.snapshot.title);
+      const doc = {
+        name: `${src.snapshot.title || "Agreement"}.pdf`,
+        mime: "application/pdf",
+        dataBase64: bytesToBase64(bytes),
+        pageCount: 0, // set below from the opened handle
+      };
+      const handle = await openDocument(doc);
+      doc.pageCount = handle.pageCount;
+      handle.destroy();
+      commit((cur) => appendEvent(
+        {
+          ...cur,
+          document: doc,
+          source: cur.source ? { ...cur.source, dirtySinceFreeze: false } : cur.source,
+          status: "draft",
+          fields: cur.fields.filter((f) => f.page < doc.pageCount).map(({ value, ...f }) => f),
+          signers: cur.signers.map((s) => ({ ...s, status: "pending" as const, viewedAt: undefined, signedAt: undefined })),
+          annotations: [],
+          sentAt: undefined, completedAt: undefined, certificateId: undefined,
+        },
+        "document_frozen", "Owner", `Draft rendered to the signing base (${doc.pageCount} page${doc.pageCount === 1 ? "" : "s"})`,
+      ));
+      setTab("prepare");
+      setPageIndex(0);
+    } catch (err) {
+      setNotice(`Freeze failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setFreezing(false);
+    }
+  };
+
+  /* ---- pdf amendments (owner-only, PREPARING; baked at send) */
+  const placeAnnotation = (kind: EsignAnnotation["kind"], page: number, fx: number, fy: number) => {
+    const size = kind === "whiteout" ? { w: 0.22, h: 0.03 } : { w: 0.26, h: 0.032 };
+    const a: EsignAnnotation = {
+      id: esignId(), kind, page,
+      x: clamp(fx - size.w / 2, 0, 1 - size.w), y: clamp(fy - size.h / 2, 0, 1 - size.h),
+      w: size.w, h: size.h,
+      ...(kind === "text" ? { text: "" } : null),
+    };
+    commit((cur) => ({ ...cur, annotations: [...(cur.annotations ?? []), a] }));
+    setSelectedAnnId(a.id);
+    setSelectedId(null);
+    setArmedType(null);
+  };
+  const patchAnnotation = (id: string, patch: Partial<EsignAnnotation>) =>
+    commit((cur) => ({ ...cur, annotations: (cur.annotations ?? []).map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
+  const removeAnnotation = (id: string) => {
+    commit((cur) => ({ ...cur, annotations: (cur.annotations ?? []).filter((a) => a.id !== id) }));
+    if (selectedAnnId === id) setSelectedAnnId(null);
   };
 
   /* ---- field placement */
@@ -285,9 +393,13 @@ export default function ESignSurface({
 
   /* keyboard: delete + nudge on the selected field */
   const onSurfaceKeyDown = (e: React.KeyboardEvent) => {
-    if (!editable || !selected) return;
+    if (!editable) return;
     const target = e.target as HTMLElement;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+    if (!selected) {
+      if (selectedAnnId && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); removeAnnotation(selectedAnnId); }
+      return;
+    }
     if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeField(selected.id); }
     const step = e.shiftKey ? 0.02 : 0.004;
     if (e.key === "ArrowLeft") { e.preventDefault(); patchField(selected.id, { x: clamp(selected.x - step, 0, 1 - selected.w) }); }
@@ -329,6 +441,7 @@ export default function ESignSurface({
   /* ---- send (review-gated; seam or labeled demo) */
   const sendProblems: string[] = [];
   if (!env.document) sendProblems.push("No document loaded.");
+  if (env.source?.dirtySinceFreeze && env.document) sendProblems.push("The draft changed since the last freeze — re-freeze it (Edit tab) so recipients sign the current text.");
   if (env.signers.length === 0) sendProblems.push("No signers.");
   env.signers.forEach((s) => {
     if (!s.name.trim() || !s.email.trim()) sendProblems.push(`${s.role || "A signer"} is missing a name or email.`);
@@ -366,6 +479,18 @@ export default function ESignSurface({
 
   const confirmSend = async () => {
     const req = buildSendRequest();
+    // bake owner amendments INTO the pdf bytes first — from SENT onward the
+    // signing base is immutable, so pending overlays must become real content
+    let baked: { document: NonNullable<EsignEnvelope["document"]>; count: number } | null = null;
+    const pendingAnns = envRef.current.annotations ?? [];
+    if (pendingAnns.length && envRef.current.document) {
+      try {
+        baked = { document: await bakeAnnotations(envRef.current.document, pendingAnns), count: pendingAnns.length };
+      } catch (err) {
+        setNotice(`Could not bake the document amendments: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+    }
     let detail: string;
     if (config?.onSend) {
       try {
@@ -378,10 +503,15 @@ export default function ESignSurface({
     } else {
       detail = `Sent to ${req.recipients.length} recipient${req.recipients.length === 1 ? "" : "s"} (${env.signingOrder}) — demo send, no email delivered`;
     }
-    commit((cur) => appendEvent(
-      { ...cur, status: "sent", sentAt: req.sentAt },
-      "sent", "Owner", `${detail} · ${policySummary(req)}`,
-    ));
+    commit((cur) => {
+      let next: EsignEnvelope = { ...cur, status: "sent", sentAt: req.sentAt };
+      if (baked) {
+        next = { ...next, document: baked.document, annotations: [] };
+        next = appendEvent(next, "document_amended", "Owner",
+          `${baked.count} amendment${baked.count === 1 ? "" : "s"} (white-out / text correction) baked into the document before sending`);
+      }
+      return appendEvent(next, "sent", "Owner", `${detail} · ${policySummary(req)}`);
+    });
     setSendOpen(false);
     setTab("sign");
     setSigningAs(null);
@@ -567,14 +697,14 @@ export default function ESignSurface({
           )}
         </div>
         <nav className="nxEsTabsNav" role="tablist" aria-label="E-signature stages">
-          {(["prepare", "sign", "audit"] as Tab[]).map((t) => (
+          {([...(env.source ? ["draft"] : []), "prepare", "sign", "audit"] as Tab[]).map((t) => (
             <button
               key={t} type="button" role="tab" aria-selected={tab === t}
               className={tab === t ? "nxEsTabBtn isActive" : "nxEsTabBtn"}
               onClick={() => setTab(t)}
               data-testid={`esign-tab-${t}`}
             >
-              {t === "prepare" ? "Prepare" : t === "sign" ? "Sign" : "Activity"}
+              {t === "draft" ? (editable ? "Edit" : <span className="nxEsTabLock"><Lock size={11} aria-hidden /> Document</span>) : t === "prepare" ? "Prepare" : t === "sign" ? "Sign" : "Activity"}
             </button>
           ))}
         </nav>
@@ -637,6 +767,44 @@ export default function ESignSurface({
       )}
 
       <div className={`nxEsBody mode-${tab}`}>
+        {/* DRAFTING — the editable document behind the signing base. Composes the
+            document block (Notion×Word editor: tracked changes, docx import/
+            export) rather than shipping a second editor. Read-only from SENT
+            onward: an editable "signed" contract would be worthless. */}
+        {tab === "draft" && env.source && (
+          <div className="nxEsDraftPane" data-testid="esign-draft-pane">
+            <div className="nxEsDraftBar">
+              <span className="nxEsHint">
+                {editable
+                  ? "Edit the contract text here — a fix never needs a round-trip through Word. Freezing renders it to the signing base (print-class layout, not Word-identical)."
+                  : "The envelope was sent — the document is frozen and read-only. Recipients sign exactly this text."}
+              </span>
+              {editable && (
+                <button
+                  type="button" className="nxEsBtn isPrimary" data-testid="esign-freeze"
+                  disabled={freezing}
+                  onClick={() => void freezeDraft()}
+                >
+                  <Snowflake size={13} /> {freezing ? "Rendering…" : env.document ? "Re-freeze & place fields" : "Freeze & place fields"}
+                </button>
+              )}
+            </div>
+            {editable && env.document && env.source.dirtySinceFreeze && (
+              <div className="nxEsNotice" role="status">
+                <span>The draft changed since the last freeze — recipients would sign the OLD render. Re-freeze before sending.</span>
+              </div>
+            )}
+            <DocumentSurface
+              value={env.source.snapshot}
+              onChange={editable ? onDraftChange : undefined}
+              readOnly={!editable}
+              author={{ name: "Owner" }}
+              config={{ cover: false, icon: false, pageWidthToggle: false }}
+              data-testid="esign-draft-editor"
+            />
+          </div>
+        )}
+
         {/* left rail: palette (prepare) or signer picker (sign) */}
         {tab === "prepare" && (
           <aside className="nxEsRail" aria-label="Field palette and signers">
@@ -646,17 +814,43 @@ export default function ESignSurface({
                 <div className="nxEsDocCard">
                   <div className="nxEsDocName" title={env.document.name}>{env.document.name}</div>
                   <div className="nxEsDocMeta">{env.document.pageCount} page{env.document.pageCount === 1 ? "" : "s"} · {Math.round(env.document.dataBase64.length * 0.75 / 1024)} KB</div>
-                  {editable && (
-                    <button type="button" className="nxEsBtn" onClick={() => fileRef.current?.click()}>Replace…</button>
-                  )}
+                  <div className="nxEsBtnRow">
+                    {env.source ? (
+                      <button
+                        type="button" className="nxEsBtn" data-testid="esign-edit-document"
+                        onClick={() => setTab("draft")}
+                      >
+                        <FilePenLine size={13} /> {editable ? "Edit text" : "View text"}
+                      </button>
+                    ) : editable ? (
+                      <button
+                        type="button" className="nxEsBtn" title="Uploaded PDFs can be amended (white-out + text corrections) below; full text editing needs the source document (.docx or a new draft)."
+                        onClick={() => fileRef.current?.click()}
+                      >
+                        Replace…
+                      </button>
+                    ) : null}
+                    {editable && env.source && (
+                      <button type="button" className="nxEsBtn" onClick={() => fileRef.current?.click()}>Replace…</button>
+                    )}
+                  </div>
                 </div>
               ) : (
-                <button type="button" className="nxEsDropZone" onClick={() => fileRef.current?.click()}>
-                  Load a PDF or image…
-                </button>
+                <>
+                  <button type="button" className="nxEsDropZone" onClick={() => fileRef.current?.click()}>
+                    Load a PDF, image or .docx…
+                  </button>
+                  {editable && (
+                    <button type="button" className="nxEsBtn isBlock" data-testid="esign-start-draft" onClick={startDraft}>
+                      <FilePenLine size={13} /> Draft a document in the editor
+                    </button>
+                  )}
+                </>
               )}
               <input
-                ref={fileRef} type="file" accept="application/pdf,image/png,image/jpeg" hidden
+                ref={fileRef} type="file"
+                accept="application/pdf,image/png,image/jpeg,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                hidden
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadFile(f); e.target.value = ""; }}
               />
             </section>
@@ -681,6 +875,41 @@ export default function ESignSurface({
                 ))}
               </div>
             </section>
+
+            {editable && env.document?.mime.includes("pdf") && !env.source && (
+              <section className="nxEsRailSec">
+                <h3 className="nxEsRailTitle">Amend document</h3>
+                <p className="nxEsHint">
+                  Fix the PDF before it goes out: white-out covers content, text writes a
+                  correction. Both are baked into the document when you send.
+                </p>
+                <div className="nxEsPalette">
+                  <button
+                    type="button"
+                    className={armedType === "ann-whiteout" ? "nxEsPaletteItem isArmed" : "nxEsPaletteItem"}
+                    aria-pressed={armedType === "ann-whiteout"}
+                    data-testid="esign-ann-whiteout"
+                    onClick={() => setArmedType((cur) => (cur === "ann-whiteout" ? null : "ann-whiteout"))}
+                  >
+                    <span className="nxEsGlyph" aria-hidden><Eraser size={14} /></span> White-out
+                  </button>
+                  <button
+                    type="button"
+                    className={armedType === "ann-text" ? "nxEsPaletteItem isArmed" : "nxEsPaletteItem"}
+                    aria-pressed={armedType === "ann-text"}
+                    data-testid="esign-ann-text"
+                    onClick={() => setArmedType((cur) => (cur === "ann-text" ? null : "ann-text"))}
+                  >
+                    <span className="nxEsGlyph" aria-hidden><FilePenLine size={14} /></span> Correction
+                  </button>
+                </div>
+                <p className="nxEsHint">
+                  Honest boundary: this amends and covers — it does not reflow the PDF's own
+                  text. Full rewording needs the source document (import the .docx or draft in
+                  the editor).
+                </p>
+              </section>
+            )}
 
             <section className="nxEsRailSec">
               <div className="nxEsRailTitleRow">
@@ -937,6 +1166,7 @@ export default function ESignSurface({
         )}
 
         {/* document canvas */}
+        {tab !== "draft" && (
         <div className="nxEsCanvasWrap">
           {/* viewer controls ride OVER the document instead of taking a
               full-width band of their own — they govern the page, not the
@@ -961,7 +1191,8 @@ export default function ESignSurface({
             {!env.document && (
               <div className="nxEsEmpty">
                 <p>No document yet.</p>
-                <button type="button" className="nxEsBtn isPrimary" onClick={() => fileRef.current?.click()}>Load a PDF or image…</button>
+                <button type="button" className="nxEsBtn isPrimary" onClick={() => fileRef.current?.click()}>Load a PDF, image or .docx…</button>
+                <button type="button" className="nxEsBtn" onClick={startDraft}>Draft a document in the editor</button>
               </div>
             )}
             {docError && <div className="nxEsNotice isError" role="alert">{docError}</div>}
@@ -986,10 +1217,23 @@ export default function ESignSurface({
                     if (e.target !== e.currentTarget) return;
                     if (editable && armedType) {
                       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      placeField(armedType, p.index, (e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
-                    } else setSelectedId(null);
+                      const fx = (e.clientX - rect.left) / rect.width;
+                      const fy = (e.clientY - rect.top) / rect.height;
+                      if (armedType === "ann-whiteout" || armedType === "ann-text") {
+                        placeAnnotation(armedType === "ann-whiteout" ? "whiteout" : "text", p.index, fx, fy);
+                      } else placeField(armedType, p.index, fx, fy);
+                    } else { setSelectedId(null); setSelectedAnnId(null); }
                   }}
                 >
+                  {(env.annotations ?? []).filter((a) => a.page === p.index).map((a) => (
+                    <AnnotationBox
+                      key={a.id} ann={a} editable={editable && tab === "prepare"}
+                      selected={selectedAnnId === a.id}
+                      onSelect={() => { setSelectedAnnId(a.id); setSelectedId(null); }}
+                      onPatch={(patch) => patchAnnotation(a.id, patch)}
+                      onRemove={() => removeAnnotation(a.id)}
+                    />
+                  ))}
                   {env.fields.filter((f) => f.page === p.index).map((f) => (
                     <FieldBox
                       key={f.id} field={f} env={env}
@@ -1009,6 +1253,7 @@ export default function ESignSurface({
             ))}
           </div>
         </div>
+        )}
 
         {/* right rail: field properties (prepare, when selected) */}
         {tab === "prepare" && editable && selected && (
@@ -1188,6 +1433,12 @@ export default function ESignSurface({
                   </select>
                 </label>
               </div>
+              {(env.annotations ?? []).length > 0 && (
+                <p className="nxEsHint">
+                  {(env.annotations ?? []).length} document amendment{(env.annotations ?? []).length === 1 ? "" : "s"} will
+                  be baked into the PDF on send — recipients see the amended document only.
+                </p>
+              )}
               {(env.cc ?? []).some((c) => c.email.trim()) && (
                 <p className="nxEsHint">
                   Copied in on completion: {(env.cc ?? []).filter((c) => c.email.trim()).map((c) => c.email).join(", ")}
@@ -1497,6 +1748,80 @@ function FieldBox({ field: f, env, mode, selected, onSelect, onPatch, onRemove, 
             onClick={(e) => { e.stopPropagation(); onRemove(); }}
           ><X size={11} /></button>
           <span className="nxEsFieldGrip" aria-hidden onPointerDown={(e) => onPointerDown(e, "resize")} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------- AnnotationBox */
+
+/** An owner amendment overlay on the PDF (white-out or text correction) —
+ *  drag/resize like a field, inline-editable text, baked into the bytes at
+ *  send time. Renders paper-real (opaque white) so preview = outcome. */
+function AnnotationBox({ ann: a, editable, selected, onSelect, onPatch, onRemove }: {
+  ann: EsignAnnotation;
+  editable: boolean;
+  selected: boolean;
+  onSelect: () => void;
+  onPatch: (p: Partial<EsignAnnotation>) => void;
+  onRemove: () => void;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const drag = React.useRef<{ kind: "move" | "resize"; startX: number; startY: number; a0: EsignAnnotation } | null>(null);
+  const down = (e: React.PointerEvent, kind: "move" | "resize") => {
+    if (!editable) return;
+    if ((e.target as HTMLElement).tagName === "TEXTAREA") return; // typing, not dragging
+    e.stopPropagation();
+    onSelect();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    drag.current = { kind, startX: e.clientX, startY: e.clientY, a0: { ...a } };
+  };
+  const move = (e: React.PointerEvent) => {
+    const d = drag.current;
+    const layer = ref.current?.parentElement;
+    if (!d || !layer) return;
+    const rect = layer.getBoundingClientRect();
+    const dx = (e.clientX - d.startX) / rect.width;
+    const dy = (e.clientY - d.startY) / rect.height;
+    if (d.kind === "move") onPatch({ x: clamp(d.a0.x + dx, 0, 1 - a.w), y: clamp(d.a0.y + dy, 0, 1 - a.h) });
+    else onPatch({ w: clamp(d.a0.w + dx, 0.02, 1 - a.x), h: clamp(d.a0.h + dy, 0.012, 1 - a.y) });
+  };
+  return (
+    <div
+      ref={ref}
+      className={["nxEsAnn", `k-${a.kind}`, selected ? "isSelected" : "", editable ? "isEditable" : ""].filter(Boolean).join(" ")}
+      style={{ left: pct(a.x), top: pct(a.y), width: pct(a.w), height: pct(a.h) }}
+      role={editable ? "button" : undefined}
+      tabIndex={editable ? 0 : undefined}
+      aria-label={a.kind === "whiteout" ? "White-out amendment" : "Text correction"}
+      data-testid={`esign-ann-${a.id}`}
+      onPointerDown={(e) => down(e, "move")}
+      onPointerMove={move}
+      onPointerUp={() => { drag.current = null; }}
+    >
+      {a.kind === "text" && (editable ? (
+        <textarea
+          className="nxEsAnnText"
+          aria-label="Correction text"
+          placeholder="Corrected text…"
+          value={a.text ?? ""}
+          data-testid={`esign-ann-input-${a.id}`}
+          onChange={(e) => onPatch({ text: e.target.value })}
+          onPointerDown={(e) => { e.stopPropagation(); onSelect(); }}
+        />
+      ) : (
+        <span className="nxEsAnnTextView">{a.text}</span>
+      ))}
+      {editable && selected && (
+        <>
+          <span className="nxEsFieldTag isAnn">{a.kind === "whiteout" ? "White-out" : "Correction"} — baked at send</span>
+          <button
+            type="button" className="nxEsFieldDel" aria-label="Delete amendment"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          ><X size={11} /></button>
+          <span className="nxEsFieldGrip" aria-hidden onPointerDown={(e) => down(e, "resize")} />
         </>
       )}
     </div>

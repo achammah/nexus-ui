@@ -448,3 +448,35 @@ The certificate deliberately carries no IP or device metadata. A browser cannot 
 **One caveat worth knowing before you ship it:** "flatten" applies to the e-signature field values only. If your source PDF contains its own AcroForm fields, they are carried through and **remain interactive** — a recipient can still edit them after completion. If that matters, flatten the delivered file server-side (pdf-lib's `form.flatten()`, qpdf, or your PDF service) before archiving or distributing it.
 
 Typed signatures are rasterised through a browser canvas at flatten time, so glyph shapes depend on the fonts present on the signing machine. The snapshot retains the typed text and font name, so a server-side re-render is available and more consistent if you need reproducibility.
+
+### Editable document behind the envelope (drafting)
+
+A contract tool is only real if you can FIX the contract before it goes out. The envelope
+composes the document block (`DocumentSurface` — tracked changes, docx import/export) as its
+DRAFTING pane, so a wording change never round-trips through Word:
+
+- **`.docx` intake** — the Prepare rail's file input accepts `.docx`; it imports (mammoth)
+  into the Edit tab as editable blocks. Import notes surface in the UI.
+- **Draft from scratch** — "Draft a document in the editor" starts an empty draft.
+- **Freeze** — "Freeze & place fields" renders the draft to real PDF bytes (pdf-lib
+  paginator: headings, lists, todos, quotes, callouts, code, tables, bold) and makes it the
+  signing base. Print-class fidelity, deliberately NOT Word-identical — the UI says so.
+- **Stale gate** — editing after a freeze marks the render stale; Send is blocked until you
+  re-freeze, so recipients always sign the current text. Pending tracked changes also block
+  the freeze (the signing base must be settled text).
+- **State machine** — DRAFTING (editable body) → PREPARING (fields on the frozen render)
+  → SENT (immutable: the Edit tab flips to a read-only "Document" view, bytes never change).
+
+The envelope snapshot carries the draft at `envelope.source` (`{ kind: "document",
+snapshot: DocumentSnapshot, dirtySinceFreeze? }`), so the editable text persists with the
+envelope and survives reloads.
+
+### Amending an uploaded PDF (no source document)
+
+For a PDF you did not author, the Prepare rail offers **White-out** and **Correction**
+tools (owner-only, hidden once a source document exists — the editor is the better route).
+Overlays are dragged/resized like fields, render paper-real (opaque white), and are BAKED
+into the PDF bytes at send time — from SENT onward the signing base is immutable, and the
+audit trail records `document_amended`. Honest boundary, stated in the UI: this amends,
+annotates and covers; it does not reflow the PDF's own text. Full rewording needs the
+source document.

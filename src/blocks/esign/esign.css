@@ -581,3 +581,50 @@
 }
 .nxEsPolicyRow { display: flex; align-items: center; gap: var(--nx-gap-1); font-size: var(--nx-text-meta); color: var(--nx-fg-muted); }
 .nxEsInput.isTight { width: auto; padding: 3px 6px; }
+
+/* -------------------------------------------------- drafting (document pane) */
+
+.nxEsDraftPane {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
+  background: var(--nx-bg);
+}
+.nxEsDraftBar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--nx-gap-3);
+  padding: var(--nx-gap-2) var(--nx-gap-3);
+  border-bottom: 1px solid var(--nx-border);
+  background: var(--nx-bg-raised);
+}
+.nxEsDraftBar .nxEsHint { max-width: 70ch; }
+.nxEsDraftPane > .nxEsNotice { margin: var(--nx-gap-2) var(--nx-gap-3) 0; }
+.nxEsDraftPane > [class*="nxDoc"], .nxEsDraftPane > div:last-child { flex: 1; min-height: 0; overflow: auto; }
+.nxEsTabLock { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ------------------------------------------------------- pdf amendments */
+
+.nxEsAnn {
+  position: absolute;
+  background: #fff; /* paper-real: preview = baked outcome */
+  box-sizing: border-box;
+  border: 1px dashed transparent;
+}
+.nxEsAnn.isEditable { border-color: color-mix(in srgb, var(--nx-warn) 65%, transparent); cursor: grab; touch-action: none; }
+.nxEsAnn.isEditable:active { cursor: grabbing; }
+.nxEsAnn.isSelected { border-style: solid; border-color: var(--nx-warn); box-shadow: 0 0 0 2px color-mix(in srgb, var(--nx-warn) 30%, transparent); z-index: 2; }
+.nxEsAnn:focus-visible { outline: 2px solid var(--nx-warn); outline-offset: 1px; }
+.nxEsAnnText {
+  width: 100%; height: 100%; resize: none;
+  border: 0; background: transparent; color: #1c2733;
+  font-family: Helvetica, Arial, sans-serif; font-size: 12px; line-height: 1.3;
+  padding: 1px 2px; box-sizing: border-box;
+}
+.nxEsAnnText:focus { outline: none; }
+.nxEsAnnTextView {
+  font-family: Helvetica, Arial, sans-serif; font-size: 12px; line-height: 1.3;
+  color: #1c2733; padding: 1px 2px; white-space: pre-wrap; overflow: hidden;
+}
+.nxEsFieldTag.isAnn { background: var(--nx-warn); color: #1c2733; }
+
+@media (max-width: 760px) {
+  .nxEsDraftBar { flex-direction: column; align-items: stretch; gap: var(--nx-gap-2); }
+}

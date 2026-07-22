@@ -128,7 +128,8 @@ export interface EsignAuditEvent {
   type:
     | "created" | "document_loaded" | "field_added" | "field_removed"
     | "signer_added" | "signer_removed" | "sent" | "viewed" | "signed"
-    | "declined" | "completed" | "template_applied" | "downloaded";
+    | "declined" | "completed" | "template_applied" | "downloaded"
+    | "document_edited" | "document_frozen" | "document_amended";
   actor: string; // signer name/email or "Owner"
   detail: string;
 }
@@ -152,6 +153,31 @@ export interface EsignDocument {
   pageCount: number;
 }
 
+/** The EDITABLE source behind the signing base — a document-block snapshot
+ *  (the Notion×Word surface from `blocks/document`). While the envelope is in
+ *  DRAFTING, this is what the owner edits (with tracked changes, docx import/
+ *  export); "freeze" renders it to the PDF signing base. A .docx never needs to
+ *  round-trip outside the product: import → edit → freeze → place fields → send. */
+export interface EsignSource {
+  kind: "document";
+  snapshot: import("../document/snapshot").DocumentSnapshot;
+  /** set when the draft changed after the last freeze — the render is stale */
+  dirtySinceFreeze?: boolean;
+}
+
+/** An OWNER amendment applied to an uploaded PDF before sending — a white-out
+ *  (redaction-style cover) or a text correction drawn on top. Baked INTO the
+ *  PDF bytes at send time (they become part of the immutable signing base) and
+ *  honest about the boundary: this amends/annotates/covers; it does not reflow
+ *  the PDF's own text — full reflow needs the source document (DRAFTING). */
+export interface EsignAnnotation {
+  id: string;
+  kind: "whiteout" | "text";
+  page: number;
+  x: number; y: number; w: number; h: number; // fractions, same space as fields
+  text?: string; // kind "text"
+}
+
 export interface EsignEnvelope {
   kind: "esign-envelope";
   v: 1;
@@ -160,6 +186,10 @@ export interface EsignEnvelope {
   status: EsignEnvelopeStatus;
   signingOrder: EsignSigningOrder;
   document: EsignDocument | null;
+  /** editable source document (drafting pane); null/absent = upload-only flow */
+  source?: EsignSource | null;
+  /** owner amendments on an uploaded PDF, pending until baked at send */
+  annotations?: EsignAnnotation[];
   signers: EsignSigner[];
   /** copied-in recipients — receive the completed document, sign nothing */
   cc?: EsignCcRecipient[];
@@ -348,12 +378,47 @@ export function seedEnvelope(state: EsignSeedState = "draft"): EsignEnvelope {
   return seedDraftEnvelope();
 }
 
+/** The MSA as an editable document snapshot — the DRAFTING pane's seed content.
+ *  Mirrors the embedded seed PDF, so "edit the contract" opens on the same text. */
+export function seedContractSource(): EsignSource {
+  const B = (i: number, type: "p" | "h1" | "h2" | "h3" | "quote", text: string) =>
+    ({ id: `msa-b${i}`, type, text }) as import("../document/snapshot").DocumentSnapshot["blocks"][number];
+  return {
+    kind: "document",
+    snapshot: {
+      id: "doc-msa-2026-0142",
+      title: "Master Services Agreement",
+      pageWidth: "narrow",
+      blocks: [
+        B(1, "p", "Agreement No. MSA-2026-0142"),
+        B(2, "p", "This Master Services Agreement (the “Agreement”) is entered into as of the Effective Date by and between **Meridian Analytics Ltd.**, a company registered in Ireland with offices at 4 Harbour Square, Dublin (“Provider”), and **Northwind Retail Group BV**, with offices at Keizersgracht 220, Amsterdam (“Client”)."),
+        B(3, "h2", "1. Services"),
+        B(4, "p", "Provider shall deliver the analytics platform implementation and managed reporting services described in Statement of Work #1, including data pipeline configuration, dashboard delivery, and quarterly business reviews."),
+        B(5, "h2", "2. Term"),
+        B(6, "p", "The initial term is twenty-four (24) months from the Effective Date, renewing automatically for successive twelve (12) month periods unless either party gives ninety (90) days written notice of non-renewal."),
+        B(7, "h2", "3. Fees and Payment"),
+        B(8, "p", "Client shall pay the fees set out in Exhibit B. Invoices are issued monthly in arrears and are payable within thirty (30) days. Late amounts accrue interest at 1% per month or the maximum permitted by law, whichever is lower."),
+        B(9, "h2", "4. Confidentiality"),
+        B(10, "p", "Each party shall protect the other party's Confidential Information with at least the same degree of care it uses for its own, and no less than reasonable care, and shall use it solely to perform under this Agreement."),
+        B(11, "h2", "5. Data Protection"),
+        B(12, "p", "The parties shall comply with the Data Processing Addendum in Exhibit C. Provider acts as processor for Client personal data and shall implement the technical and organisational measures described therein."),
+        B(13, "h2", "6. Limitation of Liability"),
+        B(14, "p", "Except for breaches of confidentiality or amounts owed, neither party's aggregate liability shall exceed the fees paid or payable in the twelve (12) months preceding the claim. Neither party is liable for indirect or consequential damages."),
+        B(15, "h2", "7. Governing Law"),
+        B(16, "p", "This Agreement is governed by the laws of Ireland. The courts of Dublin have exclusive jurisdiction, without regard to conflict of law principles."),
+        B(17, "quote", "IN WITNESS WHEREOF, the parties have executed this Agreement by their duly authorised representatives as of the Effective Date."),
+      ],
+    },
+  };
+}
+
 /** DRAFT — everything unlocked, nothing signed yet. */
 export function seedDraftEnvelope(): EsignEnvelope {
   const base = seedSentEnvelope();
   const t0 = "2026-07-20T09:12:00.000Z";
   return {
     ...base,
+    source: seedContractSource(),
     id: "env-msa-2026-0142-draft",
     status: "draft",
     sentAt: undefined,

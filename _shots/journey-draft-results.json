@@ -1,0 +1,122 @@
+[
+  {
+    "name": "seed draft exposes the Edit tab",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "docx import opens the draft editor",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "docx content imported (heading + fee clause)",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "contract text edited in place (45 -> 30 days)",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "freeze lands on Prepare with a rendered page",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "frozen envelope is Draft (preparing)",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "snapshot carries source + document",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "frozen pdf parses",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "dirtySinceFreeze cleared",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "stale-freeze gate disables send",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "amend tools hidden when a source exists (editor is the fix route)",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "second signer removed for the minimal send",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "send enabled after re-freeze + fields",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "sent",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "SENT: document read-only (no editable blocks)",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "SENT: no freeze button",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "SENT: document bytes unchanged",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "amend tools visible on an uploaded pdf",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "white-out + correction placed",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "review discloses the pending amendments",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "amendments baked at send (bytes changed, overlay list cleared)",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "audit records document_amended",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "baked pdf still parses",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "no page errors across drafting journey",
+    "pass": true,
+    "detail": ""
+  }
+]
