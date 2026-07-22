@@ -239,3 +239,32 @@ Live-verified in the harness. Addresses the lead's batch from the user's :4000 r
 Full Word-parity checklist (Phase 2 + this batch): suggesting mode ✅ · inline tracked insert/delete/substitute ✅ · author attribution ✅ · accept/reject per + all ✅ · review panel + jump-to + comments ✅ · persistence ✅ · export honesty ✅ · **DOCX import ✅ · paste-from-Word ✅** · Markdown/HTML/PDF export ✅ · suggestions as a composability toggle ✅.
 
 tsc clean on my lane throughout; `blocks/workbook` @univerjs errors are another lane's, untouched.
+
+---
+
+## Real-time tracked changes (replaces the blur-deferred v1)
+
+The user's requirement: the strikethrough + coloured insertion must appear INSTANTLY while typing — not on blur, and not after a debounce ("it takes time to load, it's not real time"). Shipped: **genuinely mid-keystroke, no debounce, no timers.**
+
+**Approach.** A contenteditable can't do this by itself — if the browser performs the edit the removed text is gone (nothing left to strike), and rewriting `innerHTML` afterwards destroys the caret. So the editor now OWNS the edit in suggesting mode: a delegated native `beforeinput` listener intercepts insert/delete/replace, applies them to an explicit model, re-renders the del/ins, and restores the caret **synchronously inside the same event**. The marks are on screen before the keystroke returns — there is no async path to be late.
+
+Model per edited block (committed text is never mutated):
+`prefix | <del>deleted</del><ins>inserted</ins> | suffix`, caret indexed into `inserted`; `prefix+deleted+suffix` === committed, `prefix+inserted+suffix` === suggested.
+
+| Case | Verdict | Evidence |
+|---|---|---|
+| Insertion live | ✅ | typed 15 chars — ins grew live, focus never left the block |
+| Deletion live | ✅ | 5 backspaces struck "brief" instantly (`<del>brief</del>`) |
+| Substitution live | ✅ | selected "enterprise", typed → `<del>enterprise</del><ins>S…</ins>` on the FIRST keystroke, then 18 more chars appended |
+| Caret stability | ✅ | caret stayed inside `<ins>` at the right offset across every keystroke (offset 18/18); no jump or reversal |
+| Focus stability | ✅ | required re-taking focus before caret restore — a nested `contenteditable` island dropped focus after innerHTML replacement and swallowed everything after the first keystroke (found + fixed) |
+| Live→settled handoff | ✅ | on blur the live widget becomes the settled one, same del/ins, no flicker |
+| Accept on a live change | ✅ | folds correctly ("We will target SMB and mid-market customers first.") |
+| Editing mode unaffected | ✅ | controller inert; typing commits normally, no marks |
+| record richText regression | ✅ | server change still renders, mirror serialises to original |
+
+Styling verified identical between live and settled widgets (ins `rgb(79,70,229)` underline; del strike).
+
+**Honest limitation:** IME/composition input is not intercepted (composed text would need the browser's default). It falls through to the previous diff-based capture — the change is still tracked and materialises on blur, so it degrades rather than corrupting. Latin typing (the intercepted path) is fully live.
+
+Shot: `suggest-03-live-mid-edit.png` — taken MID-EDIT with focus still in the block.
