@@ -50,9 +50,24 @@
     "detail": ""
   },
   {
+    "name": "progress counts completed fields",
+    "pass": true,
+    "detail": "3 of 5 complete"
+  },
+  {
+    "name": "guided next-field selects an unfilled field",
+    "pass": true,
+    "detail": ""
+  },
+  {
     "name": "date auto-fills today on focus",
     "pass": true,
     "detail": "2026-07-22"
+  },
+  {
+    "name": "signature adoption persists for reuse",
+    "pass": true,
+    "detail": ""
   },
   {
     "name": "finish enabled once required filled",
@@ -72,7 +87,7 @@
   {
     "name": "flattened pdf downloads",
     "pass": true,
-    "detail": "31033 bytes"
+    "detail": "31034 bytes"
   },
   {
     "name": "flattened pdf has cert page (3 pages)",
@@ -173,6 +188,11 @@
     "name": "mobile: no page-level horizontal scroll",
     "pass": true,
     "detail": "overflow 0px"
+  },
+  {
+    "name": "decline records a reason in the audit trail",
+    "pass": true,
+    "detail": ""
   },
   {
     "name": "pdf renders upright under a fit-width re-render (no render race)",

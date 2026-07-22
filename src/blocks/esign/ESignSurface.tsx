@@ -16,7 +16,7 @@ import {
   esignId, fieldDefaultSize, FIELD_TYPE_LABEL, isEsignSnapshot, isFieldFilled,
   seedEnvelope, SIGNER_COLOR_COUNT, ESIGN_SEED_STATES,
   type ESignConfig, type EsignEnvelope, type EsignField, type EsignFieldType,
-  type EsignFieldValue, type EsignSeedState, type EsignSendRequest, type EsignSigner,
+  type EsignFieldValue, type EsignSeedState, type EsignSendRequest, type EsignSignatureValue, type EsignSigner,
 } from "./snapshot";
 import { downloadBytes, fileToEsignDocument, flattenEnvelope, openDocument, type PdfDocHandle, type PdfPageHandle } from "./pdf";
 import { initialsOf, SignatureDialog, signatureFontCss } from "./SignatureDialog";
@@ -329,6 +329,67 @@ export default function ESignSurface({
 
   const myFields = signer ? env.fields.filter((f) => f.signerId === signer.id) : [];
   const missingRequired = myFields.filter((f) => f.required && !isFieldFilled(f));
+  const myDone = myFields.filter(isFieldFilled).length;
+  const myProgress = myFields.length ? Math.round((myDone / myFields.length) * 100) : 0;
+
+  /** reading order — the order a signer is walked through their fields */
+  const inReadingOrder = (list: EsignField[]) =>
+    [...list].sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x);
+
+  /** Bring a field into view and focus its control. The guided flow is what
+   *  makes a multi-page envelope signable without hunting for pale boxes. */
+  const goToField = (f: EsignField) => {
+    setPageIndex(f.page);
+    setSelectedId(f.id);
+    window.requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-testid="esign-field-${f.id}"]`);
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      const control = document.querySelector<HTMLElement>(`[data-testid="esign-fill-${f.id}"]`);
+      control?.focus({ preventScroll: true });
+    });
+  };
+
+  /** the next field this signer still owes, after the one just handled */
+  const nextUnfilled = (afterId?: string): EsignField | null => {
+    const ordered = inReadingOrder(myFields);
+    const start = afterId ? ordered.findIndex((f) => f.id === afterId) + 1 : 0;
+    const rest = [...ordered.slice(start), ...ordered.slice(0, start)];
+    return rest.find((f) => f.required && !isFieldFilled(f)) ?? rest.find((f) => !isFieldFilled(f)) ?? null;
+  };
+
+  const goToNextUnfilled = (afterId?: string) => {
+    const f = nextUnfilled(afterId);
+    if (f) goToField(f);
+  };
+
+  /* ---- adopted signature: drawn/typed once, reusable across fields, the way
+     every real signing product works (you do not re-draw per field) */
+  const [adopted, setAdopted] = React.useState<{ signature?: EsignSignatureValue; initials?: EsignSignatureValue }>({});
+
+  const applyAdopted = (kind: "signature" | "initials", fieldId: string) => {
+    const saved = adopted[kind];
+    if (!saved) return;
+    fillField(fieldId, { type: kind, signature: { ...saved, at: new Date().toISOString() } } as EsignFieldValue);
+    goToNextUnfilled(fieldId);
+  };
+
+  /* ---- decline to sign */
+  const [declineOpen, setDeclineOpen] = React.useState(false);
+  const [declineReason, setDeclineReason] = React.useState("");
+  const declineSigning = () => {
+    if (!signer) return;
+    commit((cur) => appendEvent(
+      { ...cur, status: "sent" },
+      "declined",
+      signer.email || signer.name,
+      declineReason.trim() ? `Declined to sign — "${declineReason.trim()}"` : "Declined to sign (no reason given)",
+    ));
+    setDeclineOpen(false);
+    setDeclineReason("");
+    setSigningAs(null);
+    setTab("audit");
+    setNotice(`${signer.name || signer.role} declined to sign. The envelope is on hold — see Activity.`);
+  };
 
   const finishSigning = async () => {
     if (!signer || missingRequired.length > 0) return;
@@ -643,17 +704,40 @@ export default function ESignSurface({
             {signer && (
               <section className="nxEsRailSec">
                 <h3 className="nxEsRailTitle">Your fields</h3>
+
+                {/* progress — a signer should always know how much is left */}
+                <div className="nxEsProgress" data-testid="esign-progress">
+                  <div className="nxEsProgressBar">
+                    <span className="nxEsProgressFill" style={{ width: `${myProgress}%` }} />
+                  </div>
+                  <span className="nxEsProgressText">{myDone} of {myFields.length} complete</span>
+                </div>
+
+                {/* guided navigation — the single control that walks a signer
+                    through a multi-page envelope instead of hunting for boxes */}
+                {(missingRequired.length > 0 || myDone < myFields.length) && (
+                  <button
+                    type="button" className="nxEsBtn isBlock" data-testid="esign-next-field"
+                    onClick={() => goToNextUnfilled(selectedId ?? undefined)}
+                  >
+                    Go to next {missingRequired.length > 0 ? "required " : ""}field
+                  </button>
+                )}
+
                 <ul className="nxEsTaskList">
-                  {myFields.sort((a, b) => a.page - b.page || a.y - b.y).map((f) => (
+                  {inReadingOrder(myFields).map((f) => (
                     <li key={f.id}>
                       <button
                         type="button"
                         className={isFieldFilled(f) ? "nxEsTask isDone" : f.required ? "nxEsTask isRequired" : "nxEsTask"}
-                        onClick={() => { setPageIndex(f.page); setSelectedId(f.id); }}
+                        onClick={() => goToField(f)}
+                        data-testid={`esign-task-${f.id}`}
                       >
-                        <span className="nxEsTaskMark" aria-hidden>{isFieldFilled(f) ? "✓" : ""}</span>
-                        {f.label || FIELD_TYPE_LABEL[f.type]} · p.{f.page + 1}
-                        {f.required && !isFieldFilled(f) && <em> required</em>}
+                        <span className="nxEsTaskMark" aria-hidden>{isFieldFilled(f) && <Check size={12} />}</span>
+                        <FieldGlyph type={f.type} size={12} />
+                        <span className="nxEsTaskLabel">{f.label || FIELD_TYPE_LABEL[f.type]}</span>
+                        <span className="nxEsTaskPage">p.{f.page + 1}</span>
+                        {f.required && !isFieldFilled(f) && <em className="nxEsTaskReq">required</em>}
                       </button>
                     </li>
                   ))}
@@ -666,6 +750,12 @@ export default function ESignSurface({
                   {missingRequired.length > 0
                     ? `${missingRequired.length} required field${missingRequired.length === 1 ? "" : "s"} left`
                     : "Finish signing"}
+                </button>
+                <button
+                  type="button" className="nxEsBtn isDanger isBlock" data-testid="esign-decline"
+                  onClick={() => setDeclineOpen(true)}
+                >
+                  Decline to sign
                 </button>
               </section>
             )}
@@ -768,6 +858,8 @@ export default function ESignSurface({
                       onRemove={() => removeField(f.id)}
                       onFill={(v) => fillField(f.id, v)}
                       onOpenSignature={() => setSigDialog({ fieldId: f.id, kind: f.type === "initials" ? "initials" : "signature" })}
+                      hasAdopted={!!adopted[f.type === "initials" ? "initials" : "signature"]}
+                      onApplyAdopted={() => applyAdopted(f.type === "initials" ? "initials" : "signature", f.id)}
                     />
                   ))}
                 </div>
@@ -915,10 +1007,60 @@ export default function ESignSurface({
         onDone={(sig) => {
           if (!sigDialog) return;
           const f = env.fields.find((x) => x.id === sigDialog.fieldId);
-          if (f) fillField(f.id, { type: f.type === "initials" ? "initials" : "signature", signature: sig });
+          if (f) {
+            const kind = f.type === "initials" ? "initials" : "signature";
+            fillField(f.id, { type: kind, signature: sig });
+            // adopt once, reuse everywhere — nobody re-draws per field
+            setAdopted((cur) => ({ ...cur, [kind]: sig }));
+            setSigDialog(null);
+            goToNextUnfilled(f.id);
+            return;
+          }
           setSigDialog(null);
         }}
       />
+
+      {declineOpen && (
+        <div className="nxEsScrim" onClick={() => setDeclineOpen(false)}>
+          <div
+            className="nxEsDialog isNarrow" role="dialog" aria-modal="true"
+            aria-label="Decline to sign" onClick={(e) => e.stopPropagation()}
+          >
+            <header className="nxEsDialogHead">
+              <h2>Decline to sign</h2>
+              <button type="button" className="nxEsIconBtn" aria-label="Close" onClick={() => setDeclineOpen(false)}>
+                <X size={14} />
+              </button>
+            </header>
+            <div className="nxEsDialogBody">
+              <p className="nxEsHint">
+                The envelope stops here and the sender is notified. Your reason is recorded
+                in the audit trail.
+              </p>
+              <textarea
+                className="nxEsTextarea" rows={3} autoFocus
+                aria-label="Reason for declining"
+                placeholder="Reason (optional) — e.g. the payment terms in clause 3 need revising"
+                value={declineReason}
+                onChange={(e) => setDeclineReason(e.target.value)}
+                data-testid="esign-decline-reason"
+              />
+            </div>
+            <footer className="nxEsDialogFoot">
+              <span className="nxEsHint">This cannot be undone from the signer side.</span>
+              <div className="nxEsBtnRow">
+                <button type="button" className="nxEsBtn" onClick={() => setDeclineOpen(false)}>Cancel</button>
+                <button
+                  type="button" className="nxEsBtn isDanger" onClick={declineSigning}
+                  data-testid="esign-decline-confirm"
+                >
+                  Decline to sign
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -965,7 +1107,7 @@ function PageView({ page, zoom, children, onVisible }: {
 
 /* ---------------------------------------------------------------- FieldBox */
 
-function FieldBox({ field: f, env, mode, selected, onSelect, onPatch, onRemove, onFill, onOpenSignature }: {
+function FieldBox({ field: f, env, mode, selected, onSelect, onPatch, onRemove, onFill, onOpenSignature, hasAdopted, onApplyAdopted }: {
   field: EsignField;
   env: EsignEnvelope;
   mode: "edit" | "fill" | "view";
@@ -975,6 +1117,9 @@ function FieldBox({ field: f, env, mode, selected, onSelect, onPatch, onRemove, 
   onRemove: () => void;
   onFill: (v: EsignFieldValue | undefined) => void;
   onOpenSignature: () => void;
+  /** a signature/initials of this kind has already been adopted this session */
+  hasAdopted?: boolean;
+  onApplyAdopted?: () => void;
 }) {
   const signer = env.signers.find((s) => s.id === f.signerId);
   const color = signer?.colorIndex ?? 0;
@@ -1012,8 +1157,17 @@ function FieldBox({ field: f, env, mode, selected, onSelect, onPatch, onRemove, 
       case "signature":
       case "initials":
         return (
-          <button type="button" className="nxEsFillBtn" onClick={onOpenSignature} data-testid={`esign-fill-${f.id}`}>
-            {filled ? <SignaturePreview value={f.value} /> : `${f.type === "initials" ? "Initial" : "Sign"} here`}
+          <button
+            type="button" className="nxEsFillBtn"
+            onClick={() => { if (!filled && hasAdopted && onApplyAdopted) onApplyAdopted(); else onOpenSignature(); }}
+            title={!filled && hasAdopted ? "Apply your adopted signature" : undefined}
+            data-testid={`esign-fill-${f.id}`}
+          >
+            {filled
+              ? <SignaturePreview value={f.value} />
+              : hasAdopted
+                ? <span className="nxEsFillAdopt"><Check size={11} /> Apply {f.type === "initials" ? "initials" : "signature"}</span>
+                : `${f.type === "initials" ? "Initial" : "Sign"} here`}
           </button>
         );
       case "date":

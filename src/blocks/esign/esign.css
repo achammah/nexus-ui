@@ -271,6 +271,36 @@
 .nxEsTask.isDone { color: var(--nx-fg-muted); }
 .nxEsTaskMark { width: 16px; height: 16px; border: 1px solid var(--nx-border-strong); border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; }
 .nxEsTask.isDone .nxEsTaskMark { background: var(--nx-ok); border-color: var(--nx-ok); color: var(--nx-bg); }
+.nxEsTaskLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nxEsTaskPage { color: var(--nx-fg-faint); font-size: var(--nx-text-micro); font-variant-numeric: tabular-nums; }
+.nxEsTaskReq { color: var(--nx-danger); font-style: normal; font-size: var(--nx-text-micro); margin-left: auto; }
+.nxEsTask.isRequired { border-color: color-mix(in srgb, var(--nx-danger) 35%, var(--nx-border)); }
+.nxEsTask .nxEsGlyph { display: inline-flex; color: var(--nx-fg-faint); flex: none; }
+
+/* signing progress */
+.nxEsProgress { display: flex; flex-direction: column; gap: 4px; }
+.nxEsProgressBar {
+  height: 6px; border-radius: 999px; overflow: hidden;
+  background: var(--nx-bg-sunken); border: 1px solid var(--nx-border);
+}
+.nxEsProgressFill {
+  display: block; height: 100%; background: var(--nx-ok);
+  transition: width var(--nx-t-med, 240ms) var(--nx-ease);
+}
+@media (prefers-reduced-motion: reduce) { .nxEsProgressFill { transition: none; } }
+.nxEsProgressText { font-size: var(--nx-text-micro); color: var(--nx-fg-muted); font-variant-numeric: tabular-nums; }
+
+/* one-tap reuse of an adopted signature */
+.nxEsFillAdopt { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; }
+
+.nxEsTextarea {
+  font: inherit; font-size: var(--nx-text-meta); width: 100%; resize: vertical;
+  padding: 6px 8px; border-radius: var(--nx-radius-s);
+  border: 1px solid var(--nx-border); background: var(--nx-bg); color: var(--nx-fg);
+}
+.nxEsTextarea:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; border-color: var(--nx-accent); }
+.nxEsDialog.isNarrow { max-width: 460px; }
+.nxEsDialogBody { padding: var(--nx-gap-3); display: flex; flex-direction: column; gap: var(--nx-gap-2); }
 
 /* certificate + audit */
 .nxEsCert { border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m); background: var(--nx-bg); padding: var(--nx-gap-2); display: flex; flex-direction: column; gap: 6px; }
