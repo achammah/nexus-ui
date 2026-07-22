@@ -3,13 +3,38 @@
 import * as React from "react";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import UniverPresetSheetsCoreEnUS from "@univerjs/preset-sheets-core/locales/en-US";
+// Feature presets — each is WIRING of a capability Univer already ships; they enter
+// the presets array only when the config enables them (and their locales/CSS ride
+// this lazy chunk regardless, so importing the block still adds nothing eager).
+import { UniverSheetsFilterPreset } from "@univerjs/preset-sheets-filter";
+import UniverPresetSheetsFilterEnUS from "@univerjs/preset-sheets-filter/locales/en-US";
+import { UniverSheetsSortPreset } from "@univerjs/preset-sheets-sort";
+import UniverPresetSheetsSortEnUS from "@univerjs/preset-sheets-sort/locales/en-US";
+import { UniverSheetsConditionalFormattingPreset } from "@univerjs/preset-sheets-conditional-formatting";
+import UniverPresetSheetsConditionalFormattingEnUS from "@univerjs/preset-sheets-conditional-formatting/locales/en-US";
+import { UniverSheetsDataValidationPreset } from "@univerjs/preset-sheets-data-validation";
+import UniverPresetSheetsDataValidationEnUS from "@univerjs/preset-sheets-data-validation/locales/en-US";
+import { UniverSheetsFindReplacePreset } from "@univerjs/preset-sheets-find-replace";
+import UniverPresetSheetsFindReplaceEnUS from "@univerjs/preset-sheets-find-replace/locales/en-US";
+import { UniverSheetsNotePreset } from "@univerjs/preset-sheets-note";
+import UniverPresetSheetsNoteEnUS from "@univerjs/preset-sheets-note/locales/en-US";
 import { createUniver, LocaleType, mergeLocales } from "@univerjs/presets";
 import { defaultTheme } from "@univerjs/themes";
 import { CommandType, ThemeService, type IWorkbookData } from "@univerjs/core";
 import { IRenderManagerService } from "@univerjs/engine-render";
+import { ComponentManager } from "@univerjs/ui";
 import "@univerjs/preset-sheets-core/lib/index.css";
+import "@univerjs/preset-sheets-filter/lib/index.css";
+import "@univerjs/preset-sheets-sort/lib/index.css";
+import "@univerjs/preset-sheets-conditional-formatting/lib/index.css";
+import "@univerjs/preset-sheets-data-validation/lib/index.css";
+import "@univerjs/preset-sheets-find-replace/lib/index.css";
+import "@univerjs/preset-sheets-note/lib/index.css";
 import "./workbook.css";
+import { resolveWorkbookConfig, type WorkbookConfig } from "./config";
+import { WorkbookIO, type WorkbookIOController } from "./workbook-actions";
 import { canvasGridTheme, deriveWorkbookTheme, isDarkTheme, skinSignature, themeSignature, useThemeNonce, withLightTokens, type CanvasGridTheme, type UniverTheme } from "./workbook-theme";
+import { registerNxIcons, type IconRegistry } from "./workbook-icons";
 import { seedWorkbook } from "./snapshot";
 
 export interface WorkbookSurfaceProps {
@@ -23,7 +48,27 @@ export interface WorkbookSurfaceProps {
   /* host controls (save state, reset) — rendered INTO the right end of Univer's own
      toolbar row so the page needs no extra header strip of its own */
   actions?: React.ReactNode;
+  /* which Excel capabilities this surface carries (import/export, filters, sort,
+     conditional formatting, data validation, find & replace, notes). Omitted keys
+     fall back to the full-Excel defaults; pass a narrowed object for a simpler grid. */
+  config?: Partial<WorkbookConfig>;
   "data-testid"?: string;
+}
+
+/* Assemble the presets array + merged locale from the resolved config. Core is
+   always present; each feature preset (a capability Univer already ships) joins only
+   when enabled. importExport is NOT a preset — it is built toolbar actions, handled
+   separately — so it does not appear here. */
+function buildPresets(cfg: WorkbookConfig, container: HTMLElement) {
+  const presets: unknown[] = [UniverSheetsCorePreset({ container, ribbonType: "simple" })];
+  const locales: object[] = [UniverPresetSheetsCoreEnUS];
+  if (cfg.filters) { presets.push(UniverSheetsFilterPreset()); locales.push(UniverPresetSheetsFilterEnUS); }
+  if (cfg.sort) { presets.push(UniverSheetsSortPreset()); locales.push(UniverPresetSheetsSortEnUS); }
+  if (cfg.conditionalFormatting) { presets.push(UniverSheetsConditionalFormattingPreset()); locales.push(UniverPresetSheetsConditionalFormattingEnUS); }
+  if (cfg.dataValidation) { presets.push(UniverSheetsDataValidationPreset()); locales.push(UniverPresetSheetsDataValidationEnUS); }
+  if (cfg.findReplace) { presets.push(UniverSheetsFindReplacePreset()); locales.push(UniverPresetSheetsFindReplaceEnUS); }
+  if (cfg.notes) { presets.push(UniverSheetsNotePreset()); locales.push(UniverPresetSheetsNoteEnUS); }
+  return { presets, locale: mergeLocales(...locales) };
 }
 
 type Injector = { get: (token: unknown) => unknown };
@@ -31,10 +76,16 @@ type UniverInstance = {
   univer: { dispose: () => void; __getInjector: () => Injector };
   univerAPI: UniverApi;
 };
-interface FWorkbook { save: () => IWorkbookData }
+interface FSheet { getSheetId?: () => string }
+interface FWorkbook {
+  save: () => IWorkbookData;
+  getId?: () => string;
+  getActiveSheet?: () => FSheet | null;
+}
 interface UniverApi {
   createWorkbook: (data: IWorkbookData) => void;
   getActiveWorkbook: () => FWorkbook | null;
+  disposeUnit: (unitId: string) => void;
   toggleDarkMode: (isDark: boolean) => void;
   onCommandExecuted: (cb: (command: { type: number; id: string }) => void) => { dispose: () => void };
 }
@@ -111,8 +162,12 @@ export function WorkbookSurface({
   reloadNonce = 0,
   className,
   actions,
+  config,
   ...rest
 }: WorkbookSurfaceProps) {
+  const cfg = React.useMemo(() => resolveWorkbookConfig(config), [config]);
+  const cfgRef = React.useRef(cfg);
+  cfgRef.current = cfg;
   const hostRef = React.useRef<HTMLDivElement>(null);
   const apiRef = React.useRef<UniverApi | null>(null);
   const themeRef = React.useRef<UniverThemeService | null>(null);
@@ -139,15 +194,20 @@ export function WorkbookSurface({
     try {
       const sig = themeSignature();
       const skinSig = skinSignature();
+      const { presets, locale } = buildPresets(cfgRef.current, host);
       const created = createUniver({
         locale: LocaleType.EN_US,
-        locales: { [LocaleType.EN_US]: mergeLocales(UniverPresetSheetsCoreEnUS) },
+        locales: { [LocaleType.EN_US]: locale },
         theme: derive() as unknown as typeof defaultTheme,
-        presets: [UniverSheetsCorePreset({ container: host, ribbonType: "simple" })],
+        presets: presets as Parameters<typeof createUniver>[0]["presets"],
       }) as unknown as UniverInstance;
       instance = created;
       apiRef.current = created.univerAPI;
       const injector = created.univer.__getInjector();
+      // icon-language swap BEFORE the workbench's first commit: every registry-
+      // resolved icon (toolbar, dropdowns, context menus) renders app-language
+      // from the first paint; registrations are per-instance, disposed with it
+      registerNxIcons(injector.get(ComponentManager) as IconRegistry);
       themeRef.current = injector.get(ThemeService) as UniverThemeService;
       appliedSigRef.current = sig;
       appliedSkinRef.current = skinSig;
@@ -162,7 +222,14 @@ export function WorkbookSurface({
       const grid = deriveGrid();
       let tries = 0;
       const tick = () => {
-        if (applyGridCanvasTheme(injector, data.id, grid) || tries++ > 120) return;
+        if (applyGridCanvasTheme(injector, data.id, grid)) {
+          // late sheet controllers (permission, gridlines) re-register a few stock
+          // icon names during workbook init — re-assert the app set once the
+          // render unit exists (idempotent, delete-then-register)
+          registerNxIcons(injector.get(ComponentManager) as IconRegistry);
+          return;
+        }
+        if (tries++ > 120) return;
         gridRaf = requestAnimationFrame(tick);
       };
       gridRaf = requestAnimationFrame(tick);
@@ -194,7 +261,8 @@ export function WorkbookSurface({
       unitIdRef.current = "";
       if (host) host.innerHTML = "";
     };
-  }, [reloadNonce]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadNonce, cfg]);
 
   // live re-theme when the app theme flips (data-theme) or a skin lands. The two
   // inputs are handled separately: a SKIN change re-derives the light-anchored
@@ -230,11 +298,51 @@ export function WorkbookSurface({
     if (themeSignature() !== sig) { appliedSigRef.current = ""; appliedSkinRef.current = ""; }
   }, [nonce, phase]);
 
+  // IO controller — reads/replaces the live workbook for the import/export actions.
+  // replaceWorkbook disposes the current unit and mounts the imported data through the
+  // SAME facade path the initial mount uses, then re-applies the grid-canvas theme +
+  // app icons to the new render unit and pushes the new snapshot to the host so it
+  // persists. Kept in a ref-backed memo so the actions band never re-renders it.
+  const ioController = React.useMemo<WorkbookIOController>(() => ({
+    getSnapshot: () => apiRef.current?.getActiveWorkbook()?.save() ?? null,
+    getActiveSheetId: () => apiRef.current?.getActiveWorkbook()?.getActiveSheet?.()?.getSheetId?.(),
+    replaceWorkbook: (data) => {
+      const api = apiRef.current;
+      if (!api) return;
+      const current = api.getActiveWorkbook();
+      const currentId = current?.getId?.();
+      try { if (currentId) api.disposeUnit(currentId); } catch { /* already gone */ }
+      api.createWorkbook(data);
+      api.toggleDarkMode(isDarkTheme());
+      unitIdRef.current = data.id;
+      // re-theme the fresh render unit (bounded retry until it exists) + re-assert icons
+      const injector = injectorRef.current;
+      if (injector) {
+        const grid = deriveGrid();
+        let tries = 0;
+        const tick = () => {
+          if (applyGridCanvasTheme(injector, data.id, grid)) {
+            registerNxIcons(injector.get(ComponentManager) as IconRegistry);
+            return;
+          }
+          if (tries++ > 120) return;
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }
+      onChangeRef.current?.(api.getActiveWorkbook()?.save() ?? data);
+    },
+  }), []);
+
+  const showIO = cfg.importExport && phase === "ready";
+  const showBand = (actions || showIO) && phase === "ready";
+
   return (
     <div
       className={[
         "nxWorkbook",
         actions ? "nxWorkbook--hostActions" : "",
+        showIO ? "nxWorkbook--io" : "",
         phase === "error" ? "nxWorkbookError" : "",
         className,
       ].filter(Boolean).join(" ")}
@@ -244,11 +352,14 @@ export function WorkbookSurface({
         {/* Univer owns this div exclusively — no React children here, or React and
             Univer fight over the same nodes (removeChild). Overlays are siblings. */}
         <div className="nxWorkbookMount" ref={hostRef} data-testid="workbook-host" aria-label="Spreadsheet workbook" role="application" />
-        {actions && phase === "ready" && (
-          /* host actions live INSIDE the vendor toolbar band (its right end stays
-             clear via a reserved inset in workbook.css) — one continuous toolbar,
-             no extra header strip */
-          <div className="nxWorkbookActions nx-rise-in-sm" data-testid="workbook-actions">{actions}</div>
+        {showBand && (
+          /* the workbook's own controls (import/export) + any host actions live INSIDE
+             the vendor toolbar band (its right end stays clear via a reserved inset in
+             workbook.css) — one continuous toolbar, no extra header strip */
+          <div className="nxWorkbookActions nx-rise-in-sm" data-testid="workbook-actions">
+            {showIO && <WorkbookIO controller={ioController} baseName={valueRef.current?.name ?? "workbook"} />}
+            {actions}
+          </div>
         )}
         {phase === "loading" && (
           <div className="nxWorkbookOverlay nxWorkbookOverlay--loading nxWorkbookOverlay--transparent" data-testid="workbook-loading">

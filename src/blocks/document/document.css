@@ -1,0 +1,257 @@
+/* DocumentSurface chrome — token-driven, both themes, mobile-aware. The editor itself
+   carries its own styles (NotionEditor's inline <style>); this dresses the page shell. */
+
+/* transparent so an embedded mount inherits the host surface — see page-workspace.css */
+/* self-bound to the viewport so a scroll container forms even when the host's content area is
+   NOT height-bounded (see page-workspace.css .nxWs) — a standalone DocumentSurface mount roots
+   here; --nx-doc-inset (default 0) lets a host with a topbar tune the exact fit. */
+.nxDoc { display: flex; flex-direction: column; height: 100%; min-height: 0; max-height: calc(100dvh - var(--nx-doc-inset, 0px)); background: transparent; color: var(--nx-fg); font-family: var(--nx-font-sans); }
+
+/* the ONE header row: host breadcrumbs (or the doc title) left, controls right */
+.nxDoc-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--nx-gap-3); padding: 6px 14px; border-bottom: 1px solid var(--nx-border); background: var(--nx-bg); position: sticky; top: 0; z-index: 20; min-height: 42px; }
+.nxDoc-bar-l { display: flex; align-items: center; gap: var(--nx-gap-3); flex: 1; min-width: 0; }
+.nxDoc-bar-r { display: flex; align-items: center; gap: 4px; }
+.nxDoc-crumb { display: inline-flex; align-items: center; gap: 6px; font: var(--nx-text-title); color: var(--nx-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42vw; }
+.nxDoc-crumb-ic { font-size: 15px; }
+.nxDoc-count { font: var(--nx-text-meta); color: var(--nx-fg-faint); white-space: nowrap; }
+.nxDoc-busy { font: var(--nx-text-meta); color: var(--nx-accent); }
+
+.nxDoc-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 9px; border: 1px solid transparent; background: none; color: var(--nx-fg-muted); border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-meta); transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease), border-color var(--nx-t-fast) var(--nx-ease); }
+.nxDoc-btn:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxDoc-btn.is-on { background: var(--nx-accent-soft); color: var(--nx-accent); }
+.nxDoc-btn-primary { border-color: var(--nx-border); color: var(--nx-fg); }
+.nxDoc-btn-primary:hover { border-color: var(--nx-accent); color: var(--nx-accent); }
+
+/* export/import menu */
+.nxDoc-io { position: relative; }
+.nxDoc-io-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 232px; padding: 6px; background: var(--nx-bg-raised); border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m); box-shadow: var(--nx-shadow-2); }
+.nxDoc-io-h { font-family: var(--nx-font-mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--nx-fg-faint); padding: 8px 10px 4px; }
+.nxDoc-io-pop button { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; color: var(--nx-fg); font: var(--nx-text-body); text-align: left; padding: 8px 10px; border-radius: var(--nx-radius-s); cursor: pointer; transition: background var(--nx-t-fast) var(--nx-ease); }
+.nxDoc-io-pop button:hover { background: var(--nx-bg-sunken); }
+.nxDoc-io-pop button svg { color: var(--nx-fg-muted); }
+
+/* find & replace */
+.nxDoc-find { display: flex; align-items: center; gap: 7px; padding: 7px 14px; border-bottom: 1px solid var(--nx-border); background: var(--nx-bg-sunken); flex-wrap: wrap; }
+.nxDoc-find-ic { color: var(--nx-fg-faint); flex: none; }
+.nxDoc-find input { height: 28px; min-width: 130px; flex: 0 1 200px; border: 1px solid var(--nx-border); background: var(--nx-bg); color: var(--nx-fg); border-radius: var(--nx-radius-s); padding: 0 9px; font: var(--nx-text-body); outline: none; }
+.nxDoc-find input:focus { border-color: var(--nx-accent); box-shadow: 0 0 0 3px var(--nx-accent-soft); }
+.nxDoc-find-n { font: var(--nx-text-meta); color: var(--nx-fg-muted); min-width: 18px; text-align: center; }
+.nxDoc-find-btn { height: 28px; padding: 0 10px; border: 1px solid var(--nx-border); background: var(--nx-bg); color: var(--nx-fg-muted); border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-meta); transition: border-color var(--nx-t-fast), color var(--nx-t-fast); }
+.nxDoc-find-btn:hover:not(:disabled) { border-color: var(--nx-accent); color: var(--nx-accent); }
+.nxDoc-find-btn[aria-pressed="true"] { background: var(--nx-accent-soft); color: var(--nx-accent); border-color: var(--nx-accent); }
+.nxDoc-find-btn.is-primary { background: var(--nx-accent); color: var(--nx-accent-fg); border-color: var(--nx-accent); }
+.nxDoc-find-btn:disabled { opacity: .5; cursor: default; }
+.nxDoc-find-x { margin-left: auto; display: grid; place-items: center; width: 26px; height: 26px; border: 0; background: none; color: var(--nx-fg-faint); border-radius: var(--nx-radius-s); cursor: pointer; }
+.nxDoc-find-x:hover { background: var(--nx-bg); color: var(--nx-fg); }
+
+/* body */
+.nxDoc-body { display: flex; flex: 1; min-height: 0; }
+.nxDoc-main { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+/* the trailing runway lets the LAST heading still scroll to the fold line — without it an
+   outline click on a late section cannot land (the container is already at its scroll end)
+   and the jump reads as "stuck". */
+/* SYMMETRIC 72px gutters: the text column stays centred (720/940) and the hover handles
+   (+ / grip / delete) live inside the left gutter, so they render within the scroll
+   container instead of being clipped by its overflow-x. */
+.nxDoc-page { margin: 0 auto; padding: 0 72px 55vh; }
+.nxDoc.is-narrow .nxDoc-page { max-width: 864px; }
+.nxDoc.is-wide .nxDoc-page { max-width: 1084px; }
+.nxDoc-page.has-cover .nxDoc-head { margin-top: -34px; }
+/* the editor fills the page column (its own 760px cap is released inside the surface) */
+.nxDoc .ne-root { max-width: none; min-height: 40vh; padding-left: 0; }
+.nxDoc .ne-handle { left: -70px; }
+
+/* cover */
+.nxDoc-cover { position: relative; height: 190px; width: 100%; }
+.nxDoc-cover-ctl { position: absolute; right: 16px; bottom: 12px; display: flex; gap: 6px; opacity: 0; transition: opacity var(--nx-t-fast); }
+.nxDoc-cover:hover .nxDoc-cover-ctl { opacity: 1; }
+.nxDoc-cover-ctl button { height: 26px; padding: 0 10px; border: 0; background: color-mix(in oklab, #0b0b0b 55%, transparent); color: #fff; border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-meta); backdrop-filter: blur(4px); }
+.nxDoc-cover-ctl button:hover { background: color-mix(in oklab, #0b0b0b 72%, transparent); }
+
+/* header: icon + title — the page's own gutters already align it to the text column */
+.nxDoc-head { padding: 30px 8px 6px 0; }
+.nxDoc-head-ctl { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+.nxDoc-icon { font-size: 46px; line-height: 1; width: 64px; height: 64px; display: grid; place-items: center; border: 0; background: none; cursor: pointer; border-radius: var(--nx-radius-m); transition: background var(--nx-t-fast); }
+.nxDoc-icon:hover { background: var(--nx-bg-sunken); }
+.nxDoc-page.has-cover .nxDoc-icon { background: var(--nx-bg); box-shadow: var(--nx-shadow-1); }
+.nxDoc-addcover { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 0; background: none; color: var(--nx-fg-faint); border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-meta); opacity: 0; transition: opacity var(--nx-t-fast), background var(--nx-t-fast); }
+.nxDoc-head:hover .nxDoc-addcover { opacity: 1; }
+.nxDoc-addcover:hover { background: var(--nx-bg-sunken); color: var(--nx-fg-muted); }
+/* the title is a real inline-edit field (Notion muscle memory: click it and type) — the
+   hover wash is the affordance that says so; focus drops it and shows the caret. */
+.nxDoc-title { display: block; width: 100%; border: 0; background: none; color: var(--nx-fg); font: 800 40px/1.15 var(--nx-font-sans); letter-spacing: -.03em; outline: none; padding: 6px 8px 2px; margin: 4px 0 0 -8px; border-radius: var(--nx-radius-s); cursor: text; transition: background var(--nx-t-fast) var(--nx-ease); }
+.nxDoc-title:hover { background: var(--nx-bg-sunken); }
+.nxDoc-title:focus { background: none; }
+.nxDoc-title::placeholder { color: var(--nx-fg-faint); }
+
+/* outline rail */
+.nxDoc-rail { flex: none; width: 250px; padding: 20px 16px 20px 8px; border-left: 1px solid var(--nx-border); overflow-y: auto; }
+
+/* mobile */
+@media (max-width: 900px) {
+  .nxDoc-rail { display: none; }
+  .nxDoc-crumb { max-width: 34vw; }
+  .nxDoc-count { display: none; }
+}
+/* at the editor's mobile breakpoint the handles go static (NotionEditor's own rule), so the
+   reserved gutter column is released */
+@media (max-width: 640px) {
+  .nxDoc-page { padding-inline: 14px; }
+  /* the handles go in-flow at this width (editor's own touch rule) and eat the reading
+     column — the destructive one leaves the thumb rail; add + reorder stay */
+  .nxDoc .ne-h-del { display: none; }
+  .nxDoc.is-narrow .nxDoc-page { max-width: 720px; }
+  .nxDoc.is-wide .nxDoc-page { max-width: 940px; }
+}
+@media (max-width: 640px) {
+  .nxDoc-bar { padding: 7px 10px; gap: 4px; }
+  .nxDoc-bar-l { flex: 1 1 0; overflow: hidden; }
+  .nxDoc-bar-r { flex: none; }
+  .nxDoc-count { display: none; }
+  .nxDoc-btn { padding: 0 7px; }
+  .nxDoc-page { padding: 0 14px 45vh; }
+  .nxDoc-title { font-size: 30px; }
+  .nxDoc-icon { font-size: 38px; width: 52px; height: 52px; }
+  .nxDoc-io-pop { position: fixed; left: 8px; right: 8px; top: auto; min-width: 0; }
+}
+
+/* ── icon + cover pickers ─────────────────────────────────────────────────────
+   Native chrome: --nx-* tokens only, both themes, no third-party widget look. */
+.nxDoc-iconwrap { position: relative; }
+
+.nxIconPick, .nxCoverPick {
+  position: absolute; left: 0; top: calc(100% + 8px); z-index: 60;
+  width: 348px; background: var(--nx-bg-raised); border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-l); box-shadow: var(--nx-shadow-2); overflow: hidden;
+  display: flex; flex-direction: column; animation: nxPopIn var(--nx-t-fast) var(--nx-ease-settle);
+}
+.nxIconPick-head, .nxCoverPick-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 8px 8px 10px; border-bottom: 1px solid var(--nx-border);
+}
+.nxCoverPick-head > span { font: var(--nx-text-micro); letter-spacing: var(--nx-tracking-micro); text-transform: uppercase; color: var(--nx-fg-faint); }
+.nxIconPick-tabs { display: flex; gap: 2px; }
+.nxIconPick-tabs button {
+  border: 0; background: none; color: var(--nx-fg-muted); font: var(--nx-text-meta);
+  padding: 5px 10px; border-radius: var(--nx-radius-s); cursor: pointer;
+  transition: background var(--nx-t-fast), color var(--nx-t-fast);
+}
+.nxIconPick-tabs button:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxIconPick-tabs button.is-on { background: var(--nx-accent-soft); color: var(--nx-accent); font-weight: 500; }
+.nxIconPick-acts, .nxCoverPick-acts { display: flex; align-items: center; gap: 2px; }
+.nxIconPick-acts button, .nxCoverPick-acts button {
+  display: inline-flex; align-items: center; gap: 5px; border: 0; background: none;
+  color: var(--nx-fg-muted); font: var(--nx-text-meta); padding: 5px 8px;
+  border-radius: var(--nx-radius-s); cursor: pointer; transition: background var(--nx-t-fast), color var(--nx-t-fast);
+}
+.nxIconPick-acts button:hover:not(:disabled), .nxCoverPick-acts button:hover:not(:disabled) { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxIconPick-acts button:disabled, .nxCoverPick-acts button:disabled { opacity: .4; cursor: default; }
+.nxIconPick-x, .nxCoverPick-x { color: var(--nx-fg-faint) !important; }
+
+.nxIconPick-search { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--nx-border); color: var(--nx-fg-faint); }
+.nxIconPick-search input { flex: 1; min-width: 0; border: 0; background: none; outline: none; color: var(--nx-fg); font: var(--nx-text-body); }
+.nxIconPick-clear { display: grid; place-items: center; width: 20px; height: 20px; border: 0; background: none; color: var(--nx-fg-faint); border-radius: 4px; cursor: pointer; }
+.nxIconPick-clear:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+
+.nxIconPick-strip { display: flex; gap: 2px; padding: 6px 8px; border-bottom: 1px solid var(--nx-border); overflow-x: auto; scrollbar-width: none; }
+.nxIconPick-strip::-webkit-scrollbar { display: none; }
+.nxIconPick-strip button { flex: none; width: 30px; height: 28px; display: grid; place-items: center; border: 0; background: none; font-size: 16px; border-radius: var(--nx-radius-s); cursor: pointer; opacity: .75; transition: background var(--nx-t-fast), opacity var(--nx-t-fast); }
+.nxIconPick-strip button:hover { background: var(--nx-bg-sunken); opacity: 1; }
+
+.nxIconPick-scroll { max-height: 264px; overflow-y: auto; overscroll-behavior: contain; padding: 4px 8px 10px; }
+.nxIconPick-scroll section { scroll-margin-top: 4px; }
+.nxIconPick-scroll h4 {
+  position: sticky; top: 0; z-index: 1; margin: 0; padding: 8px 2px 5px;
+  background: var(--nx-bg-raised); font: var(--nx-text-micro);
+  letter-spacing: var(--nx-tracking-micro); text-transform: uppercase; color: var(--nx-fg-faint);
+}
+.nxIconPick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(34px, 1fr)); gap: 1px; }
+.nxIconPick-grid button {
+  aspect-ratio: 1; display: grid; place-items: center; border: 0; background: none;
+  font-size: 21px; line-height: 1; border-radius: var(--nx-radius-s); cursor: pointer;
+  transition: background var(--nx-t-fast), transform var(--nx-t-fast) var(--nx-ease);
+}
+.nxIconPick-grid button:hover { background: var(--nx-bg-sunken); transform: scale(1.14); }
+.nxIconPick-grid button img { width: 22px; height: 22px; object-fit: cover; border-radius: 4px; }
+.nxIconPick-empty { padding: 26px 10px; text-align: center; color: var(--nx-fg-faint); font: var(--nx-text-body); }
+
+.nxIconPick-upload { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.nxIconPick-drop {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 26px 16px;
+  border: 1.5px dashed var(--nx-border-strong); border-radius: var(--nx-radius-m);
+  background: none; color: var(--nx-fg-muted); cursor: pointer; text-align: center;
+  transition: border-color var(--nx-t-fast), background var(--nx-t-fast);
+}
+.nxIconPick-drop:hover:not(:disabled) { border-color: var(--nx-accent); background: var(--nx-accent-soft); }
+.nxIconPick-drop b { font: var(--nx-text-body); font-weight: 600; color: var(--nx-fg); }
+.nxIconPick-drop span { font: var(--nx-text-meta); color: var(--nx-fg-faint); line-height: 1.45; }
+.nxIconPick-current { display: flex; align-items: center; gap: 10px; font: var(--nx-text-meta); color: var(--nx-fg-muted); }
+.nxIconPick-current img { width: 34px; height: 34px; object-fit: cover; border-radius: var(--nx-radius-s); border: 1px solid var(--nx-border); }
+.nxIconPick-err, .nxCoverPick-err { font: var(--nx-text-meta); color: var(--nx-danger); }
+
+/* anchored under its trigger by default (the "Add cover" button in the page header) — and
+   right-anchored only when it hangs off the cover's own control bar, which sits top-right */
+/* anchored under its trigger (the "Add cover" button in the page header). When it hangs off
+   the cover banner instead, the trigger sits bottom-right, so it right-aligns there. */
+.nxCoverPick { width: 320px; }
+.nxDoc-cover .nxCoverPick { left: auto; right: 16px; top: calc(100% - 8px); }
+.nxCoverPick-body { padding: 4px 12px 14px; max-height: 320px; overflow-y: auto; overscroll-behavior: contain; }
+.nxCoverPick-body h4 { margin: 0; padding: 10px 0 6px; font: var(--nx-text-micro); letter-spacing: var(--nx-tracking-micro); text-transform: uppercase; color: var(--nx-fg-faint); }
+.nxCoverPick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; }
+.nxCoverPick-grid button { height: 38px; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s); cursor: pointer; transition: transform var(--nx-t-fast) var(--nx-ease), box-shadow var(--nx-t-fast); }
+.nxCoverPick-grid button:hover { transform: translateY(-1px); box-shadow: var(--nx-shadow-1); }
+.nxCoverPick-grid button.is-on { box-shadow: 0 0 0 2px var(--nx-accent); }
+.nxCoverPick-drop { display: inline-flex; align-items: center; gap: 8px; width: 100%; justify-content: center; padding: 11px; border: 1.5px dashed var(--nx-border-strong); border-radius: var(--nx-radius-m); background: none; color: var(--nx-fg-muted); font: var(--nx-text-body); cursor: pointer; }
+.nxCoverPick-drop:hover:not(:disabled) { border-color: var(--nx-accent); color: var(--nx-accent); }
+
+/* cover controls + reposition */
+.nxDoc-cover-ctl.is-open { opacity: 1; left: 16px; right: 16px; justify-content: space-between; align-items: center; }
+.nxDoc-cover-hint { display: inline-flex; align-items: center; gap: 6px; font: var(--nx-text-meta); color: #fff; background: color-mix(in oklab, #0b0b0b 55%, transparent); padding: 5px 10px; border-radius: var(--nx-radius-s); backdrop-filter: blur(4px); }
+.nxDoc-cover-ctl button.is-primary { background: var(--nx-accent); color: var(--nx-accent-fg); }
+.nxDoc-cover.is-repositioning { cursor: grab; touch-action: none; }
+.nxDoc-cover.is-repositioning:active { cursor: grabbing; }
+.nxDoc-cover.is-repositioning::after { content: ""; position: absolute; inset: 0; box-shadow: inset 0 0 0 2px var(--nx-accent); pointer-events: none; }
+
+/* ── touch: sheets instead of popovers/rails ─────────────────────────────── */
+.nxDoc-scrim { position: fixed; inset: 0; z-index: 70; background: color-mix(in oklab, #0b0b0b 42%, transparent); }
+.nxDoc-outline-sheet, .nxIconPick.is-sheet, .nxCoverPick.is-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 80; width: auto;
+  max-height: 72vh; border-radius: var(--nx-radius-l) var(--nx-radius-l) 0 0;
+  border: 1px solid var(--nx-border); border-bottom: 0;
+  background: var(--nx-bg-raised); box-shadow: var(--nx-shadow-2);
+  display: flex; flex-direction: column; animation: nxSheetIn var(--nx-t-med) var(--nx-ease-settle);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@keyframes nxSheetIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.nxDoc-sheet-grip, .nxIconPick.is-sheet::before, .nxCoverPick.is-sheet::before {
+  content: ""; display: block; flex: none; width: 38px; height: 4px; margin: 8px auto 2px;
+  border-radius: 3px; background: var(--nx-border-strong);
+}
+.nxDoc-sheet-head { display: flex; align-items: center; gap: 7px; padding: 8px 14px; font: var(--nx-text-micro); letter-spacing: var(--nx-tracking-micro); text-transform: uppercase; color: var(--nx-fg-faint); border-bottom: 1px solid var(--nx-border); }
+.nxDoc-sheet-head button { margin-left: auto; display: grid; place-items: center; width: 32px; height: 32px; border: 0; background: none; color: var(--nx-fg-muted); border-radius: var(--nx-radius-s); cursor: pointer; }
+.nxDoc-sheet-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 18px; }
+.nxDoc-sheet-body .ne-outline { max-width: none; position: static; }
+.nxDoc-sheet-body .ne-outline-head { display: none; }
+.nxDoc-sheet-body .ne-outline-i button { padding: 11px 10px; font-size: 15px; }
+/* touch targets in the sheet form of the pickers. In a flex COLUMN every non-scrolling
+   child must be flex:none, or it gets squashed to share the height with the grid. */
+.nxIconPick.is-sheet > .nxIconPick-head,
+.nxIconPick.is-sheet > .nxIconPick-search,
+.nxIconPick.is-sheet > .nxIconPick-strip,
+.nxCoverPick.is-sheet > .nxCoverPick-head { flex: none; }
+.nxIconPick.is-sheet .nxIconPick-scroll { max-height: none; flex: 1; min-height: 0; }
+.nxIconPick.is-sheet .nxIconPick-grid { grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); }
+.nxIconPick.is-sheet .nxIconPick-grid button { font-size: 26px; }
+.nxIconPick.is-sheet .nxIconPick-strip button { width: 40px; height: 38px; font-size: 19px; }
+.nxCoverPick.is-sheet .nxCoverPick-body { max-height: none; flex: 1; }
+.nxCoverPick.is-sheet .nxCoverPick-grid button { height: 52px; }
+
+/* Suggesting mode — the Editing↔Suggesting switch, the review-count badge, the review rail */
+.nxDoc-modeswitch { display: inline-flex; align-items: center; gap: 0; padding: 2px; background: var(--nx-bg-sunken); border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m); }
+.nxDoc-mode { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border: 0; background: none; color: var(--nx-fg-muted); border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-meta); white-space: nowrap; transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease); }
+.nxDoc-mode:hover { color: var(--nx-fg); }
+.nxDoc-mode.is-on { background: var(--nx-bg-raised); color: var(--nx-accent); box-shadow: var(--nx-shadow-1); font-weight: 600; }
+.nxDoc-btn { position: relative; }
+.nxDoc-badge { position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px; padding: 0 3px; display: grid; place-items: center; font: var(--nx-text-meta); font-size: 9.5px; font-weight: 700; line-height: 1; color: var(--nx-accent-fg); background: var(--nx-accent); border-radius: 8px; }
+.nxDoc-rail-sug { width: 288px; padding: 12px 10px 20px; }
+@media (max-width: 1080px) { .nxDoc-rail-sug { width: 258px; } }

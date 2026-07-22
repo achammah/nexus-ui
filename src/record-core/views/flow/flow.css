@@ -1,10 +1,11 @@
 /* Flow view — full-fidelity records-as-graph canvas, styled to read as a
    first-class app view, not an embedded widget. The canvas is an inset WELL
    (bg-sunken) that record cards (bg-raised) sit above — the same depth the kanban
-   uses. Every piece of xyflow's own chrome (controls, minimap, attribution, edges,
-   handles, background, resizer) AND every control this view adds (layout switcher,
-   search, group toggle, node-detail panel) is restyled to our --nx-* button/
-   surface tokens. Dark mode and runtime skins re-theme the whole surface through
+   uses. xyflow's stock <Controls> is REPLACED by our own zoom cluster
+   (FlowControls); every remaining piece of xyflow chrome (minimap, attribution,
+   edges, handles, background, resizer) AND every control this view adds (layout
+   switcher, search, group toggle, node-detail panel) is styled to our --nx-*
+   button/surface tokens. Dark mode and runtime skins re-theme the whole surface through
    plain CSS inheritance — no JS re-derivation. flow.css loads after xyflow's
    stylesheet, so these overrides win on equal specificity. */
 
@@ -26,7 +27,12 @@
   --xy-connectionline-stroke: var(--nx-accent);
   --xy-handle-background-color: var(--nx-accent);
   --xy-handle-border-color: var(--nx-bg-raised);
-  --xy-minimap-mask-background-color: color-mix(in oklab, var(--nx-bg-sunken) 60%, transparent);
+  /* minimap = a miniature of the canvas well: sunken interior, the out-of-view
+     region veiled toward the raised surface, the viewport window outlined */
+  --xy-minimap-background-color: var(--nx-bg-sunken);
+  --xy-minimap-mask-background-color: color-mix(in oklab, var(--nx-bg-raised) 55%, transparent);
+  --xy-minimap-mask-stroke-color: var(--nx-border-strong);
+  --xy-minimap-mask-stroke-width: 1.5;
   --xy-minimap-node-background-color: var(--nx-border-strong);
   --xy-selection-background-color: var(--nx-accent-soft);
   --xy-selection-border: 1px dashed var(--nx-accent);
@@ -34,44 +40,74 @@
 }
 
 /* ---------- xyflow chrome → native (restyled classes) ---------- */
-.nxFlowWrap .react-flow__panel { margin: var(--nx-gap-3); }
+/* ‼ Collision guard, load-bearing: xyflow tags its overlay elements with BARE
+   utility classes (top/bottom/left/right/line/handle on resize controls +
+   panels; selected/draggable/nopan on nodes). A host app's OWN generic rules
+   for those names (a `.top` header bar, a `.selected` state) bleed straight
+   into the canvas — measured: a host `.top{padding;background;border-bottom}`
+   ballooned the two 8px top corner resize handles into ~50×22 outlined ghost
+   boxes flanking the node label, striped the top resize line, and painted a
+   phantom backdrop behind the top panels. Every box-affecting prop on these
+   elements is therefore pinned explicitly. */
+.nxFlowWrap .react-flow__panel {
+  margin: var(--nx-gap-3);
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+.nxFlowWrap .react-flow__node {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+}
 
-/* control cluster reads as an app toolbar card (horizontal orientation set in FlowView) */
-.nxFlowWrap .react-flow__controls {
-  display: flex;
-  flex-direction: row;
+/* zoom cluster (FlowControls — ours, not xyflow's): one toolbar card holding
+   zoom out · live % readout · zoom in · fit · layout lock, in the same card +
+   icon-button language as the view's top toolbars */
+.nxFlowZoombar {
   gap: 2px;
   padding: 3px;
   background: var(--nx-bg-raised);
   border: 1px solid var(--nx-border);
   border-radius: var(--nx-radius-m);
   box-shadow: var(--nx-shadow-1);
+  flex-wrap: nowrap;
 }
-.nxFlowWrap .react-flow__controls .react-flow__controls-button {
-  width: 28px;
-  height: 28px;
-  padding: 0;
+.nxFlowZoombar .nxIconBtn:disabled { opacity: 0.4; cursor: default; background: transparent; color: var(--nx-fg-muted); }
+.nxFlowZoombar .nxIconBtn[data-active="true"] { background: var(--nx-accent-soft); color: var(--nx-accent); }
+.nxFlowZoomPct {
+  height: 26px;
+  min-width: 44px;
+  padding: 0 6px;
   background: transparent;
   border: none;
   border-radius: var(--nx-radius-s);
+  font: var(--nx-text-meta);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--nx-fg-muted);
+  cursor: pointer;
   transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease);
 }
-.nxFlowWrap .react-flow__controls .react-flow__controls-button:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
-.nxFlowWrap .react-flow__controls .react-flow__controls-button:disabled { opacity: 0.4; cursor: default; }
-.nxFlowWrap .react-flow__controls .react-flow__controls-button svg {
-  width: 14px; height: 14px; max-width: none; max-height: none; fill: currentColor;
-}
+.nxFlowZoomPct:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxFlowZoomDivider { width: 1px; height: 16px; background: var(--nx-border); flex: none; }
 
-/* minimap reads as a native inset panel, not a stock rectangle */
+/* minimap reads as a miniature canvas well: sunken interior (the same surface
+   the real canvas uses), the out-of-view region veiled, the viewport window
+   outlined — interior colors come from the --xy-minimap-* → --nx-* mapping on
+   .nxFlowWrap above */
 .nxFlowWrap .react-flow__minimap {
-  background: var(--nx-bg-raised);
   border: 1px solid var(--nx-border);
   border-radius: var(--nx-radius-m);
   box-shadow: var(--nx-shadow-1);
   overflow: hidden;
 }
 .nxFlowWrap .react-flow__minimap-svg { display: block; border-radius: var(--nx-radius-m); }
+/* keep the viewport-window outline hairline-thin whatever the graph's extent
+   (the svg viewBox scales; without this the 1.5 stroke vanishes or balloons) */
+.nxFlowWrap .react-flow__minimap-mask { vector-effect: non-scaling-stroke; }
+.nxFlowWrap .react-flow__minimap-node { stroke: none; }
 .nxFlowWrap .react-flow__minimap .nxMiniGroup { fill: color-mix(in oklab, var(--nx-border) 60%, transparent); }
 
 /* attribution: hidden via proOptions.hideAttribution (xyflow is MIT — hiding the
@@ -110,6 +146,13 @@
 }
 .nxFlowChipBtn:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
 .nxFlowChipBtn[data-active="true"] { background: var(--nx-accent-soft); border-color: var(--nx-accent); color: var(--nx-accent); }
+
+/* right-click editor menu (FlowContextMenu — dropdown chrome comes from the
+   shared kit; these are the flow-specific bits) */
+.nxFlowMenu { min-width: 176px; }
+.nxFlowMenuTitle { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--nx-fg-faint); }
+.nxFlowMenuDot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+.nxFlowMenuCheck { margin-left: auto; color: var(--nx-accent); font-weight: 700; }
 
 /* search box */
 .nxFlowSearch {
@@ -259,6 +302,13 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--nx-t-fast) var(--nx-ease);
+  /* collision guard (see banner above): host `.top`/`.left`/… rules must not
+     re-box these bare-classed elements */
+  display: block !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
 }
 /* reveal on hover only on pointer devices — on touch (data-touch=1) a tap goes
    sticky-:hover and would leave the handles stranded on the tapped node */
@@ -266,13 +316,22 @@
   opacity: 1;
   pointer-events: all;
 }
-.nxFlowResizeLine { border-color: var(--nx-accent) !important; }
-.nxFlowResizeHandle {
+.nxFlowWrap .react-flow__resize-control.line {
+  background: transparent !important;
+  border-style: solid;
+  border-color: var(--nx-accent) !important;
+}
+/* each line draws ONLY its own edge, whatever border a host rule adds */
+.nxFlowWrap .react-flow__resize-control.line.top { border-width: 1px 0 0 0 !important; }
+.nxFlowWrap .react-flow__resize-control.line.bottom { border-width: 0 0 1px 0 !important; }
+.nxFlowWrap .react-flow__resize-control.line.left { border-width: 0 0 0 1px !important; }
+.nxFlowWrap .react-flow__resize-control.line.right { border-width: 0 1px 0 0 !important; }
+.nxFlowWrap .react-flow__resize-control.handle {
+  width: 8px !important;
+  height: 8px !important;
   background: var(--nx-bg-raised) !important;
   border: 1.5px solid var(--nx-accent) !important;
   border-radius: 2px !important;
-  width: 8px !important;
-  height: 8px !important;
 }
 
 /* connect handles: display-only anchors by default; when drag-to-relate is on
@@ -281,6 +340,8 @@
 .nxFlowWrap .react-flow__handle {
   opacity: 0;
   pointer-events: none;
+  padding: 0 !important; /* collision guard: bare source/target/nodrag classes */
+  margin: 0 !important;
   width: 10px;
   height: 10px;
   border-radius: 999px;

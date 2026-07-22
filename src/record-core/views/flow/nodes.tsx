@@ -24,6 +24,9 @@ export interface FlowActions {
   onResize: (id: string, width: number, height: number) => void;
   onOpenDetail: (id: string) => void;
   onToggleGroup: (groupValue: string) => void;
+  /* context-menu Rename → the named node opens its inline title editor */
+  renameRequest?: string | null;
+  onRenameHandled?: () => void;
 }
 
 const noop = () => {};
@@ -62,8 +65,8 @@ export const nodeAccent = (colorField: FieldDef | undefined, row: RecordRow): st
 };
 
 /* which field types can be renamed inline on the node (typed editors live in the
-   detail panel) */
-const inlineTitleType = (t: string) => t === "text" || t === "longText" || t === "email" || t === "url";
+   detail panel) — FlowView reuses this to gate the context menu's Rename */
+export const inlineTitleType = (t: string) => t === "text" || t === "longText" || t === "email" || t === "url";
 
 export function RecordCardNode({ id, data }: NodeProps<Node<RecordNodeData, "record">>) {
   const actions = React.useContext(FlowActionsContext);
@@ -78,6 +81,14 @@ export function RecordCardNode({ id, data }: NodeProps<Node<RecordNodeData, "rec
     setDraft(nodeTitle(data));
     setEditing(true);
   }, [canRename, data]);
+
+  /* context-menu Rename lands here: the requested node opens its title editor */
+  React.useEffect(() => {
+    if (actions.renameRequest === id) {
+      actions.onRenameHandled?.();
+      startEdit();
+    }
+  }, [actions, id, startEdit]);
 
   const commit = () => {
     setEditing(false);

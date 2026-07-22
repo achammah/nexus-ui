@@ -1,0 +1,247 @@
+/* Timeline (Gantt) view — all chrome through --nx-* tokens (light + dark come
+   from the canvas; nothing hardcoded). */
+
+.nxTl {
+  display: flex;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  background: var(--nx-bg-raised);
+  overflow: hidden;
+  min-height: 320px;
+  user-select: none;
+}
+
+/* ---------------------------------------------------------------- rail */
+.nxTlRail {
+  flex: none;
+  border-right: 1px solid var(--nx-border);
+  display: flex;
+  flex-direction: column;
+  background: var(--nx-bg-raised);
+}
+.nxTlRailHead {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-gap-2);
+  height: 52px; /* aligns with the two header rows */
+  padding: 0 10px;
+  font: var(--nx-text-meta);
+  font-weight: 600;
+  color: var(--nx-fg-muted);
+  border-bottom: 1px solid var(--nx-border);
+}
+.nxTlRows { overflow: hidden; width: 100%; }
+.nxTlRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+  /* the row must not size to its CONTENT — without this the title escapes the
+     rail and hard-clips at the border instead of ellipsing (visible on mobile,
+     where the rail is narrow) */
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border-bottom: 1px solid color-mix(in oklab, var(--nx-border) 55%, transparent);
+  cursor: default;
+  outline: none;
+}
+.nxTlRow:hover, .nxTlRow:focus-visible { background: var(--nx-bg-sunken); }
+.nxTlRow--sel { background: var(--nx-accent-soft); }
+.nxTlRow--sel:hover { background: var(--nx-accent-soft); }
+.nxTlRowH-overdue .nxTlTitle { color: var(--nx-danger); }
+.nxTlRowH-done .nxTlTitle { color: var(--nx-fg-faint); text-decoration: line-through; }
+
+.nxTlCheck {
+  flex: none;
+  width: 13px; height: 13px;
+  accent-color: var(--nx-accent);
+  opacity: 0;
+  transition: opacity var(--nx-t-fast) var(--nx-ease);
+}
+.nxTlRow:hover .nxTlCheck, .nxTlRow:focus-visible .nxTlCheck, .nxTlRow--sel .nxTlCheck, .nxTlCheck:checked { opacity: 1; }
+
+.nxTlCaret {
+  flex: none;
+  width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; background: none; border-radius: var(--nx-radius-s);
+  color: var(--nx-fg-faint); cursor: pointer; padding: 0;
+}
+.nxTlCaret:hover { background: var(--nx-border); color: var(--nx-fg); }
+.nxTlCaret--leaf { pointer-events: none; }
+
+.nxTlTitle {
+  flex: 1 1 auto;
+  /* the title outranks the inline cells for space: they shrink (and the
+     assignee ellipses) before the task name becomes unreadable */
+  min-width: 96px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-align: left;
+  border: 0; background: none; padding: 0;
+  font: var(--nx-text-body);
+  color: var(--nx-fg);
+  cursor: pointer;
+}
+.nxTlTitle:hover { color: var(--nx-accent); }
+
+.nxTlRollup {
+  flex: none;
+  font: var(--nx-text-micro);
+  color: var(--nx-fg-faint);
+  background: var(--nx-bg-sunken);
+  border: 1px solid var(--nx-border);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.nxTlRepeat { flex: none; color: var(--nx-fg-faint); }
+
+.nxTlCells { display: inline-flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.nxTlCellBtn {
+  border: 0; background: none; padding: 1px 2px; border-radius: var(--nx-radius-s);
+  cursor: pointer; display: inline-flex; align-items: center;
+  font: var(--nx-text-micro); color: var(--nx-fg-muted);
+}
+.nxTlCellBtn:hover { background: var(--nx-border); }
+/* a status chip is a single token — it may shorten, never wrap to two lines
+   (a wrapped pill breaks the fixed row height the bar canvas is aligned to) */
+.nxTlCells .nxOptChip { white-space: nowrap; flex: none; }
+/* the assignee is the first to go when space is tight: a fixed stub that
+   ellipses, rather than shrinking to one unreadable letter */
+.nxTlAssignee { flex: none; width: 46px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nxTlAddSub { opacity: 0; }
+.nxTlRow:hover .nxTlAddSub { opacity: 1; }
+.nxTlDate {
+  border: 0; background: none; width: 20px; padding: 0;
+  color: var(--nx-fg-faint); font: var(--nx-text-micro); cursor: pointer;
+  color-scheme: light dark;
+}
+.nxTlDate::-webkit-datetime-edit { display: none; }
+.nxTlDate::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .55; }
+/* the picker is an AFFORDANCE, not a readout (the bar already encodes the
+   dates) — resting rows stay clean, it appears on hover/focus */
+.nxTlRow:not(:hover):not(:focus-within) .nxTlDate { opacity: 0; }
+.nxTlDate:focus-visible { opacity: 1; }
+
+.nxTlQuick {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  color: var(--nx-fg-faint);
+  border-bottom: 1px solid color-mix(in oklab, var(--nx-border) 55%, transparent);
+}
+.nxTlQuick input {
+  flex: 1; min-width: 0;
+  border: 0; background: none; outline: none;
+  font: var(--nx-text-body); color: var(--nx-fg);
+}
+.nxTlQuick input::placeholder { color: var(--nx-fg-faint); }
+.nxTlQuickClear {
+  border: 0; background: var(--nx-bg-sunken); color: var(--nx-fg-muted);
+  border-radius: 999px; width: 16px; height: 16px; line-height: 1; cursor: pointer;
+}
+
+/* -------------------------------------------------------------- canvas */
+.nxTlScroll { flex: 1; overflow: auto; background: var(--nx-bg); }
+.nxTlCanvas { position: relative; min-height: 100%; }
+
+.nxTlHead {
+  position: sticky; top: 0; z-index: 3;
+  height: 52px;
+  background: var(--nx-bg-raised);
+  border-bottom: 1px solid var(--nx-border);
+}
+.nxTlHeadRow { position: relative; height: 26px; }
+.nxTlHeadRow--fine { border-top: 1px solid color-mix(in oklab, var(--nx-border) 55%, transparent); }
+.nxTlHeadCell {
+  position: absolute; top: 0; bottom: 0;
+  display: flex; align-items: center;
+  padding-left: 6px;
+  overflow: hidden; white-space: nowrap;
+  font: var(--nx-text-micro);
+  color: var(--nx-fg-muted);
+  border-left: 1px solid color-mix(in oklab, var(--nx-border) 55%, transparent);
+}
+
+.nxTlBody { position: relative; }
+.nxTlWeekend { position: absolute; top: 0; bottom: 0; background: color-mix(in oklab, var(--nx-fg) 3.5%, transparent); }
+.nxTlToday { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--nx-accent); opacity: .75; z-index: 1; }
+
+.nxTlArrows { position: absolute; inset: 0; pointer-events: none; z-index: 2; color: var(--nx-fg-faint); }
+.nxTlArrow { fill: none; stroke: currentColor; stroke-width: 1.5; opacity: .8; }
+.nxTlArrow--late { color: var(--nx-danger); }
+
+.nxTlRowLine {
+  position: absolute; left: 0; right: 0; height: 36px;
+  border-bottom: 1px solid color-mix(in oklab, var(--nx-border) 40%, transparent);
+}
+
+.nxTlBar {
+  position: absolute; top: 7px; height: 22px; z-index: 2;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--tl-opt, var(--nx-accent)) 26%, var(--nx-bg-raised));
+  border: 1px solid color-mix(in oklab, var(--tl-opt, var(--nx-accent)) 55%, transparent);
+  display: flex; align-items: center;
+  cursor: grab;
+  transition: box-shadow var(--nx-t-fast) var(--nx-ease);
+}
+.nxTlBar:hover { box-shadow: var(--nx-shadow-1); }
+.nxTlBar--drag { cursor: grabbing; box-shadow: var(--nx-shadow-2); z-index: 4; }
+.nxTlBar--parent { border-radius: 4px; height: 14px; top: 11px; }
+.nxTlBar--critical { outline: 2px solid color-mix(in oklab, var(--nx-warn) 70%, transparent); outline-offset: 1px; }
+.nxTlH-overdue.nxTlBar { border-color: var(--nx-danger); background: color-mix(in oklab, var(--nx-danger) 22%, var(--nx-bg-raised)); }
+.nxTlH-atRisk.nxTlBar { border-color: var(--nx-warn); }
+.nxTlH-blocked.nxTlBar { border-style: dashed; border-color: var(--nx-danger); }
+.nxTlH-done.nxTlBar { opacity: .55; }
+
+.nxTlProgress {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: color-mix(in oklab, var(--tl-opt, var(--nx-accent)) 30%, transparent);
+  border-radius: 6px 0 0 6px;
+  pointer-events: none;
+}
+.nxTlBarLabel {
+  position: relative;
+  padding: 0 8px;
+  font: var(--nx-text-micro);
+  color: var(--nx-fg);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  pointer-events: none;
+}
+.nxTlHandle {
+  position: absolute; top: -2px; bottom: -2px; width: 7px; z-index: 3;
+  cursor: ew-resize;
+}
+.nxTlHandle--l { left: -3px; }
+.nxTlHandle--r { right: -3px; }
+.nxTlHandle::after {
+  content: ""; position: absolute; top: 6px; bottom: 6px; left: 3px; width: 2px;
+  border-radius: 2px; background: var(--nx-fg-faint); opacity: 0;
+}
+.nxTlBar:hover .nxTlHandle::after { opacity: .8; }
+
+.nxTlMilestone {
+  position: absolute; top: 11px; width: 14px; height: 14px; z-index: 2;
+  transform: translateX(-7px) rotate(45deg);
+  background: var(--nx-accent);
+  border-radius: 3px;
+  cursor: grab;
+}
+.nxTlMilestone.nxTlH-overdue { background: var(--nx-danger); }
+.nxTlMilestone.nxTlH-done { opacity: .5; }
+
+.nxTlSchedule {
+  position: absolute; top: 7px; left: 8px;
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px dashed var(--nx-border-strong);
+  background: none; border-radius: var(--nx-radius-s);
+  padding: 2px 8px;
+  font: var(--nx-text-micro); color: var(--nx-fg-faint);
+  cursor: pointer;
+}
+.nxTlSchedule:hover { color: var(--nx-fg); border-color: var(--nx-fg-faint); }
+
+@media (max-width: 767px) {
+  .nxTl { min-height: 260px; }
+  .nxTlRailHead { padding: 0 6px; }
+  .nxTlRow { gap: 2px; }
+}

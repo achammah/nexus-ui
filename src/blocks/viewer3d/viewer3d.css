@@ -1,0 +1,242 @@
+/* Viewer3D block — all chrome on the --nx-* tokens; the WebGL canvas is
+   transparent, so the stage ground is pure CSS and flips with the theme. */
+
+.nxV3 {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 420px;
+  background: var(--nx-bg);
+}
+
+/* ---- toolbar ---- */
+.nxV3Bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nx-gap-3);
+  padding: var(--nx-gap-2) var(--nx-gap-4);
+  border-bottom: 1px solid var(--nx-border);
+  background: var(--nx-bg-raised);
+  flex-wrap: wrap;
+}
+.nxV3BarTitle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--nx-gap-2);
+  min-width: 0;
+}
+.nxV3Kicker {
+  font: var(--nx-text-micro);
+  letter-spacing: var(--nx-tracking-micro);
+  text-transform: uppercase;
+  color: var(--nx-accent);
+  white-space: nowrap;
+}
+.nxV3Title {
+  font: var(--nx-text-title);
+  color: var(--nx-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nxV3BarActions {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-gap-2);
+  flex-wrap: wrap;
+}
+
+.nxV3Btn,
+.nxV3SegBtn {
+  font: var(--nx-text-meta);
+  color: var(--nx-fg-muted);
+  background: transparent;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease), border-color var(--nx-t-fast) var(--nx-ease);
+  white-space: nowrap;
+}
+.nxV3Btn:hover, .nxV3SegBtn:hover { color: var(--nx-fg); border-color: var(--nx-border-strong); background: var(--nx-bg-sunken); }
+.nxV3Btn:focus-visible, .nxV3SegBtn:focus-visible, .nxV3Canvas:focus-visible, .nxV3Pin:focus-visible, .nxV3CardClose:focus-visible {
+  outline: 2px solid var(--nx-accent);
+  outline-offset: 1px;
+}
+.nxV3Btn[aria-pressed="true"] {
+  color: var(--nx-accent);
+  border-color: color-mix(in srgb, var(--nx-accent) 45%, var(--nx-border));
+  background: var(--nx-accent-soft);
+}
+.nxV3Seg {
+  display: inline-flex;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s);
+  overflow: hidden;
+}
+.nxV3Seg .nxV3SegBtn { border: none; border-radius: 0; }
+.nxV3Seg .nxV3SegBtn + .nxV3SegBtn { border-left: 1px solid var(--nx-border); }
+.nxV3SegBtn[aria-pressed="true"] { color: var(--nx-accent); background: var(--nx-accent-soft); }
+
+/* ---- stage ---- */
+.nxV3Stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  /* studio ground: a soft radial pool of light behind the model, in both themes */
+  background:
+    radial-gradient(120% 90% at 50% 32%, color-mix(in srgb, var(--nx-bg-raised) 72%, var(--nx-bg)) 0%, var(--nx-bg) 62%, color-mix(in srgb, var(--nx-fg) 5%, var(--nx-bg)) 100%);
+}
+.nxV3Canvas {
+  position: absolute;
+  inset: 0;
+  touch-action: none; /* one-finger orbit + pinch zoom on mobile */
+}
+.nxV3Canvas canvas { display: block; width: 100% !important; height: 100% !important; }
+
+.nxV3Overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* ---- hotspot pins ---- */
+.nxV3Pin {
+  position: absolute;
+  left: 0; top: 0;
+  /* interactive markers always paint above the passive room labels */
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  will-change: transform;
+  transition: opacity var(--nx-t-med) var(--nx-ease);
+}
+.nxV3PinDot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--nx-accent);
+  border: 2.5px solid var(--nx-bg-raised);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--nx-fg) 18%, transparent), var(--nx-shadow-1);
+  flex: none;
+}
+.nxV3Pin--danger .nxV3PinDot, .nxV3CardDot.nxV3Pin--danger { background: var(--nx-danger); }
+.nxV3Pin--warn .nxV3PinDot, .nxV3CardDot.nxV3Pin--warn { background: var(--nx-warn); }
+.nxV3Pin--ok .nxV3PinDot, .nxV3CardDot.nxV3Pin--ok { background: var(--nx-ok); }
+.nxV3PinLabel {
+  font: var(--nx-text-meta);
+  color: var(--nx-fg);
+  background: color-mix(in srgb, var(--nx-bg-raised) 88%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--nx-border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  box-shadow: var(--nx-shadow-1);
+  white-space: nowrap;
+}
+.nxV3Pin:hover .nxV3PinLabel { border-color: var(--nx-border-strong); }
+.nxV3Pin--open { z-index: 3; }
+.nxV3Pin--open .nxV3PinDot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--nx-accent) 25%, transparent); }
+.nxV3Pin--occluded { opacity: 0.35; }
+
+/* ---- room labels ---- */
+.nxV3RoomLabel {
+  position: absolute;
+  left: 0; top: 0;
+  z-index: 1;
+  font: var(--nx-text-micro);
+  letter-spacing: var(--nx-tracking-micro);
+  text-transform: uppercase;
+  color: var(--nx-fg-muted);
+  background: color-mix(in srgb, var(--nx-bg-raised) 82%, transparent);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s);
+  padding: 2px 7px;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+/* ---- detail card ---- */
+.nxV3Card {
+  position: absolute;
+  right: var(--nx-gap-4);
+  bottom: var(--nx-gap-4);
+  width: min(320px, calc(100% - 2 * var(--nx-gap-4)));
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-2);
+  padding: var(--nx-gap-3) var(--nx-gap-4);
+}
+.nxV3CardHead { display: flex; align-items: center; gap: var(--nx-gap-2); }
+.nxV3CardDot { width: 10px; height: 10px; border-radius: 50%; background: var(--nx-accent); flex: none; }
+.nxV3CardTitle { font: var(--nx-text-title); color: var(--nx-fg); flex: 1; min-width: 0; }
+.nxV3CardClose {
+  background: transparent; border: none; cursor: pointer;
+  color: var(--nx-fg-faint); font-size: 16px; line-height: 1;
+  padding: 2px 6px; border-radius: var(--nx-radius-s);
+}
+.nxV3CardClose:hover { color: var(--nx-fg); background: var(--nx-bg-sunken); }
+.nxV3CardBody { font: var(--nx-text-body); color: var(--nx-fg-muted); margin: var(--nx-gap-2) 0 0; }
+
+/* ---- hint + poster/loading/error ---- */
+.nxV3Hint {
+  position: absolute;
+  left: var(--nx-gap-4);
+  bottom: var(--nx-gap-3);
+  font: var(--nx-text-meta);
+  color: var(--nx-fg-faint);
+  pointer-events: none;
+}
+@media (max-width: 640px) { .nxV3Hint { display: none; } }
+
+.nxV3Poster {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--nx-gap-3);
+  background: var(--nx-bg);
+  color: var(--nx-fg-muted);
+  font: var(--nx-text-body);
+  text-align: center;
+  padding: var(--nx-gap-5);
+}
+.nxV3PosterGlyph {
+  width: 56px; height: 56px;
+  border-radius: var(--nx-radius-m);
+  border: 1px solid var(--nx-border);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--nx-accent) 14%, var(--nx-bg-raised)), var(--nx-bg-raised));
+  position: relative;
+  animation: nxV3Pulse 1.6s var(--nx-ease) infinite;
+}
+.nxV3PosterGlyph::after {
+  content: "";
+  position: absolute; inset: 16px;
+  border: 2px solid color-mix(in srgb, var(--nx-accent) 55%, var(--nx-border));
+  border-radius: 4px;
+  transform: rotate(18deg) skewX(-8deg);
+}
+@keyframes nxV3Pulse { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .nxV3PosterGlyph { animation: none; } }
+.nxV3PosterTitle { font: var(--nx-text-title); color: var(--nx-fg); }
+.nxV3PosterBody { max-width: 360px; }
+.nxV3Poster--error .nxV3Btn { margin-top: var(--nx-gap-2); }
+
+/* mobile: tighter toolbar */
+@media (max-width: 640px) {
+  .nxV3Bar { padding: var(--nx-gap-2) var(--nx-gap-3); }
+  .nxV3Title { display: none; }
+}
