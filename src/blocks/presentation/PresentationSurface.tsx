@@ -637,19 +637,22 @@ export function PresentationSurface({
                   }
                 />
               </FitSlide>
-              {notesOpen && (
-                <div className="nxPresNotes" data-testid="notes-panel">
-                  <span className="nxPresNotesLabel">Speaker notes</span>
-                  <textarea
-                    className="nxPresNotesArea"
-                    value={slide.notes}
-                    placeholder="Notes only you see in presenter view…"
-                    onChange={(e) => patchSlide(slide.id, { notes: e.target.value })}
-                    aria-label="Speaker notes"
-                  />
-                </div>
-              )}
             </div>
+
+            {/* notes are a sibling of the stage, not a child of it — inside the
+                well they would lay out as a column beside the slide */}
+            {notesOpen && (
+              <div className="nxPresNotes" data-testid="notes-panel">
+                <span className="nxPresNotesLabel">Speaker notes</span>
+                <textarea
+                  className="nxPresNotesArea"
+                  value={slide.notes}
+                  placeholder="Notes only you see in presenter view…"
+                  onChange={(e) => patchSlide(slide.id, { notes: e.target.value })}
+                  aria-label="Speaker notes"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -232,20 +232,14 @@
   border-radius: var(--nx-radius-s);
 }
 
-/* notes — a floating panel OVER the canvas (never a second full-width band;
-   the stage keeps the whole column height) */
+/* notes — a thin pane UNDER the stage (as Slides has it). Floating it over the
+   canvas covered the slide's own content, which is worse than the space it saves;
+   it is collapsible from the Slide menu when the stage should take the column. */
 .nxPresNotes {
-  position: absolute;
-  left: var(--nx-gap-3);
-  bottom: var(--nx-gap-3);
-  width: min(480px, calc(100% - 2 * var(--nx-gap-3)));
-  border: 1px solid var(--nx-border);
-  border-radius: var(--nx-radius-m);
-  background: color-mix(in srgb, var(--nx-bg-raised) 94%, transparent);
-  backdrop-filter: blur(6px);
-  box-shadow: var(--nx-shadow-2);
+  flex: none;
+  border-top: 1px solid var(--nx-border);
+  background: var(--nx-bg-raised);
   padding: var(--nx-gap-2) var(--nx-gap-3);
-  z-index: 5;
 }
 .nxPresNotesLabel {
   font: 600 var(--nx-text-micro) var(--nx-font-sans);
