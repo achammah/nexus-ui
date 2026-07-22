@@ -27,6 +27,8 @@ export interface PdfPageHandle {
   width: number;
   height: number;
   render: (canvas: HTMLCanvasElement, scale: number) => Promise<void>;
+  /** abort an in-flight render for this canvas (unmount, page swap) */
+  cancel: (canvas: HTMLCanvasElement) => void;
 }
 
 export interface PdfDocHandle {
@@ -37,6 +39,30 @@ export interface PdfDocHandle {
 
 type PdfjsModule = typeof import("pdfjs-dist");
 let pdfjsPromise: Promise<PdfjsModule> | null = null;
+
+/* One canvas may be asked to re-render before its previous render finished —
+   zoom changes, fit-width on resize, page swaps. Two pdfjs render tasks sharing
+   a canvas corrupt the 2D transform state and paint the page MIRRORED, so a
+   canvas may only ever have one live task: cancel the old one and let it settle
+   before starting the next. */
+const liveRenders = new WeakMap<HTMLCanvasElement, { cancel: () => void; done: Promise<void> }>();
+
+async function renderExclusive(
+  canvas: HTMLCanvasElement,
+  start: () => { promise: Promise<void>; cancel: () => void },
+): Promise<void> {
+  const prev = liveRenders.get(canvas);
+  if (prev) {
+    prev.cancel();
+    await prev.done; // resolves (never rejects) once the cancellation settles
+  }
+  const task = start();
+  const done = task.promise.catch(() => { /* cancelled or superseded */ });
+  // cancel() must stay bound to its task — pdfjs RenderTask uses private fields
+  liveRenders.set(canvas, { cancel: () => task.cancel(), done });
+  await done;
+  if (liveRenders.get(canvas)?.done === done) liveRenders.delete(canvas);
+}
 
 async function loadPdfjs(): Promise<PdfjsModule> {
   if (!pdfjsPromise) {
@@ -68,6 +94,8 @@ export async function openDocument(doc: EsignDocument): Promise<PdfDocHandle> {
         const ctx = canvas.getContext("2d");
         if (ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       },
+      /* images paint synchronously — nothing to cancel */
+      cancel: () => {},
     };
     return { pageCount: 1, getPage: async () => page, destroy: () => {} };
   }
@@ -84,14 +112,23 @@ export async function openDocument(doc: EsignDocument): Promise<PdfDocHandle> {
         width: vp1.width,
         height: vp1.height,
         render: async (canvas, scale) => {
+          // The viewport stays at the CSS scale; the extra device pixels come
+          // from an explicit transform (pdfjs's documented high-DPI recipe).
           const dpr = Math.min(globalThis.devicePixelRatio || 1, 2);
-          const viewport = page.getViewport({ scale: scale * dpr });
-          canvas.width = Math.round(viewport.width);
-          canvas.height = Math.round(viewport.height);
+          const viewport = page.getViewport({ scale });
+          canvas.width = Math.round(viewport.width * dpr);
+          canvas.height = Math.round(viewport.height * dpr);
           const ctx = canvas.getContext("2d");
           if (!ctx) return;
-          await page.render({ canvasContext: ctx, viewport }).promise;
+          await renderExclusive(canvas, () =>
+            page.render({
+              canvasContext: ctx,
+              viewport,
+              transform: dpr === 1 ? undefined : [dpr, 0, 0, dpr, 0, 0],
+            }),
+          );
         },
+        cancel: (canvas) => liveRenders.get(canvas)?.cancel(),
       };
     },
     destroy: () => void pdf.destroy(),

@@ -52,7 +52,7 @@
   {
     "name": "flattened pdf downloads",
     "pass": true,
-    "detail": "31033 bytes"
+    "detail": "31035 bytes"
   },
   {
     "name": "flattened pdf has cert page (3 pages)",
@@ -153,6 +153,11 @@
     "name": "mobile: no page-level horizontal scroll",
     "pass": true,
     "detail": "overflow 0px"
+  },
+  {
+    "name": "pdf renders upright under a fit-width re-render (no render race)",
+    "pass": true,
+    "detail": "top 6053 / bottom 667 ink of 152064px band"
   },
   {
     "name": "no page errors across journey",

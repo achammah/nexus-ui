@@ -31,6 +31,10 @@ export interface ESignSurfaceProps {
 }
 
 type Tab = "prepare" | "sign" | "audit";
+/* the manual zoom range and the fit-width floor are the SAME range, so fitting a
+   narrow pane can never park the control at a disabled bound with a clipped page */
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 2;
 const ALL_FIELD_TYPES: EsignFieldType[] = ["signature", "initials", "date", "text", "checkbox", "dropdown"];
 const STATUS_LABEL: Record<EsignEnvelope["status"], string> = {
   draft: "Draft", sent: "Sent", partially_signed: "Partially signed", completed: "Completed",
@@ -65,6 +69,12 @@ export default function ESignSurface({
 
   const [tab, setTab] = React.useState<Tab>(env.status === "draft" ? "prepare" : "sign");
   const [zoom, setZoom] = React.useState(1);
+  /* once the user works the zoom control we stop auto-fitting under them */
+  const zoomTouched = React.useRef(false);
+  const setZoomManual = React.useCallback((next: React.SetStateAction<number>) => {
+    zoomTouched.current = true;
+    setZoom(next);
+  }, []);
   const [pageIndex, setPageIndex] = React.useState(0);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [armedType, setArmedType] = React.useState<EsignFieldType | null>(null);
@@ -100,14 +110,29 @@ export default function ESignSurface({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docKey, reloadNonce]);
 
-  // fit-width once per document: a phone (or narrow pane) gets the whole page
-  // width on screen instead of a clipped 100% render
+  // fit-width: a phone (or narrow pane) gets the whole page width on screen
+  // instead of a clipped 100% render. This re-runs on CONTAINER RESIZE (rotate,
+  // pane drag, responsive reflow) — fitting only at load time leaves a stale
+  // desktop zoom behind and the page clips. The user's own zoom wins from the
+  // moment they touch the control.
   React.useEffect(() => {
     const first = pages[0];
     const box = scrollRef.current;
     if (!first || !box) return;
-    const avail = box.clientWidth - 32;
-    if (first.width > avail) setZoom(Math.max(0.4, Math.floor((avail / first.width) * 100) / 100));
+    const fit = () => {
+      if (zoomTouched.current) return;
+      // slack covers the page gutter plus the page's own border/shadow, so the
+      // fit result never lands one pixel wide and clips
+      const avail = box.clientWidth - 40;
+      const next = first.width > avail
+        ? Math.max(ZOOM_MIN, Math.floor((avail / first.width) * 100) / 100)
+        : 1;
+      setZoom((z) => (z === next ? z : next));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(box);
+    return () => ro.disconnect();
   }, [pages]);
 
   const editable = env.status === "draft";
@@ -640,9 +665,9 @@ export default function ESignSurface({
               <span className="nxEsSigningAs">Signing as <strong>{signer.name}</strong></span>
             )}
             <div className="nxEsZoom">
-              <button type="button" className="nxEsIconBtn" aria-label="Zoom out" disabled={zoom <= 0.6} onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.15).toFixed(2)))}>−</button>
+              <button type="button" className="nxEsIconBtn" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoomManual((z) => Math.max(ZOOM_MIN, +(z - 0.15).toFixed(2)))}>−</button>
               <span className="nxEsPageLabel">{Math.round(zoom * 100)}%</span>
-              <button type="button" className="nxEsIconBtn" aria-label="Zoom in" disabled={zoom >= 2} onClick={() => setZoom((z) => Math.min(2, +(z + 0.15).toFixed(2)))}>+</button>
+              <button type="button" className="nxEsIconBtn" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoomManual((z) => Math.min(ZOOM_MAX, +(z + 0.15).toFixed(2)))}>+</button>
             </div>
           </div>
           <div className="nxEsScroll" ref={scrollRef} data-testid="esign-scroll">
@@ -861,7 +886,7 @@ function PageView({ page, zoom, children, onVisible }: {
     const canvas = canvasRef.current;
     if (!canvas) return;
     void page.render(canvas, zoom).catch(() => { if (!dead) { /* render race on unmount */ } });
-    return () => { dead = true; };
+    return () => { dead = true; page.cancel(canvas); };
   }, [page, zoom]);
   React.useEffect(() => {
     const el = hostRef.current;
