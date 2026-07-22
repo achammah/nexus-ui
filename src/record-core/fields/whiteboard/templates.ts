@@ -60,7 +60,7 @@ function kanban(): Skeleton[] {
   // labels kept short (≤13 chars) so the centered bound text clears the card at the
   // hand-drawn font's real (wide) render — a long label shears its edge glyphs
   const cols = [
-    { t: "To do", bg: BG.grey, notes: ["Draft brief", "List assets"] },
+    { t: "To do", bg: BG.grey, notes: ["Draft brief", "Set scope"] },
     { t: "In progress", bg: BG.blue, notes: ["Wire the API", "Design pass"] },
     { t: "Done", bg: BG.green, notes: ["Kickoff call"] },
   ];

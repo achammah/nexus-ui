@@ -152,6 +152,9 @@ export default function OpsRail({ api, config, selection, compact, templates, pe
     const dy = cy - (b.minY + b.maxY) / 2;
     const placed = created.map((e) => ({ ...e, x: (Number(e.x) || 0) + dx, y: (Number(e.y) || 0) + dy }));
     commit([...(api.getSceneElements() as WbElement[]), ...placed]);
+    // frame the whole inserted template in view (a tall template placed at centre can
+    // push its header up behind the toolbar) — fit it with a margin
+    api.scrollToContent(placed, { fitToViewport: true, viewportZoomFactor: 0.85, animate: false } as never);
     flash(`Inserted “${t.label}”.`);
   };
 
