@@ -13,7 +13,7 @@ import {
 } from "react-map-gl/maplibre";
 import type { MapRef, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type { GeoJSONSource, Map as MaplibreMap } from "maplibre-gl";
-import { Navigation, ArrowRight, HelpCircle, MapPinPlus, ZoomIn } from "lucide-react";
+import { Navigation, ArrowRight, HelpCircle, MapPinPlus, ZoomIn, Box } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./map.css";
 import { Button } from "../../../primitives/Button";
@@ -361,6 +361,47 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     }
     applySky(map, projection === "globe", appDark);
   }, [projection, appDark]);
+
+  /* ── fly view: trackpad tilt/rotate + a one-click 3D toggle ──
+     Trackpad users have no right-mouse drag, so a plain two-finger drag stays
+     pan/zoom and ⌥(alt) + two-finger becomes the fly gesture: vertical → PITCH
+     (tilt top-down↔oblique), horizontal → BEARING (spin). We intercept the wheel
+     in the capture phase and stop it before maplibre's scrollZoom sees it, so the
+     two gestures never fight. Desktop mouse still tilts via ctrl/right-drag
+     (dragRotate); mobile via two-finger (touchPitch). */
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.altKey) return; // plain scroll → zoom/pan (unchanged)
+      const map = mapRef.current?.getMap();
+      if (!map) return;
+      e.preventDefault();
+      e.stopImmediatePropagation(); // keep scrollZoom from also firing
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        map.setBearing(map.getBearing() + e.deltaX * 0.4);
+      } else {
+        // push up (deltaY<0) tilts toward the horizon; clamp to the config maxPitch
+        const next = Math.max(0, Math.min(map.getMaxPitch(), map.getPitch() - e.deltaY * 0.25));
+        map.setPitch(next);
+      }
+    };
+    el.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    return () => el.removeEventListener("wheel", onWheel, { capture: true } as EventListenerOptions);
+  }, []);
+  /* one-click fly toggle: level (top-down + north) when tilted/rotated, else ease
+     into a 3D oblique pose. Works in flat AND globe (tilting a globe orbits it). */
+  const flyActive = pitchAttr > 5;
+  const toggleFly = React.useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const tilted = map.getPitch() > 5 || Math.abs(map.getBearing()) > 1;
+    map.easeTo(
+      tilted
+        ? { pitch: 0, bearing: 0, duration: reduceMotion ? 0 : 700, essential: true }
+        : { pitch: Math.min(60, map.getMaxPitch()), duration: reduceMotion ? 0 : 900, essential: true },
+    );
+  }, [reduceMotion]);
 
   /* ── projection ⟂ basemap: two orthogonal axes on ONE merged map view ──
      Projection (flat|globe) is a live toggle that changes ONLY the projection —
@@ -936,6 +977,13 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
         interactiveLayerIds={interactiveLayerIds}
         cursor={effectiveCursor}
         doubleClickZoom={false}
+        /* fly-view gestures: ctrl/right-drag rotates + tilts (pitchWithRotate),
+           two-finger touch tilts + rotates on mobile, keyboard arrows+shift steer.
+           Trackpad tilt (⌥ + two-finger) is a custom wheel handler below. */
+        dragRotate
+        touchZoomRotate
+        touchPitch
+        keyboard
         onClick={onMapClick}
         onDblClick={onMapDblClick}
         onContextMenu={onMapContextMenu}
@@ -1221,6 +1269,18 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
             onToggleBuildings={(on) => onViewState({ mapBuildings3d: on })}
             onToggleHillshade={(on) => onViewState({ mapHillshade: on })}
           />
+          <Button
+            size="sm"
+            variant={flyActive ? "primary" : "secondary"}
+            icon={<Box size={14} />}
+            className="nxMapCtrlBtn"
+            data-testid="map-fly-btn"
+            aria-pressed={flyActive}
+            title={flyActive ? "Level the view (top-down, north up)" : "Fly view — tilt into 3D. Trackpad: ⌥ + two-finger to tilt / spin"}
+            onClick={toggleFly}
+          >
+            {flyActive ? "2D" : "3D"}
+          </Button>
           <LayersPanel
             open={typeof viewState.mapLayersOpen === "boolean" ? viewState.mapLayersOpen : false}
             onOpenChange={(v) => onViewState({ mapLayersOpen: v })}
