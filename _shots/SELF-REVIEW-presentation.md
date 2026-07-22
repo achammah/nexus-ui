@@ -90,3 +90,28 @@ Honest gaps (this wave):
 4. **Templates are per-deck**, not a cross-deck library (host registry seam).
 
 Verified: tsc clean (block), 111/111 journeys live against the harness, shots re-captured.
+
+## Craft pass (2nd same-class rejection — approach re-opened, not patched)
+
+The user's verdict ("not PPTX grade", "not updated") re-opened the approach. Root cause of "not
+updated" was structural, not cosmetic: the deployed page loads the STORED snapshot, so no seed
+improvement ever reached an existing install. Fixes:
+
+1. **Seed revision upgrade path** — `seedRev` stamped by `seedDeck()`; on adopt, an UNTOUCHED older
+   seed (own rev older, or the legacy fixture signature title+slug with no rev) is replaced and the
+   replacement persists to the host store (J22a); a user-authored deck is never touched (J22b).
+   HONEST LIMIT: a legacy demo deck the user EDITED still matches the fixture signature and will be
+   replaced — flagged to the lead, acceptable for demo content by their call.
+2. **Notes float restored (user-arbitrated twice)** — floating bottom-left panel, closed by default;
+   guard journey J2c-guard asserts it is NOT a full-width band and the stage keeps the column height.
+3. **Typography/rhythm pass** — title 76px/-0.028em with kicker; content slides share one heading
+   baseline (H + hairline, uniform 84px top); uppercase kicker treatment for column lead-ins;
+   editorial numbered lists (accent `01`-style counters); quote with oversized accent glyph + em-dash
+   attribution; measure caps on body text.
+4. **Seed redesigned to CFO grade** — title slide with kicker + accent panel; numbered section
+   dividers (animated `01`/`02`); KPI slide = hero stat card + 3 soft cards (staggered rise);
+   diagram/chart/table slides animated; master footer + slide № on every slide.
+
+Verified: 114/114 journeys, tsc clean, build clean; per-slide shots read individually:
+`deck-title.png`, `deck-section.png`, `deck-kpi.png`, `deck-quote.png`, `deck-diagram.png`,
+`deck-chart.png`, `deck-present-kpi.png`, `deck-title-dark.png`.

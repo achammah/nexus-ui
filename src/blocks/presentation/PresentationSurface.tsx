@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { DeckMaster, DeckSnapshot, DeckThemeId, PresentationConfig, Slide, SlideBlocks, SlideLayout, SlideTemplate, SlideTransition } from "./types";
 import { uid } from "./types";
-import { applyViewEvent, createSlide, isDeckSnapshot, seedDeck } from "./snapshot";
+import { applyViewEvent, createSlide, isDeckSnapshot, isStaleSeed, seedDeck } from "./snapshot";
 import { LAYOUTS, SlideView, textOf } from "./SlideView";
 import { ElementLayer } from "./ElementLayer";
 import { ColorWell, ElementBar, FONT_STACKS, InsertMenu } from "./ElementControls";
@@ -120,10 +120,22 @@ export function PresentationSurface({
   };
 
   /* adopt value on mount + on reloadNonce; edits flow deck -> onChange upward */
-  const [deck, setDeck] = React.useState<DeckSnapshot>(() => (isDeckSnapshot(value) ? value : seedDeck()));
+  /* adopt: invalid -> seed; a stored deck that is an UNTOUCHED older seed also
+     re-seeds (demo installs receive seed upgrades; edited decks are never touched) */
+  const adopt = (v: DeckSnapshot | null): DeckSnapshot =>
+    isDeckSnapshot(v) ? (isStaleSeed(v) ? seedDeck() : v) : seedDeck();
+  const [deck, setDeck] = React.useState<DeckSnapshot>(() => adopt(value));
   React.useEffect(() => {
-    setDeck(isDeckSnapshot(value) ? value : seedDeck());
+    setDeck(adopt(value));
     // adopt exactly when the host asks (initial value is captured by useState)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadNonce]);
+
+  /* a stale-seed replacement must reach the host store too, or shared-link
+     viewers (which read the stored blob) would keep serving the old deck */
+  React.useEffect(() => {
+    if (isDeckSnapshot(value) && isStaleSeed(value)) onChangeRef.current?.(deckRef.current);
+    // mount + explicit re-adopt only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadNonce]);
 
@@ -204,7 +216,7 @@ export function PresentationSurface({
 
   const [tab, setTab] = React.useState<Tab>("slides");
   const [sel, setSel] = React.useState(0);
-  const [notesOpen, setNotesOpen] = React.useState(true);
+  const [notesOpen, setNotesOpen] = React.useState(false);
   const [presenting, setPresenting] = React.useState(false);
   const [previewSlug, setPreviewSlug] = React.useState<string | null>(null);
   const [busyExport, setBusyExport] = React.useState<null | "pptx" | "import">(null);
@@ -715,6 +727,21 @@ export function PresentationSurface({
               </FitSlide>
             </div>
 
+            {/* notes FLOAT over the canvas (user-arbitrated: the under-stage band
+                cost stage height twice) — closed by default so the stage opens clean */}
+            {notesOpen && (
+              <div className="nxPresNotes" data-testid="notes-panel">
+                <span className="nxPresNotesLabel">Speaker notes</span>
+                <textarea
+                  className="nxPresNotesArea"
+                  value={slide.notes}
+                  placeholder="Notes only you see in presenter view…"
+                  onChange={(e) => patchSlide(slide.id, { notes: e.target.value })}
+                  aria-label="Speaker notes"
+                />
+              </div>
+            )}
+
             {masterOpen && (
               <div className="nxPresMasterPanel" data-testid="master-panel">
                 <div className="nxPresMasterPanelHead">
@@ -791,20 +818,6 @@ export function PresentationSurface({
               </div>
             )}
 
-            {/* notes are a sibling of the stage, not a child of it — inside the
-                well they would lay out as a column beside the slide */}
-            {notesOpen && (
-              <div className="nxPresNotes" data-testid="notes-panel">
-                <span className="nxPresNotesLabel">Speaker notes</span>
-                <textarea
-                  className="nxPresNotesArea"
-                  value={slide.notes}
-                  placeholder="Notes only you see in presenter view…"
-                  onChange={(e) => patchSlide(slide.id, { notes: e.target.value })}
-                  aria-label="Speaker notes"
-                />
-              </div>
-            )}
           </div>
         </div>
       )}

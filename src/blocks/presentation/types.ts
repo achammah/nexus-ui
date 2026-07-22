@@ -253,6 +253,8 @@ export interface DataRoom {
 export interface DeckSnapshot {
   kind: "deck";
   version: 1;
+  /* set by seedDeck(); an untouched older seed is auto-replaced on adopt */
+  seedRev?: number;
   id: string;
   title: string;
   theme: DeckThemeId;

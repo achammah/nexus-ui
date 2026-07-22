@@ -62,13 +62,14 @@ await page.waitForSelector(".nxPresFilmItem");
 {
   await page.locator(".nxPresFilmItem .nxPresFilmIdx").nth(2).click();
   const body = page.locator(".nxPresCanvasWell .nxPresBody");
-  await body.click();
+  /* the KPI cards float over the lower part of the body region — click its text line */
+  await body.click({ position: { x: 24, y: 18 } });
   await page.keyboard.press("ControlOrMeta+a");
   /* toggle OFF (selection starts on seeded <b>) then ON across the whole body */
   await page.locator('[data-testid="fmt-bold"]').click();
   const afterOff = await page.locator(".nxPresCanvasWell .nxPresBody").innerHTML();
   await page.locator('[data-testid="fmt-bold"]').click();
-  await page.locator(".nxPresNotesArea").click();
+  await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : null));
   await page.waitForTimeout(250);
   let d = await deck();
   const html = d.slides[2].blocks.body || "";
@@ -77,10 +78,26 @@ await page.waitForSelector(".nxPresFilmItem");
   await h.click();
   await page.keyboard.press("End");
   await page.keyboard.type(" XYZ");
-  await page.locator(".nxPresNotesArea").click();
+  await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : null));
   await page.waitForTimeout(250);
   d = await deck();
   ok("J2b typing persists", (d.slides[2].blocks.title || "").includes("XYZ"));
+  /* notes are CLOSED by default now (floating panel, user-arbitrated) — open via the Slide menu */
+  await page.locator('[data-testid="slide-menu"]').click();
+  await page.locator('[data-testid="notes-toggle"]').click();
+  await page.waitForSelector('[data-testid="notes-panel"]');
+  /* GUARD (regression #3 protection): the notes panel must FLOAT — never a
+     full-width band at the surface root, and the stage keeps its height */
+  const notesBox = await page.locator('[data-testid="notes-panel"]').boundingBox();
+  const mainBox = await page.locator(".nxPresMain").boundingBox();
+  const wellBox = await page.locator(".nxPresCanvasWell").boundingBox();
+  ok(
+    "J2c-guard notes float (not a band)",
+    notesBox.width < mainBox.width * 0.6 &&
+      notesBox.y + notesBox.height <= wellBox.y + wellBox.height + 2 &&
+      Math.abs(wellBox.height - mainBox.height) < 4,
+    `notes=${Math.round(notesBox.width)}w main=${Math.round(mainBox.width)}w well=${Math.round(wellBox.height)}h/${Math.round(mainBox.height)}h`,
+  );
   await page.locator(".nxPresNotesArea").fill("New note ABC");
   await page.waitForTimeout(250);
   d = await deck();
@@ -457,8 +474,9 @@ async function p18() {
 
   const canvasEl = (n = 0) => page.locator(".nxPresCanvas .nxPresEl").nth(n);
   const slideNow = async () => {
+    /* the gesture slide is the BLANK one J18 adds (seeded slides carry their own elements) */
     const d = await deck();
-    return d ? d.slides.find((x) => x.elements && x.elements.length) : null;
+    return d ? d.slides.find((x) => x.layout === "blank") : null;
   };
 
   /* the seeded deck ships a real diagram slide (shapes exercised out of the box) */
@@ -468,8 +486,12 @@ async function p18() {
   });
   ok("J18a seeded deck ships a shape diagram", seededIdx >= 0, `slide ${seededIdx + 1}`);
 
-  /* insert every shape kind */
+  /* insert every shape kind — on a fresh BLANK slide (seeded slides carry their
+     own design elements, so index-based assertions need a clean surface) */
   await page.locator(".nxPresFilmItem").first().click();
+  await page.locator('[data-testid="add-slide-menu"]').click();
+  await page.locator('[data-testid="add-blank"]').click();
+  await page.waitForTimeout(150);
   const kinds = ["rect", "roundRect", "ellipse", "triangle", "arrow", "line", "star", "callout"];
   for (const k of kinds) {
     await pickFrom("insert-menu", `insert-shape-${k}`);
@@ -481,7 +503,11 @@ async function p18() {
   await page.evaluate((k) => localStorage.removeItem(k), KEY);
   await page.goto(URL0);
   await page.waitForSelector(".nxPresFilmItem");
+  /* fresh seed after the reset — gesture assertions run on a new BLANK slide */
   await page.locator(".nxPresFilmItem").first().click();
+  await page.locator('[data-testid="add-slide-menu"]').click();
+  await page.locator('[data-testid="add-blank"]').click();
+  await page.waitForTimeout(150);
   await pickFrom("insert-menu", "insert-shape-rect");
   ok("J18c element bar appears on selection", await page.locator('[data-testid="element-bar"]').isVisible());
 
@@ -635,8 +661,11 @@ async function p18() {
 
   await shot("pres-shapes-editor.png");
 
-  /* elements render in present mode + the read-only viewer, not just the editor */
-  await page.locator(".nxPresFilmItem").nth(seededIdx).click();
+  /* elements render in present mode + the read-only viewer, not just the editor —
+     present the RICHEST slide (the seeded diagram), located by element count */
+  const dRich = await deck();
+  const richIdx = dRich.slides.reduce((best, s, i) => ((s.elements?.length ?? 0) > (dRich.slides[best].elements?.length ?? 0) ? i : best), 0);
+  await page.locator(".nxPresFilmItem").nth(richIdx).click();
   await page.locator('[data-testid="present-btn"]').click();
   await page.waitForSelector('[data-testid="present-mode"]');
   const presEls = await page.locator('[data-testid="present-mode"] .nxPresEl').count();
@@ -920,7 +949,8 @@ async function p20() {
   await page.locator('[data-testid="el-lineheight"]').fill("1.8");
   await page.waitForTimeout(250);
   let d2 = await deck();
-  let elNew = (d2.slides[1].elements ?? []).find((e) => e.kind === "text");
+  /* the inserted box is APPENDED — the template copy may carry seeded text elements */
+  let elNew = (d2.slides[1].elements ?? []).filter((e) => e.kind === "text").at(-1);
   ok(
     "J21d text depth persists",
     !!elNew && /Georgia/i.test(elNew.style?.fontFamily || "") && elNew.style?.align === "center" && elNew.style?.lineHeight === 1.8,
@@ -932,7 +962,7 @@ async function p20() {
   await page.locator('[data-testid="el-anim-rise"]').click();
   await page.waitForTimeout(200);
   d2 = await deck();
-  elNew = (d2.slides[1].elements ?? []).find((e) => e.kind === "text");
+  elNew = (d2.slides[1].elements ?? []).filter((e) => e.kind === "text").at(-1);
   ok("J21e anim persists", elNew?.anim?.effect === "rise", JSON.stringify(elNew?.anim));
   const editorAnims = await page.evaluate(() => document.querySelectorAll(".nxPresCanvasWell [data-anim]").length);
   await page.locator('[data-testid="present-btn"]').click();
@@ -957,6 +987,36 @@ async function p20() {
   const videoInDom = await page.locator(".nxPresCanvasWell video.nxPresElVideo").count();
   ok("J21g video element inserts + renders", !!vid && videoInDom === 1, `dom=${videoInDom}`);
   await shot("pres-parity-editor.png");
+}
+
+/* J22 — stale-seed upgrade: an untouched OLDER seed re-seeds on adopt (and the
+   replacement persists); an edited/user deck is never touched */
+{
+  await page.goto(URL0);
+  await page.waitForSelector(".nxPresFilmItem");
+  // legacy pre-rev seed signature: fixture title + seeded slug, NO seedRev
+  await page.evaluate((k) => {
+    const legacy = {
+      kind: "deck", version: 1, id: "deck-legacy", title: "Atlas Q2 Business Review",
+      theme: "native",
+      slides: [{ id: "sl-old", layout: "title", blocks: { title: "Atlas Q2 Business Review" }, notes: "" }],
+      sharing: { links: [{ id: "lnk-old", slug: "atlas-q2-review", createdAt: new Date().toISOString() }] },
+      analytics: { sessions: [] }, rooms: [],
+    };
+    localStorage.setItem(k, JSON.stringify(legacy));
+  }, KEY);
+  await page.reload();
+  await page.waitForSelector(".nxPresFilmItem");
+  await page.waitForTimeout(300);
+  let d = await deck();
+  ok("J22a stale legacy seed re-seeds + persists", d.seedRev >= 2 && d.slides.length >= 12, `rev=${d.seedRev} slides=${d.slides.length}`);
+  const userDeck = { ...d, seedRev: undefined, title: "My own deck", id: "deck-user" };
+  await page.evaluate(([k, v]) => localStorage.setItem(k, JSON.stringify(v)), [KEY, userDeck]);
+  await page.reload();
+  await page.waitForSelector(".nxPresFilmItem");
+  await page.waitForTimeout(300);
+  d = await deck();
+  ok("J22b user deck never replaced", d.id === "deck-user" && d.title === "My own deck");
 }
 
 const fails = results.filter((r) => !r.pass);

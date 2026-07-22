@@ -25,6 +25,20 @@ export function isDeckSnapshot(x: unknown): x is DeckSnapshot {
   );
 }
 
+/* Bumped whenever seedDeck() materially improves. A STORED deck that is an
+   UNTOUCHED older seed (its own seedRev is older, or it carries the legacy seed
+   fixtures with no rev at all) is replaced on adopt, so demo installs actually
+   receive seed upgrades; anything a user edited (different title/slug or a
+   stamped rev they wrote into) is never touched. */
+export const SEED_REV = 2;
+
+export function isStaleSeed(d: DeckSnapshot): boolean {
+  if (typeof d.seedRev === "number") return d.seedRev < SEED_REV;
+  /* legacy pre-rev seeds: identifiable by BOTH seed fixtures together — a
+     user-authored deck cannot carry the seeded share slug by accident */
+  return d.title === "Atlas Q2 Business Review" && d.sharing.links.some((l) => l.slug === "atlas-q2-review");
+}
+
 export function createSlide(layout: Slide["layout"] = "title-body"): Slide {
   return { id: `sl-${uid()}`, layout, blocks: {}, notes: "", transition: "fade" };
 }
@@ -80,6 +94,34 @@ export function seedDeck(): DeckSnapshot {
     elements?: SlideElement[],
   ): Slide => ({ id: `sl-${uid()}`, layout, blocks, notes, transition, elements });
 
+  /* KPI stat card: a soft accent panel + the number + label + delta line,
+     staggered in as a group (i = animation order via array position) */
+  const kpi = (x: number, value: string, label: string, delta: string, i: number): SlideElement =>
+    el({
+      kind: "shape",
+      shape: "roundRect",
+      x,
+      y: 330,
+      w: 272,
+      h: 260,
+      rot: 0,
+      html: `<span style="font-size:56px;font-weight:750;letter-spacing:-0.02em">${value}</span><br><span style="font-size:20px;opacity:.85">${label}</span><br><span style="font-size:16px;opacity:.6">${delta}</span>`,
+      style: {
+        fill: "var(--pres-accent)",
+        stroke: "none",
+        strokeWidth: 0,
+        opacity: 1,
+        fillOpacity: i === 0 ? 1 : 0.09,
+        radius: 18,
+        color: i === 0 ? "#ffffff" : "var(--pres-fg)",
+        fontSize: 20,
+        align: "center",
+        valign: "middle",
+        lineHeight: 1.35,
+      },
+      anim: { effect: "rise" },
+    });
+
   const slides: Slide[] = [
     s(
       "title",
@@ -89,22 +131,38 @@ export function seedDeck(): DeckSnapshot {
       },
       "Welcome everyone. One headline before we dive in: best net-revenue quarter since launch.",
       "none",
+      [
+        el({ kind: "text", x: 96, y: 218, w: 600, h: 40, rot: 0, html: "QUARTERLY BUSINESS REVIEW", style: { fill: "none", stroke: "none", strokeWidth: 0, opacity: 1, color: "var(--pres-accent)", fontSize: 17, letterSpacing: 3, align: "left", valign: "top" }, anim: { effect: "fade" } }),
+        el({ kind: "shape", shape: "rect", x: 1188, y: 0, w: 92, h: 720, rot: 0, style: { fill: "var(--pres-accent)", stroke: "none", strokeWidth: 0, opacity: 1, fillOpacity: 0.1 } }),
+        el({ kind: "shape", shape: "rect", x: 1224, y: 0, w: 56, h: 720, rot: 0, style: { fill: "var(--pres-accent)", stroke: "none", strokeWidth: 0, opacity: 1, fillOpacity: 0.22 } }),
+      ],
     ),
     s(
       "section",
       { title: "Where we are" },
       "Section 1 of 3. Keep this under a minute.",
       "zoom",
+      [
+        el({ kind: "text", x: 96, y: 180, w: 300, h: 130, rot: 0, html: "01", style: { fill: "none", stroke: "none", strokeWidth: 0, opacity: 1, color: "var(--pres-accent)", fontSize: 104, align: "left", valign: "top" }, anim: { effect: "pop" } }),
+        el({ kind: "shape", shape: "line", x: 96, y: 500, w: 420, h: 6, rot: 0, style: { fill: "none", stroke: "var(--pres-accent)", strokeWidth: 6, opacity: 0.35 } }),
+      ],
     ),
     s(
       "title-body",
       {
         title: "Q2 at a glance",
         body: B(
-          "<ul><li><b>ARR $4.2M</b>, up 18% quarter over quarter</li><li>Net revenue retention <b>117%</b> (was 109%)</li><li>Churn down to <b>1.4%</b> monthly — best ever</li><li>Two enterprise logos closed: <i>Meridian Bank</i> and <i>Northwind Logistics</i></li></ul>",
+          "<b>Best net-revenue quarter since launch</b> — four numbers tell the story; two enterprise logos (<i>Meridian Bank</i>, <i>Northwind Logistics</i>) closed behind them.",
         ),
       },
       "Pause on NRR — the expansion motion is finally working. Meridian took 9 months; Northwind took 6 weeks.",
+      "fade",
+      [
+        kpi(96, "$4.2M", "ARR", "+18% QoQ", 0),
+        kpi(392, "117%", "Net revenue retention", "was 109%", 1),
+        kpi(688, "1.4%", "Monthly churn", "best ever", 2),
+        kpi(984, "2", "Enterprise logos", "closed in Q2", 3),
+      ],
     ),
     s(
       "two-column",
@@ -147,7 +205,10 @@ export function seedDeck(): DeckSnapshot {
       "Read the quote out loud, then pause. This is the enterprise story in one line.",
       "slide",
     ),
-    s("section", { title: "Where we're going" }, "Section 2 — the plan.", "zoom"),
+    s("section", { title: "Where we're going" }, "Section 2 — the plan.", "zoom", [
+      el({ kind: "text", x: 96, y: 180, w: 300, h: 130, rot: 0, html: "02", style: { fill: "none", stroke: "none", strokeWidth: 0, opacity: 1, color: "var(--pres-accent)", fontSize: 104, align: "left", valign: "top" }, anim: { effect: "pop" } }),
+      el({ kind: "shape", shape: "line", x: 96, y: 500, w: 420, h: 6, rot: 0, style: { fill: "none", stroke: "var(--pres-accent)", strokeWidth: 6, opacity: 0.35 } }),
+    ]),
     s(
       "title-body",
       {
@@ -164,12 +225,12 @@ export function seedDeck(): DeckSnapshot {
       "Walk the arrows left to right. The callout is the dependency people always ask about.",
       "fade",
       [
-        el({ kind: "shape", shape: "roundRect", x: 96, y: 300, w: 300, h: 150, rot: 0, html: "EU residency<br><b>September</b>", style: { fill: "var(--pres-accent)", stroke: "none", strokeWidth: 0, opacity: 1, radius: 20, color: "#ffffff", fontSize: 26, align: "center", valign: "middle" } }),
+        el({ kind: "shape", shape: "roundRect", x: 96, y: 300, w: 300, h: 150, rot: 0, html: "EU residency<br><b>September</b>", style: { fill: "var(--pres-accent)", stroke: "none", strokeWidth: 0, opacity: 1, radius: 20, color: "#ffffff", fontSize: 26, align: "center", valign: "middle" }, anim: { effect: "rise" } }),
         el({ kind: "shape", shape: "arrow", x: 412, y: 366, w: 90, h: 20, rot: 0, style: { fill: "var(--pres-muted)", stroke: "none", strokeWidth: 0, opacity: 1 } }),
-        el({ kind: "shape", shape: "roundRect", x: 518, y: 300, w: 300, h: 150, rot: 0, html: "Self-serve tier<br><b>October</b>", style: { fill: "var(--pres-accent)", stroke: "none", strokeWidth: 0, opacity: 0.82, radius: 20, color: "#ffffff", fontSize: 26, align: "center", valign: "middle" } }),
+        el({ kind: "shape", shape: "roundRect", x: 518, y: 300, w: 300, h: 150, rot: 0, html: "Self-serve tier<br><b>October</b>", style: { fill: "var(--pres-accent)", stroke: "none", strokeWidth: 0, opacity: 0.82, radius: 20, color: "#ffffff", fontSize: 26, align: "center", valign: "middle" }, anim: { effect: "rise" } }),
         el({ kind: "shape", shape: "arrow", x: 834, y: 366, w: 90, h: 20, rot: 0, style: { fill: "var(--pres-muted)", stroke: "none", strokeWidth: 0, opacity: 1 } }),
-        el({ kind: "shape", shape: "roundRect", x: 940, y: 300, w: 244, h: 150, rot: 0, html: "Mobile 99.7%<br><b>November</b>", style: { fill: "none", stroke: "var(--pres-accent)", strokeWidth: 3, opacity: 1, radius: 20, color: "var(--pres-fg)", fontSize: 26, align: "center", valign: "middle" } }),
-        el({ kind: "shape", shape: "callout", x: 96, y: 486, w: 420, h: 150, rot: 0, html: "Self-serve can't ship before Frankfurt is GA.", style: { fill: "var(--pres-muted)", stroke: "none", strokeWidth: 0, opacity: 1, fillOpacity: 0.16, radius: 18, color: "var(--pres-fg)", fontSize: 22, align: "center", valign: "middle" } }),
+        el({ kind: "shape", shape: "roundRect", x: 940, y: 300, w: 244, h: 150, rot: 0, html: "Mobile 99.7%<br><b>November</b>", style: { fill: "none", stroke: "var(--pres-accent)", strokeWidth: 3, opacity: 1, radius: 20, color: "var(--pres-fg)", fontSize: 26, align: "center", valign: "middle" }, anim: { effect: "rise" } }),
+        el({ kind: "shape", shape: "callout", x: 96, y: 486, w: 420, h: 150, rot: 0, html: "Self-serve can't ship before Frankfurt is GA.", style: { fill: "var(--pres-muted)", stroke: "none", strokeWidth: 0, opacity: 1, fillOpacity: 0.16, radius: 18, color: "var(--pres-fg)", fontSize: 22, align: "center", valign: "middle" }, anim: { effect: "fade" } }),
       ],
     ),
     s(
@@ -180,6 +241,7 @@ export function seedDeck(): DeckSnapshot {
       [
         el({
           kind: "chart",
+          anim: { effect: "fade" },
           x: 76, y: 246, w: 700, h: 350, rot: 0,
           style: { opacity: 1, fontSize: 13 },
           chart: {
@@ -197,6 +259,7 @@ export function seedDeck(): DeckSnapshot {
         }),
         el({
           kind: "table",
+          anim: { effect: "rise" },
           x: 812, y: 262, w: 400, h: 300, rot: 0,
           style: { opacity: 1, fontSize: 19, color: "var(--pres-fg)" },
           table: {
@@ -260,6 +323,7 @@ export function seedDeck(): DeckSnapshot {
   return {
     kind: "deck",
     version: 1,
+    seedRev: SEED_REV,
     id: `deck-${uid()}`,
     title: "Atlas Q2 Business Review",
     theme: "native",

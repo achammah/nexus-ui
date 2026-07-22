@@ -187,7 +187,7 @@
 .nxPresLayoutBtn { padding: 4px 6px; font-size: 11px; }
 
 /* main column */
-.nxPresMain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.nxPresMain { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
 .nxPresToolbar {
   display: flex;
   align-items: center;
@@ -232,14 +232,21 @@
   border-radius: var(--nx-radius-s);
 }
 
-/* notes — a thin pane UNDER the stage (as Slides has it). Floating it over the
-   canvas covered the slide's own content, which is worse than the space it saves;
-   it is collapsible from the Slide menu when the stage should take the column. */
+/* notes — a floating panel OVER the canvas (user-arbitrated twice: the under-
+   stage band cost stage height). Closed by default; toggled from the Slide menu,
+   so it never covers content uninvited. */
 .nxPresNotes {
-  flex: none;
-  border-top: 1px solid var(--nx-border);
-  background: var(--nx-bg-raised);
+  position: absolute;
+  left: var(--nx-gap-3);
+  bottom: var(--nx-gap-3);
+  width: min(480px, calc(100% - 2 * var(--nx-gap-3)));
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  background: color-mix(in srgb, var(--nx-bg-raised) 94%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--nx-shadow-2);
   padding: var(--nx-gap-2) var(--nx-gap-3);
+  z-index: 5;
 }
 .nxPresNotesLabel {
   font: 600 var(--nx-text-micro) var(--nx-font-sans);
@@ -283,33 +290,54 @@
 .nxPresRegion.isEditable:focus { box-shadow: 0 0 0 2px var(--pres-accent, var(--nx-accent)); }
 .nxPresRegion:empty::before { content: attr(data-placeholder); color: color-mix(in srgb, var(--pres-fg, #111) 34%, transparent); }
 
-.nxPresTitle { font-size: 68px; font-weight: 750; line-height: 1.08; letter-spacing: -0.02em; }
-.nxPresSubtitle { font-size: 26px; color: var(--pres-muted, #666); }
-.nxPresLayout-title { justify-content: center; }
+.nxPresTitle { font-size: 76px; font-weight: 760; line-height: 1.04; letter-spacing: -0.028em; max-width: 980px; }
+.nxPresSubtitle { font-size: 25px; line-height: 1.45; color: var(--pres-muted, #666); max-width: 860px; margin-top: 4px; }
+.nxPresLayout-title { justify-content: center; gap: 12px; }
 .nxPresLayout-title .nxPresTitle::after {
   content: "";
   display: block;
-  width: 84px;
+  width: 96px;
   height: 5px;
   border-radius: 3px;
-  margin-top: 26px;
+  margin-top: 30px;
   background: var(--pres-accent, var(--nx-accent));
 }
 
-.nxPresH { font-size: 40px; font-weight: 700; letter-spacing: -0.015em; flex: none; }
-.nxPresLayout-title-body, .nxPresLayout-two-column, .nxPresLayout-image { justify-content: flex-start; }
-.nxPresBody { font-size: 24px; line-height: 1.55; flex: 1; min-height: 0; }
+/* content slides share one vertical rhythm: heading block (H + hairline) at the
+   top, content starting on the same baseline on every layout */
+.nxPresH {
+  font-size: 38px;
+  font-weight: 720;
+  letter-spacing: -0.018em;
+  line-height: 1.15;
+  flex: none;
+  padding-bottom: 22px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--pres-fg, #111) 12%, transparent);
+}
+.nxPresLayout-title-body, .nxPresLayout-two-column, .nxPresLayout-image { justify-content: flex-start; padding-top: 84px; }
+.nxPresBody { font-size: 23px; line-height: 1.6; flex: 1; min-height: 0; max-width: 1010px; }
 .nxPresBlank { display: flex; flex-direction: column; justify-content: center; }
 
-.nxPresLayout-two-column { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; column-gap: 56px; row-gap: 20px; align-content: start; }
+.nxPresLayout-two-column { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; column-gap: 72px; row-gap: 26px; align-content: start; }
 .nxPresLayout-two-column .nxPresH { grid-column: 1 / -1; }
-.nxPresCol { font-size: 22px; line-height: 1.5; min-height: 0; }
+.nxPresCol { font-size: 22px; line-height: 1.58; min-height: 0; }
+/* column lead-ins ("Worked" / "Didn't") read as kickers, not stray bold words */
+.nxPresCol > b:first-child, .nxPresCol > strong:first-child {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pres-accent, var(--nx-accent));
+  margin-bottom: 12px;
+}
 
-.nxPresLayout-image { gap: 16px; }
+.nxPresLayout-image { gap: 18px; }
 .nxPresImageWell { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; order: 2; }
 .nxPresLayout-image .nxPresH { order: 1; }
 .nxPresLayout-image .nxPresCaption { order: 3; }
-.nxPresImage { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+.nxPresImage { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 10px; }
 .nxPresImageEmpty {
   border: 2px dashed color-mix(in srgb, var(--pres-fg, #111) 25%, transparent);
   background: transparent;
@@ -321,20 +349,31 @@
 }
 .nxPresImageSwap { position: absolute; right: 10px; top: 10px; border: 0; border-radius: var(--nx-radius-s); background: color-mix(in srgb, #000 55%, transparent); color: #fff; font: 500 13px var(--nx-font-sans); padding: 4px 10px; cursor: pointer; opacity: 0; transition: opacity var(--nx-t-fast) var(--nx-ease); }
 .nxPresImageWell:hover .nxPresImageSwap { opacity: 1; }
-.nxPresCaption { font-size: 18px; color: var(--pres-muted, #666); flex: none; }
+.nxPresCaption { font-size: 17px; line-height: 1.5; color: var(--pres-muted, #666); flex: none; }
 
-.nxPresQuote { font-size: 44px; font-style: italic; font-weight: 550; line-height: 1.3; }
-.nxPresQuote::before { content: "“"; display: block; font-size: 90px; line-height: 0.6; color: var(--pres-accent, var(--nx-accent)); margin-bottom: 18px; font-style: normal; }
-.nxPresAttribution { font-size: 20px; color: var(--pres-muted, #666); }
-.nxPresLayout-quote { justify-content: center; padding-right: 160px; }
+.nxPresQuote { font-size: 42px; font-style: italic; font-weight: 550; line-height: 1.34; letter-spacing: -0.008em; max-width: 1000px; }
+.nxPresQuote::before { content: "\201C"; display: block; font-size: 110px; line-height: 0.55; color: var(--pres-accent, var(--nx-accent)); margin-bottom: 26px; font-style: normal; font-weight: 700; }
+.nxPresAttribution { font-size: 19px; color: var(--pres-muted, #666); margin-top: 10px; padding-left: 2px; }
+.nxPresAttribution::before { content: "\2014\00A0"; color: var(--pres-accent, var(--nx-accent)); }
+.nxPresLayout-quote { justify-content: center; padding-right: 160px; gap: 8px; }
 
-.nxPresSection { font-size: 56px; font-weight: 750; letter-spacing: -0.02em; }
-.nxPresLayout-section { justify-content: center; align-items: flex-start; }
-.nxPresLayout-section::before { content: ""; width: 64px; height: 6px; border-radius: 3px; background: var(--pres-accent, var(--nx-accent)); margin-bottom: 8px; }
+.nxPresSection { font-size: 58px; font-weight: 760; letter-spacing: -0.025em; line-height: 1.06; max-width: 900px; }
+.nxPresLayout-section { justify-content: center; align-items: flex-start; gap: 0; }
+.nxPresLayout-section::before { content: ""; width: 72px; height: 6px; border-radius: 3px; background: var(--pres-accent, var(--nx-accent)); margin-bottom: 22px; }
 
-.nxPresSlide :is(ul, ol) { margin: 0.25em 0 0.25em 1.15em; }
-.nxPresSlide li { margin: 0.28em 0; }
-.nxPresSlide li::marker { color: var(--pres-accent, var(--nx-accent)); }
+.nxPresSlide :is(ul, ol) { margin: 0.3em 0 0.3em 1.1em; padding-left: 0.15em; }
+.nxPresSlide li { margin: 0.42em 0; padding-left: 0.25em; }
+.nxPresSlide li::marker { color: var(--pres-accent, var(--nx-accent)); font-weight: 700; }
+.nxPresSlide ol { list-style: none; counter-reset: pres-ol; margin-left: 0; }
+.nxPresSlide ol > li { counter-increment: pres-ol; display: flex; gap: 18px; align-items: baseline; padding-left: 0; margin: 0.75em 0; }
+.nxPresSlide ol > li::before {
+  content: counter(pres-ol, decimal-leading-zero);
+  font-size: 0.82em;
+  font-weight: 750;
+  color: var(--pres-accent, var(--nx-accent));
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
 .nxPresSlide b, .nxPresSlide strong { font-weight: 700; }
 
 /* ---- present mode ----
