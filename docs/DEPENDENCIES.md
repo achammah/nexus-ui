@@ -27,6 +27,10 @@ So importing/using `PageWorkspace` (tree + Cmd-K + backlinks + the document surf
 - **PDF export** uses the browser's own print pipeline (a self-contained styled window → Save as PDF), not a PDF library. This is the most faithful route (the browser renders the exact document CSS) and adds **zero** bundle weight. If a consumer needs headless/programmatic PDF bytes, `jsPDF` (MIT) is the drop-in seam — but print-to-PDF was chosen as the robust default.
 - **Syntax highlighting** in code blocks is a small dependency-free tokenizer (comments/strings/numbers/keywords) — no `highlight.js`/`prism`/`shiki`. It is intentionally approximate (reads as highlighted across common languages) in exchange for zero bundle cost.
 
+## Scale path — one-blob persistence (documented seam, not needed now)
+
+The page workspace persists as ONE `PageStore` blob, so a large workspace loads every page **and all their block bodies** at once — fine for the demo and typical use (tens–hundreds of pages). The flat adjacency-list store + `pageStoreKey` cleanly support a **per-page-lazy split** later without a redesign: keep the tree/metadata (id/title/icon/parentId/order/favorite) in one small blob, and store each page's `blocks` under `pageStoreKey(key) + ':' + pageId`, loaded on open. The derived views (tree, breadcrumbs, backlinks-by-structure) read titles/structure, not bodies, so they keep working on the metadata blob alone. The two things that read bodies — **full-text search** (`searchPages`) and **link-backlinks scanning** (`outboundRefs`) — would move to a maintained index built as pages are saved (which also removes the current linear scan). Blocks are already per-`PageNode`, so no model change is required to get there.
+
 ## Fidelity boundaries (honest seams, not bugs)
 
 - **DOCX round-trip** preserves headings, lists, tables, and all text. Word's document model has no native to-do / callout / code-block, so on a re-import those degrade to paragraphs (the same boundary Google Docs hits exporting to Word). Markdown and HTML round-trip losslessly.

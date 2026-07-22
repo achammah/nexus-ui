@@ -34,6 +34,8 @@ The store is a **flat adjacency list** — pages keyed by id, each pointing at i
 
 Links: an inline **`[[page:<id>|<title>]]`** token in block text (a clickable link, title re-resolved from the store so renames propagate) and a **sub-page block** `{ type:"page"; pageId }`. The editor renders and creates both through the `pageContext` seam — so `NotionEditor` stays entity-agnostic (a `richText` field with no `pageContext` degrades a page ref to a static chip).
 
+> **Scale note:** the store persists as one blob, so a large workspace loads all pages + block bodies at once (fine for typical use). The flat store + `pageStoreKey` cleanly support a per-page-lazy split later (metadata in one blob; each page's `blocks` under `pageStoreKey(key)+':'+pageId`, load-on-open) paired with a maintained search/backlink index — no model change needed. See `docs/DEPENDENCIES.md`.
+
 ## DocumentSurface
 
 ```tsx
