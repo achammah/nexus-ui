@@ -1,20 +1,19 @@
 import type { LngLat } from "./geomath";
 import { haversine } from "./geomath";
 
-/* Geocoding + routing SEAM for the map view.
+/* Geocoding SEAM for the map view (forward search + reverse "what's here?").
    ─────────────────────────────────────────────────────────────────────────────
-   ⚑ FLAGGED SEAM. Address geocoding and turn-by-turn routing need an external
-   provider (Nominatim/OSM, Mapbox, Google, OpenRouteService, …) — each with a key
-   and/or a usage policy. NONE is hardcoded here (no key can leak, no blocked host).
-   This module defines the provider INTERFACE and ships a deterministic LOCAL MOCK
-   that works offline / in CI and returns the REAL payload SHAPE, so the search-and-
-   geocode and route-between-records capabilities are wired end-to-end against a
-   contract a real provider drops straight into.
+   ⚑ FLAGGED SEAM. Address geocoding needs an external provider (Nominatim/OSM,
+   Mapbox, Google, …) — each with a key and/or a usage policy. NONE is hardcoded
+   here (no key can leak, no blocked host). This module defines the provider
+   INTERFACE and ships a deterministic LOCAL MOCK that works offline / in CI and
+   returns the REAL payload SHAPE, so search-and-geocode and reverse-geocode are
+   wired end-to-end against a contract a real provider drops straight into.
 
-   To wire a real provider: pass `geocodeProvider` / `routeProvider` to MapView
-   (via the app, e.g. a server route that proxies the keyed vendor call) — the
-   result shapes below are exactly what MapView consumes. See docs/RECIPES.md
-   "Give an object a map view" › geocode/route seam. */
+   To wire a real provider: set `geocodeEndpoint` in the view config to an APP route
+   that proxies the keyed vendor SERVER-SIDE (forward: `?q=`; reverse: `?lat=&lon=`)
+   and returns the shapes below. Leave it unset and the local mock runs. Turn-by-turn
+   ROUTING lives in routing.ts. See docs/RECIPES.md "Give an object a map view". */
 
 export interface GeocodeResult {
   label: string; // display name
@@ -27,17 +26,8 @@ export interface GeocodeResult {
   approximate?: boolean;
 }
 
-export interface RouteResult {
-  /* the path geometry, GeoJSON [lng, lat] order (a real provider returns road
-     geometry; the mock returns a densified great-circle path) */
-  coordinates: LngLat[];
-  distanceM: number;
-  durationS: number;
-  approximate?: boolean;
-}
-
-export type GeocodeProvider = (query: string) => Promise<GeocodeResult[]>;
-export type RouteProvider = (waypoints: LngLat[]) => Promise<RouteResult>;
+export type GeocodeSearch = (query: string) => Promise<GeocodeResult[]>;
+export type GeocodeReverse = (lng: number, lat: number) => Promise<GeocodeResult | null>;
 
 /* the mock's gazetteer — a small index over the demo region (Western Europe).
    A real geocoder's coverage is the whole planet; this is deliberately tiny and
@@ -47,6 +37,8 @@ const GAZETTEER: GeocodeResult[] = [
   { label: "Ghent, Belgium", lng: 3.7174, lat: 51.0543 },
   { label: "Antwerp, Belgium", lng: 4.4025, lat: 51.2194 },
   { label: "Bruges, Belgium", lng: 3.2247, lat: 51.2093 },
+  { label: "Leuven, Belgium", lng: 4.7005, lat: 50.8798 },
+  { label: "Liège, Belgium", lng: 5.5797, lat: 50.6326 },
   { label: "Amsterdam, Netherlands", lng: 4.9041, lat: 52.3676 },
   { label: "Rotterdam, Netherlands", lng: 4.4777, lat: 51.9244 },
   { label: "Utrecht, Netherlands", lng: 5.1214, lat: 52.0907 },
@@ -74,11 +66,10 @@ function hash01(s: string, salt: number): number {
   return ((h >>> 0) % 100000) / 100000;
 }
 
-/* the LOCAL MOCK geocoder — substring match over the gazetteer; on no match one
-   deterministic point near the region centre, flagged `approximate` so the UI
-   labels it. A real provider returns [] on no match; the demo keeps the flow
-   alive on purpose. */
-export const mockGeocode: GeocodeProvider = async (query) => {
+/* the LOCAL MOCK forward geocoder — substring match over the gazetteer; on no
+   match one deterministic point near the region centre, flagged `approximate`. A
+   real provider returns [] on no match; the demo keeps the flow alive on purpose. */
+export const mockGeocode: GeocodeSearch = async (query) => {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const hits = GAZETTEER.filter((g) => g.label.toLowerCase().includes(q)).slice(0, 6);
@@ -93,35 +84,27 @@ export const mockGeocode: GeocodeProvider = async (query) => {
   ];
 };
 
-/* the LOCAL MOCK router — densifies a great-circle path through the waypoints,
-   distance by haversine, duration at ~48 km/h (13.3 m/s) as a stand-in for a road
-   ETA. A real router returns snapped road geometry + a real duration; this is the
-   same SHAPE. */
-export const mockRoute: RouteProvider = async (waypoints) => {
-  const coordinates: LngLat[] = [];
-  const STEPS = 24;
-  for (let leg = 0; leg < waypoints.length - 1; leg++) {
-    const a = waypoints[leg];
-    const b = waypoints[leg + 1];
-    for (let s = 0; s <= STEPS; s++) {
-      if (leg > 0 && s === 0) continue; // avoid duplicating the shared vertex
-      const t = s / STEPS;
-      coordinates.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+/* the LOCAL MOCK reverse geocoder — the nearest gazetteer place, labeled with its
+   name when close, else "near <place>"; always `approximate`. A real reverse
+   geocoder returns a street address. */
+export const mockReverse: GeocodeReverse = async (lng, lat) => {
+  let best: GeocodeResult | null = null;
+  let bestD = Infinity;
+  for (const g of GAZETTEER) {
+    const d = haversine([lng, lat], [g.lng, g.lat]);
+    if (d < bestD) {
+      bestD = d;
+      best = g;
     }
   }
-  let distanceM = 0;
-  for (let i = 1; i < waypoints.length; i++) distanceM += haversine(waypoints[i - 1], waypoints[i]);
-  return { coordinates, distanceM, durationS: distanceM / 13.3, approximate: true };
+  if (!best) return { label: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lng, lat, approximate: true };
+  const label = bestD < 4000 ? best.label : `Near ${best.label} · ${(bestD / 1000).toFixed(0)} km`;
+  return { label, lng, lat, approximate: true };
 };
 
-/* ── config-pluggable providers ──────────────────────────────────────────────
-   The map view resolves its provider from an OPTIONAL endpoint URL in the view
-   config (`geocodeEndpoint` / `routeEndpoint`). Point it at an APP route that
-   proxies a keyed vendor SERVER-SIDE (the key never reaches the browser) and
-   returns the shapes above; leave it unset and the local mock runs. This is the
-   whole seam: no code change to swap the mock for production. */
+/* ── config-pluggable providers ──────────────────────────────────────────── */
 
-export function makeGeocodeProvider(endpoint?: string): GeocodeProvider {
+export function makeGeocodeProvider(endpoint?: string): GeocodeSearch {
   if (!endpoint) return mockGeocode;
   return async (query) => {
     const res = await fetch(`${endpoint}${endpoint.includes("?") ? "&" : "?"}q=${encodeURIComponent(query)}`, {
@@ -133,15 +116,15 @@ export function makeGeocodeProvider(endpoint?: string): GeocodeProvider {
   };
 }
 
-export function makeRouteProvider(endpoint?: string): RouteProvider {
-  if (!endpoint) return mockRoute;
-  return async (waypoints) => {
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ waypoints }),
+export function makeReverseGeocoder(endpoint?: string): GeocodeReverse {
+  if (!endpoint) return mockReverse;
+  return async (lng, lat) => {
+    const res = await fetch(`${endpoint}${endpoint.includes("?") ? "&" : "?"}lat=${lat}&lon=${lng}&reverse=1`, {
+      headers: { accept: "application/json" },
     });
-    if (!res.ok) throw new Error(`route ${res.status}`);
-    return (await res.json()) as RouteResult;
+    if (!res.ok) throw new Error(`reverse ${res.status}`);
+    const data: unknown = await res.json();
+    if (Array.isArray(data)) return (data[0] as GeocodeResult) ?? null;
+    return (data as GeocodeResult) ?? null;
   };
 }

@@ -13,6 +13,7 @@ import {
 } from "react-map-gl/maplibre";
 import type { MapRef, MapLayerMouseEvent } from "react-map-gl/maplibre";
 import type { GeoJSONSource, Map as MaplibreMap } from "maplibre-gl";
+import { Navigation, ArrowRight, HelpCircle, MapPinPlus, ZoomIn } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./map.css";
 import { Button } from "../../../primitives/Button";
@@ -30,53 +31,63 @@ import {
   MARKER_MIN_R,
   boundsOf,
   numericValue,
-  radiusFor,
   sizeExtent,
   splitRows,
   toFeatureCollection,
   type LocatedRow,
 } from "./geo";
-import { basemapHasGlyphs, basemapStyle, fallbackStyle, isDarkBasemap } from "./basemaps";
+import { basemapHasGlyphs, basemapIsVector, basemapStyle, fallbackStyle, isDarkBasemap } from "./basemaps";
 import {
   activeBasemap,
+  buildings3dOn,
   clusterRadius,
   clustersOn,
   heatmapOn,
+  hillshadeOn,
   pointsOn,
   renderMode,
   resolveMapOptions,
+  routeProfile,
 } from "./mapConfig";
 import {
   circleRing,
   formatArea,
   formatDistance,
-  formatDuration,
-  haversine,
   pathLength,
+  haversine,
   pointInCircle,
   pointInPolygon,
   polygonArea,
   type LngLat,
 } from "./geomath";
-import { makeGeocodeProvider, makeRouteProvider, type RouteResult } from "./geocode";
+import { makeGeocodeProvider, makeReverseGeocoder, type GeocodeResult } from "./geocode";
+import { makeRouter, moveStop, stopLabel, type Profile, type RouteResult } from "./routing";
+import { applyAugments, flyToPoint, viewportRing, zoomAroundPoint } from "./camera";
 import { spiderfyLayout, type SpiderOffset } from "./spiderfy";
-import { BasemapSwitcher, DrawTools, LayersPanel, Legend, MapSearch, ReadoutChips, type SearchHit } from "./overlays";
+import { DrawTools, LayersPanel, Legend, MapSearch, MapTypeMenu, ReadoutChips, type SearchHit } from "./overlays";
+import { MapContextMenu, type ContextItem } from "./ContextMenu";
+import { ItineraryPanel, type Stop } from "./ItineraryPanel";
+import { Minimap } from "./Minimap";
 
 /* MapView — records on a free vector/raster basemap, taken to Google-Maps depth:
-   a basemap switcher (streets/light/dark/satellite/terrain), layer toggles
-   (points · clustering with a radius control · heatmap), color- and size-by-field
-   markers with a legend, draw/measure tools (distance · area · radius) that
-   filter records by the drawn shape, search + geocode, route between records, and
-   click-to-add a record at a location. Every capability is config-composable
-   (mapConfig.ts) with a sensible default; all chrome is token-themed (map.css),
-   light+dark, mobile. GL paint can't read CSS vars, so colors resolve to literals
-   at mount and re-resolve on theme/skin change (tokens/resolve). Tiles unreachable
-   (offline/CI) → a token-only fallback canvas keeps every overlay working. */
+   six map TYPES (streets/light/dark/satellite/hybrid/terrain) with a crossfade on
+   switch + 3D-building extrusions and shaded relief; a real CAMERA feel (eased
+   fly/zoom, double-click zoom toward the cursor, drag-tilt/rotate with a compass);
+   multi-stop ROUTING with turn-by-turn directions (OSRM demo, mock fallback); rich
+   INTERACTIONS (marker popups with directions, a right-click context menu, address
+   search + reverse-geocode, geolocate, cluster spiderfy); and polish (minimap inset,
+   scale, fullscreen, draw/measure, filter-by-area). Every capability is
+   config-composable (mapConfig.ts) with a sensible default; all chrome is token-
+   themed (map.css), light+dark, mobile. GL paint can't read CSS vars, so colors
+   resolve to literals at mount and re-resolve on theme/skin change (tokens/resolve).
+   Tiles unreachable (offline/CI) → a token-only fallback canvas keeps every overlay
+   working. */
 
 const SOURCE_ID = "map-records";
 const HEAT_ID = "map-heat";
 const DRAW_ID = "map-draw";
 const DOM_MARKER_CAP = 400; // above this, un-clustered points render on the GPU
+const CLUSTER_MAX_ZOOM = 14;
 
 type Shape =
   | { kind: "line"; points: LngLat[] }
@@ -102,6 +113,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     object.fields[0];
 
   const { located, withoutLocation } = React.useMemo(() => splitRows(rows, latKey, lngKey), [rows, latKey, lngKey]);
+  const rowById = React.useCallback((id: string) => located.find((l) => String(l.row.id) === id), [located]);
 
   /* ── draw / measure shape (one at a time, Google-Maps style) ── */
   const [drawMode, setDrawMode] = React.useState<"line" | "polygon" | "circle" | null>(null);
@@ -142,6 +154,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     "nx-bg-raised",
     "nx-bg-sunken",
     "nx-border",
+    "nx-border-strong",
     "nx-opt-blue",
     "nx-opt-teal",
     "nx-opt-yellow",
@@ -152,9 +165,11 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   const accent = colors["nx-accent"] || "rgba(79, 70, 229, 1)";
   const accentFg = colors["nx-accent-fg"] || "rgba(255, 255, 255, 1)";
   const surface = colors["nx-bg-raised"] || "rgba(255, 255, 255, 1)";
+  const buildingColor = colors["nx-border-strong"] || "#c8c6c1";
 
   /* ── basemap ── */
   const basemap = activeBasemap(opts, viewState);
+  const vectorActive = basemapIsVector(basemap);
   const [styleFailed, setStyleFailed] = React.useState(false);
   const [ready, setReady] = React.useState(false);
   const loadedRef = React.useRef(false);
@@ -186,12 +201,47 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   const mapRef = React.useRef<MapRef>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
+  /* ── 3D augments (buildings · hillshade · optional DEM terrain) — re-applied on
+     every style load, since setStyle wipes custom layers ── */
+  const buildings3d = buildings3dOn(opts, viewState);
+  const hillshade = hillshadeOn(opts, viewState);
+  const augments = React.useMemo(
+    () => ({
+      buildings3d: buildings3d && vectorActive && !styleFailed,
+      buildingColor,
+      hillshade: hillshade && !styleFailed,
+      hillshadeOpacity: darkBasemap ? 0.5 : 0.32,
+      terrainDemUrl: opts.terrain.demUrl,
+      terrainExaggeration: opts.terrain.exaggeration,
+    }),
+    [buildings3d, vectorActive, styleFailed, buildingColor, hillshade, darkBasemap, opts.terrain.demUrl, opts.terrain.exaggeration],
+  );
+  const applyAll = React.useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (map && map.isStyleLoaded()) applyAugments(map, augments);
+  }, [augments]);
+  React.useEffect(() => {
+    if (ready) applyAll();
+  }, [ready, applyAll]);
+
+  /* ── basemap crossfade — a soft blur + opacity dip on the canvas while the new
+     style loads, cleared on the next idle, so a switch morphs instead of hard-flips ── */
+  const [switching, setSwitching] = React.useState(false);
+  const pickBasemap = React.useCallback(
+    (id: string) => {
+      if (!reduceMotion && id !== basemap) setSwitching(true);
+      onViewState({ mapBasemap: id, mapTypeOpen: false }); // picking a base closes the menu (overlay toggles keep it open)
+    },
+    [onViewState, reduceMotion, basemap],
+  );
+
   /* fit to data ONCE on mount / first rows that carry coords */
   const initialView = React.useMemo(() => {
+    const pose = { pitch: opts.camera.initialPitch, bearing: opts.camera.initialBearing };
     const b = boundsOf(located);
-    if (!b) return { longitude: 4.6, latitude: 51.2, zoom: 5 };
-    if (located.length === 1) return { longitude: located[0].lng, latitude: located[0].lat, zoom: 11 };
-    return { bounds: b, fitBoundsOptions: { padding: 64, maxZoom: 12 } };
+    if (!b) return { longitude: 4.6, latitude: 51.2, zoom: 5, ...pose };
+    if (located.length === 1) return { longitude: located[0].lng, latitude: located[0].lat, zoom: 11, ...pose };
+    return { bounds: b, fitBoundsOptions: { padding: 64, maxZoom: 12 }, ...pose };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const fittedRef = React.useRef(located.length > 0);
@@ -260,10 +310,19 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   /* ── GL state mirrored onto data-attrs (canvas isn't DOM) ── */
   const [clusterCount, setClusterCount] = React.useState(0);
   const [zoomAttr, setZoomAttr] = React.useState<string>("");
+  const [pitchAttr, setPitchAttr] = React.useState(0);
+  const [bearingAttr, setBearingAttr] = React.useState(0);
+  const [overview, setOverview] = React.useState<{ center: { lng: number; lat: number }; zoom: number; ring: LngLat[] } | null>(null);
   const syncGlState = React.useCallback((map: MaplibreMap) => {
     setZoomAttr(map.getZoom().toFixed(1));
+    setPitchAttr(Math.round(map.getPitch()));
+    setBearingAttr(Math.round(map.getBearing()));
     setClusterCount(map.getLayer("map-clusters") ? map.queryRenderedFeatures(undefined, { layers: ["map-clusters"] }).length : 0);
-  }, []);
+    if (opts.controls.minimap) {
+      const c = map.getCenter();
+      setOverview({ center: { lng: c.lng, lat: c.lat }, zoom: map.getZoom(), ring: viewportRing(map) });
+    }
+  }, [opts.controls.minimap]);
 
   /* ── spiderfy: DOM pins that collide on screen fan out onto a ring with leader
      lines. Projected fresh on every settle (zoom/pan changes pixel positions);
@@ -285,9 +344,23 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     if (ready) recomputeSpider();
   }, [ready, recomputeSpider]);
 
+  /* ── cluster spiderfy-on-click: a cluster that can't split further fans its
+     leaves out as temporary DOM pins ── */
+  const [clusterLeaves, setClusterLeaves] = React.useState<{ anchor: LngLat; ids: string[] } | null>(null);
+  const clusterLeafOffsets = React.useMemo(() => {
+    const map = mapRef.current;
+    if (!clusterLeaves || !map) return new Map<string, SpiderOffset>();
+    const p = map.project(clusterLeaves.anchor);
+    return spiderfyLayout(clusterLeaves.ids.map((id) => ({ id, x: p.x, y: p.y })));
+  }, [clusterLeaves]);
+  React.useEffect(() => {
+    // any camera move dismisses the temporary fan
+    setClusterLeaves(null);
+  }, [zoomAttr]);
+
   /* ── search + geocode ── */
   const geocode = React.useMemo(() => makeGeocodeProvider(typeof viewConfig.geocodeEndpoint === "string" ? viewConfig.geocodeEndpoint : undefined), [viewConfig.geocodeEndpoint]);
-  const route = React.useMemo(() => makeRouteProvider(typeof viewConfig.routeEndpoint === "string" ? viewConfig.routeEndpoint : undefined), [viewConfig.routeEndpoint]);
+  const reverse = React.useMemo(() => makeReverseGeocoder(typeof viewConfig.geocodeEndpoint === "string" ? viewConfig.geocodeEndpoint : undefined), [viewConfig.geocodeEndpoint]);
   const [query, setQuery] = React.useState("");
   const [geoHits, setGeoHits] = React.useState<SearchHit[]>([]);
   const recordHits = React.useMemo<SearchHit[]>(() => {
@@ -317,7 +390,10 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   const [searchMarker, setSearchMarker] = React.useState<{ lng: number; lat: number; label: string } | null>(null);
 
   const flyTo = React.useCallback(
-    (lng: number, lat: number, zoom = 13) => mapRef.current?.flyTo({ center: [lng, lat], zoom, duration: reduceMotion ? 0 : 700 }),
+    (lng: number, lat: number, zoom = 13) => {
+      const map = mapRef.current?.getMap();
+      if (map) flyToPoint(map, lng, lat, zoom, reduceMotion);
+    },
     [reduceMotion],
   );
   const pickSearch = (h: SearchHit) => {
@@ -332,33 +408,121 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     }
   };
 
-  /* ── route between records ── */
-  const [routeOn, setRouteOn] = React.useState(false);
-  const [routeSel, setRouteSel] = React.useState<LngLat[]>([]);
-  const [routeResult, setRouteResult] = React.useState<RouteResult | null>(null);
-  const addWaypoint = React.useCallback(
-    (pt: LngLat) => {
-      setRouteSel((sel) => {
-        const next = [...sel, pt];
-        if (next.length >= 2) {
-          route(next.slice(-2)).then(setRouteResult).catch(() => setRouteResult(null));
-          setRouteOn(false);
-          return [];
-        }
-        return next;
-      });
-    },
-    [route],
+  /* ── itinerary / routing ── */
+  const router = React.useMemo(
+    () => makeRouter({ endpoint: opts.routing.endpoint, osrmBaseUrl: opts.routing.osrmBaseUrl }),
+    [opts.routing.endpoint, opts.routing.osrmBaseUrl],
   );
-  const clearRoute = () => {
+  const profile = routeProfile(opts, viewState);
+  const [itinOpen, setItinOpen] = React.useState(false);
+  const [stops, setStops] = React.useState<Stop[]>([]);
+  const [routeResult, setRouteResult] = React.useState<RouteResult | null>(null);
+  const [routeLoading, setRouteLoading] = React.useState(false);
+  const stopSeq = React.useRef(0);
+  const stopFromRecord = (l: LocatedRow): Stop => ({ key: `r${l.row.id}`, lng: l.lng, lat: l.lat, label: String(l.row[titleField.key] ?? l.row.id), recordId: String(l.row.id) });
+  const stopFromCoord = (lng: number, lat: number, label?: string): Stop => ({ key: `c${stopSeq.current++}`, lng, lat, label: label ?? `Point (${lat.toFixed(3)}, ${lng.toFixed(3)})` });
+  const pickingStop = itinOpen && stops.length < 2;
+
+  const addStop = React.useCallback((s: Stop, at: "start" | "end") => {
+    setStops((prev) => {
+      const without = prev.filter((p) => p.key !== s.key);
+      const next = at === "start" ? [s, ...without] : [...without, s];
+      return next;
+    });
+    setItinOpen(true);
+  }, []);
+  const openDirectionsFromRecord = (l: LocatedRow, at: "start" | "end") => {
+    setPopupId(null);
+    addStop(stopFromRecord(l), at);
+  };
+
+  /* (re)compute the route whenever the stops or profile change */
+  React.useEffect(() => {
+    if (stops.length < 2) {
+      setRouteResult(null);
+      setRouteLoading(false);
+      return;
+    }
+    let live = true;
+    setRouteLoading(true);
+    router(stops.map((s) => [s.lng, s.lat] as LngLat), profile)
+      .then((r) => {
+        if (!live) return;
+        setRouteResult(r);
+        setRouteLoading(false);
+        const map = mapRef.current?.getMap();
+        if (map) {
+          let minLng = 180, minLat = 90, maxLng = -180, maxLat = -90;
+          for (const [lng, lat] of r.coordinates) {
+            if (lng < minLng) minLng = lng;
+            if (lng > maxLng) maxLng = lng;
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+          }
+          if (r.coordinates.length) map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: { top: 72, bottom: 72, left: isMobile ? 48 : 340, right: 48 }, maxZoom: 15, duration: reduceMotion ? 0 : 700 });
+        }
+      })
+      .catch(() => live && (setRouteResult(null), setRouteLoading(false)));
+    return () => {
+      live = false;
+    };
+  }, [stops, profile, router, reduceMotion, isMobile]);
+
+  const clearItinerary = () => {
+    setStops([]);
     setRouteResult(null);
-    setRouteSel([]);
-    setRouteOn(false);
+  };
+  const closeItinerary = () => {
+    setItinOpen(false);
+    clearItinerary();
   };
 
   /* ── add point ── */
   const [addPointOn, setAddPointOn] = React.useState(false);
   const canAddPoint = opts.tools.addPoint && !readOnly && !!onCreateDraft;
+  const dropRecord = (lng: number, lat: number) => {
+    onCreateDraft?.({ [latKey]: Number(lat.toFixed(6)), [lngKey]: Number(lng.toFixed(6)) });
+    setAddPointOn(false);
+  };
+
+  /* ── context menu ── */
+  const [ctx, setCtx] = React.useState<{ x: number; y: number; items: ContextItem[] } | null>(null);
+  const closeCtx = () => setCtx(null);
+  const [whatsHere, setWhatsHere] = React.useState<GeocodeResult | null>(null);
+  const openContext = React.useCallback(
+    (x: number, y: number, lng: number, lat: number, record?: LocatedRow) => {
+      if (!opts.tools.contextMenu) return;
+      const items: ContextItem[] = [];
+      if (record) {
+        items.push({ id: "open", label: "Open record", icon: <ArrowRight size={15} />, onSelect: () => onOpen(String(record.row.id)) });
+        if (opts.tools.route) {
+          items.push({ id: "dir-from", label: "Directions from here", icon: <Navigation size={15} />, onSelect: () => openDirectionsFromRecord(record, "start") });
+          items.push({ id: "dir-to", label: "Directions to here", icon: <ArrowRight size={15} />, onSelect: () => openDirectionsFromRecord(record, "end") });
+        }
+      } else {
+        if (opts.tools.route) {
+          items.push({ id: "dir-from", label: "Directions from here", icon: <Navigation size={15} />, onSelect: () => addStop(stopFromCoord(lng, lat), "start") });
+          items.push({ id: "dir-to", label: "Directions to here", icon: <ArrowRight size={15} />, onSelect: () => addStop(stopFromCoord(lng, lat), "end") });
+        }
+        if (opts.tools.geocode) {
+          items.push({
+            id: "whats-here",
+            label: "What's here?",
+            icon: <HelpCircle size={15} />,
+            onSelect: () => {
+              setWhatsHere({ label: "…", lng, lat });
+              reverse(lng, lat).then((r) => setWhatsHere(r ?? { label: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lng, lat })).catch(() => setWhatsHere({ label: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lng, lat }));
+            },
+          });
+        }
+        if (canAddPoint) items.push({ id: "add", label: "Add a point here", icon: <MapPinPlus size={15} />, onSelect: () => dropRecord(lng, lat) });
+        items.push({ id: "zoom", label: "Zoom in here", icon: <ZoomIn size={15} />, onSelect: () => { const m = mapRef.current?.getMap(); if (m) zoomAroundPoint(m, [lng, lat], 1.6, reduceMotion); } });
+      }
+      if (items.length) setCtx({ x, y, items });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [opts.tools.contextMenu, opts.tools.route, opts.tools.geocode, canAddPoint, reduceMotion, onOpen, reverse],
+  );
 
   /* ── draw handlers ── */
   const clearDraw = () => {
@@ -377,6 +541,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
 
   const onMapClick = React.useCallback(
     (e: MapLayerMouseEvent) => {
+      closeCtx();
       const pt = ll(e);
       // draw modes consume the click
       if (drawMode === "line" || drawMode === "polygon") {
@@ -395,13 +560,16 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
         return;
       }
       if (addPointOn && onCreateDraft) {
-        onCreateDraft({ [latKey]: Number(pt[1].toFixed(6)), [lngKey]: Number(pt[0].toFixed(6)) });
-        setAddPointOn(false);
+        dropRecord(pt[0], pt[1]);
         return;
       }
-      // feature click (cluster expand / point → popup or route waypoint)
+      // feature click (cluster expand/spiderfy · point → popup or route stop)
       const feature = e.features?.[0];
       if (!feature) {
+        if (pickingStop) {
+          addStop(stopFromCoord(pt[0], pt[1]), "end");
+          return;
+        }
         setPopupId(null);
         return;
       }
@@ -409,17 +577,30 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       if (props.cluster) {
         const src = mapRef.current?.getSource(SOURCE_ID) as GeoJSONSource | undefined;
         const [lng, lat] = (feature.geometry as GeoJSON.Point).coordinates;
-        src?.getClusterExpansionZoom(Number(props.cluster_id)).then((zoom) => {
-          mapRef.current?.easeTo({ center: [lng, lat], zoom, duration: reduceMotion ? 0 : 500 });
+        const cid = Number(props.cluster_id);
+        src?.getClusterExpansionZoom(cid).then((zoom) => {
+          const map = mapRef.current;
+          if (!map) return;
+          // a cluster that won't separate further → spiderfy its leaves in place
+          if (zoom > CLUSTER_MAX_ZOOM || zoom <= map.getZoom() + 0.4) {
+            src?.getClusterLeaves(cid, 24, 0).then((leaves) => {
+              const ids = (leaves as GeoJSON.Feature[]).map((f) => String((f.properties as { id?: unknown })?.id ?? "")).filter(Boolean);
+              setClusterLeaves({ anchor: [lng, lat], ids });
+            });
+          } else {
+            map.easeTo({ center: [lng, lat], zoom, duration: reduceMotion ? 0 : 500 });
+          }
         });
         return;
       }
       if (props.id != null) {
-        if (routeOn) addWaypoint(pt);
+        const rec = rowById(String(props.id));
+        if (pickingStop && rec) addStop(stopFromRecord(rec), "end");
         else setPopupId(String(props.id));
       }
     },
-    [drawMode, draft, addPointOn, onCreateDraft, latKey, lngKey, routeOn, addWaypoint, reduceMotion],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [drawMode, draft, addPointOn, onCreateDraft, pickingStop, reduceMotion, rowById, addStop],
   );
 
   const onMapDblClick = React.useCallback(
@@ -427,10 +608,32 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       if (drawMode === "line" || drawMode === "polygon") {
         e.preventDefault?.();
         commitDraw();
+        return;
       }
+      if (drawMode === "circle") return;
+      const pt = ll(e);
+      if (opts.camera.doubleClickAction === "addPoint" && canAddPoint) {
+        dropRecord(pt[0], pt[1]);
+        return;
+      }
+      const map = mapRef.current?.getMap();
+      if (map) zoomAroundPoint(map, e.lngLat, 1.4, reduceMotion);
     },
-    [drawMode, commitDraw],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [drawMode, commitDraw, opts.camera.doubleClickAction, canAddPoint, reduceMotion],
   );
+
+  const onMapContextMenu = React.useCallback(
+    (e: MapLayerMouseEvent) => {
+      if (drawMode || addPointOn) return; // let those flows own the click
+      e.preventDefault?.();
+      const feature = e.features?.[0];
+      const rec = feature && feature.properties && (feature.properties as { id?: unknown }).id != null ? rowById(String((feature.properties as { id?: unknown }).id)) : undefined;
+      openContext(e.point.x, e.point.y, e.lngLat.lng, e.lngLat.lat, rec);
+    },
+    [drawMode, addPointOn, rowById, openContext],
+  );
+
   const onMapMove = React.useCallback(
     (e: MapLayerMouseEvent) => {
       if (drawMode && (draft.length > 0 || drawMode !== "circle")) setHover(ll(e));
@@ -440,7 +643,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
 
   const [cursor, setCursor] = React.useState<string>();
   const drawing = drawMode !== null;
-  const effectiveCursor = drawing || addPointOn || routeOn ? "crosshair" : cursor;
+  const effectiveCursor = drawing || addPointOn || pickingStop ? "crosshair" : cursor;
 
   /* ── draw GeoJSON (committed shape + live draft preview) ── */
   const drawFC = React.useMemo(() => {
@@ -479,22 +682,31 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
         ? `${formatArea(Math.PI * shape.radiusM ** 2)} · r ${formatDistance(shape.radiusM)}`
         : undefined;
   const inArea = areaShape ? { count: visibleLocated.length, total: located.length } : null;
-  const routeText = routeResult ? `${formatDistance(routeResult.distanceM)} · ${formatDuration(routeResult.durationS)}${routeResult.approximate ? " · est." : ""}` : undefined;
   const drawHint = drawing
     ? drawMode === "circle"
       ? draft.length === 0
         ? "Click to set the centre"
         : "Click to set the radius"
-      : `Click to add points · double-click to finish${draft.length ? "" : ""}`
+      : "Click to add points · double-click to finish"
     : addPointOn
       ? "Click the map to place a new record"
-      : routeOn
-        ? routeSel.length === 0
-          ? "Click a record to start the route"
-          : "Click a second record"
-        : undefined;
+      : undefined;
 
   const interactiveLayerIds = clusterRender ? ["map-clusters", "map-point"] : glPointRender ? ["map-point-plain"] : undefined;
+
+  /* context-menu placement: flip toward the interior near an edge */
+  const ctxStyle = React.useMemo<React.CSSProperties>(() => {
+    if (!ctx) return {};
+    const el = containerRef.current;
+    const w = el?.clientWidth ?? 800;
+    const h = el?.clientHeight ?? 600;
+    const s: React.CSSProperties = {};
+    if (ctx.x > w - 210) s.right = w - ctx.x;
+    else s.left = ctx.x;
+    if (ctx.y > h - 260) s.bottom = h - ctx.y;
+    else s.top = ctx.y;
+    return s;
+  }, [ctx]);
 
   if (!glOk) {
     return (
@@ -513,8 +725,13 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       data-map-ready={ready ? "1" : "0"}
       data-map-clusters={clusterCount}
       data-map-zoom={zoomAttr}
+      data-map-pitch={pitchAttr}
+      data-map-bearing={bearingAttr}
       data-map-tiles={styleFailed ? "fallback" : "remote"}
       data-map-basemap={basemap}
+      data-map-buildings={augments.buildings3d ? "1" : "0"}
+      data-map-hillshade={augments.hillshade ? "1" : "0"}
+      data-map-switching={switching ? "1" : "0"}
       data-map-points={mode.points ? "1" : "0"}
       data-map-heatmap={mode.heatmap ? "1" : "0"}
       data-map-clusterradius={clusRadius}
@@ -523,19 +740,24 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       data-map-area={shape?.kind === "polygon" || shape?.kind === "circle" ? "1" : ""}
       data-map-inarea={inArea ? inArea.count : ""}
       data-map-route={routeResult ? Math.round(routeResult.distanceM) : ""}
+      data-map-stops={stops.length}
       data-map-dark={darkBasemap ? "1" : "0"}
       onKeyDown={(e) => {
         if (e.key !== "Escape") return;
-        if (drawing) {
+        if (ctx) {
+          e.stopPropagation();
+          closeCtx();
+        } else if (drawing) {
           e.stopPropagation();
           setDraft([]);
           setHover(null);
           setDrawMode(null);
-        } else if (addPointOn || routeOn) {
+        } else if (addPointOn) {
           e.stopPropagation();
           setAddPointOn(false);
-          setRouteOn(false);
-          setRouteSel([]);
+        } else if (itinOpen) {
+          e.stopPropagation();
+          closeItinerary();
         } else if (popupId) {
           e.stopPropagation();
           setPopupId(null);
@@ -546,18 +768,34 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
         ref={mapRef}
         initialViewState={initialView}
         mapStyle={mapStyle}
+        maxPitch={opts.camera.maxPitch}
         interactiveLayerIds={interactiveLayerIds}
         cursor={effectiveCursor}
-        doubleClickZoom={!drawing}
+        doubleClickZoom={false}
         onClick={onMapClick}
         onDblClick={onMapDblClick}
+        onContextMenu={onMapContextMenu}
         onMouseMove={onMapMove}
         onMouseEnter={() => !drawing && setCursor("pointer")}
         onMouseLeave={() => setCursor(undefined)}
         onLoad={(e) => {
           loadedRef.current = true;
           setReady(true);
+          applyAugments(e.target, augments);
           syncGlState(e.target);
+        }}
+        onStyleData={(e) => {
+          const map = e.target;
+          if (!map.isStyleLoaded()) return;
+          // a REAL basemap style finished loading — maplibre's `load` fires only
+          // once for the map, so mark loaded here too (a switch re-arms the offline
+          // timer by resetting loadedRef; without this a slow switch falsely falls
+          // back to the offline canvas). The fallback style itself never clears it.
+          if (map.getStyle()?.name !== "offline-fallback") {
+            loadedRef.current = true;
+            setStyleFailed(false);
+            applyAugments(map, augments);
+          }
         }}
         onError={() => {
           if (!loadedRef.current) setStyleFailed(true);
@@ -565,13 +803,18 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
         onIdle={(e) => {
           syncGlState(e.target);
           recomputeSpider();
+          if (switching) setSwitching(false);
+        }}
+        onMove={(e) => {
+          setPitchAttr(Math.round(e.target.getPitch()));
+          setBearingAttr(Math.round(e.target.getBearing()));
         }}
         onZoomEnd={(e) => setZoomAttr(e.target.getZoom().toFixed(1))}
         attributionControl={{ compact: true }}
       >
-        <NavigationControl position="top-right" showCompass={!isMobile} />
+        <NavigationControl position="top-right" showCompass showZoom visualizePitch />
         {opts.controls.fullscreen && !isMobile && <FullscreenControl position="top-right" />}
-        {opts.controls.geolocate && <GeolocateControl position="top-right" />}
+        {opts.controls.geolocate && <GeolocateControl position="top-right" positionOptions={{ enableHighAccuracy: true }} trackUserLocation />}
         {opts.controls.scale && <ScaleControl position="bottom-right" unit="metric" />}
 
         {/* heatmap (independent, un-clustered source) */}
@@ -609,7 +852,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
 
         {/* clustered points */}
         {clusterRender && (
-          <Source id={SOURCE_ID} type="geojson" data={featureCollection} cluster clusterMaxZoom={14} clusterRadius={clusRadius}>
+          <Source id={SOURCE_ID} type="geojson" data={featureCollection} cluster clusterMaxZoom={CLUSTER_MAX_ZOOM} clusterRadius={clusRadius}>
             <Layer
               id="map-clusters"
               type="circle"
@@ -646,8 +889,6 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
           visibleLocated.map(({ row, lat, lng }) => {
             const title = String(row[titleField.key] ?? row.id);
             const tint = colorField ? optionMeta(colorField, row[colorKey ?? ""]).color : undefined;
-            // size-by-field on a TIGHT range (0.82–1.32) so big values don't produce
-            // giant colliding pins — the legend still conveys the field
             const sv = sizeKey ? numericValue(row[sizeKey]) : undefined;
             const scale =
               sizeKey && ext && sv !== undefined && ext.max > ext.min
@@ -674,8 +915,16 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
                       style={{ ...(tint ? { "--pin-color": `var(--nx-opt-${tint})` } : {}), "--pin-scale": scale } as React.CSSProperties}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (routeOn) addWaypoint([lng, lat]);
+                        const rec = rowById(String(row.id));
+                        if (pickingStop && rec) addStop(stopFromRecord(rec), "end");
                         else setPopupId(String(row.id));
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const rect = containerRef.current?.getBoundingClientRect();
+                        const rec = rowById(String(row.id));
+                        if (rect) openContext(e.clientX - rect.left, e.clientY - rect.top, lng, lat, rec);
                       }}
                     >
                       <svg width="24" height="29" viewBox="0 0 26 31" aria-hidden="true">
@@ -689,16 +938,55 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
             );
           })}
 
-        {/* route line */}
+        {/* cluster spiderfy: temporary leaf pins fanned around the clicked cluster */}
+        {clusterLeaves &&
+          clusterLeaves.ids.map((id) => {
+            const rec = rowById(id);
+            if (!rec) return null;
+            const off = clusterLeafOffsets.get(id);
+            const dx = off?.dx ?? 0;
+            const dy = off?.dy ?? 0;
+            const tint = colorField ? optionMeta(colorField, rec.row[colorKey ?? ""]).color : undefined;
+            return (
+              <Marker key={`leaf-${id}`} longitude={clusterLeaves.anchor[0]} latitude={clusterLeaves.anchor[1]} anchor="bottom">
+                <div className="nxMapPinCell">
+                  <svg className="nxMapLeader" width="0" height="0" overflow="visible" aria-hidden="true">
+                    <line x1="0" y1="0" x2={dx.toFixed(1)} y2={dy.toFixed(1)} />
+                    <circle cx="0" cy="0" r="2.5" />
+                  </svg>
+                  <div className="nxMapPinOffset" style={{ transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)` }}>
+                    <button
+                      type="button"
+                      className="nxMapPin"
+                      data-testid={`map-leaf-${id}`}
+                      aria-label={String(rec.row[titleField.key] ?? id)}
+                      style={{ ...(tint ? { "--pin-color": `var(--nx-opt-${tint})` } : {}) } as React.CSSProperties}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPopupId(id);
+                        setClusterLeaves(null);
+                      }}
+                    >
+                      <svg width="24" height="29" viewBox="0 0 26 31" aria-hidden="true">
+                        <path d="M13 1C6.4 1 1 6.3 1 12.8 1 21.3 13 30 13 30s12-8.7 12-17.2C25 6.3 19.6 1 13 1Z" fill="currentColor" stroke="var(--nx-bg-raised)" strokeWidth="1.5" />
+                        <circle cx="13" cy="12.6" r="4.6" fill="var(--nx-bg-raised)" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </Marker>
+            );
+          })}
+
+        {/* route line: a casing under a colored top line (Google-Maps look) */}
         {routeResult && (
           <Source id="map-route" type="geojson" data={{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: routeResult.coordinates } }}>
-            <Layer id="map-route-line" type="line" layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": accent, "line-width": 4, "line-opacity": 0.85, "line-dasharray": [1, 0.6] }} />
+            <Layer id="map-route-casing" type="line" layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": surface, "line-width": 8, "line-opacity": 0.9 }} />
+            <Layer id="map-route-line" type="line" layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": accent, "line-width": 5, "line-opacity": routeResult.approximate ? 0.7 : 0.95, ...(routeResult.approximate ? { "line-dasharray": [1.4, 1] } : {}) }} />
           </Source>
         )}
 
-        {/* draw + measure shapes (committed solid, draft dashed — dasharray/opacity
-            can't be feature-driven in maplibre, so the draft/committed split is by
-            filter into separate constant-paint layers) */}
+        {/* draw + measure shapes (committed solid, draft dashed) */}
         {(shape || draft.length > 0) && (
           <Source id={DRAW_ID} type="geojson" data={drawFC}>
             <Layer id="map-draw-fill" type="fill" filter={["==", ["geometry-type"], "Polygon"]} paint={{ "fill-color": accent, "fill-opacity": 0.12 }} />
@@ -714,11 +1002,23 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
           </Marker>
         )}
 
-        {routeSel.map((p, i) => (
-          <Marker key={`rs${i}`} longitude={p[0]} latitude={p[1]} anchor="center">
-            <span className="nxMapRoutePin" aria-hidden />
+        {/* itinerary stop markers (A, B, C …) */}
+        {stops.map((s, i) => (
+          <Marker key={s.key} longitude={s.lng} latitude={s.lat} anchor="bottom">
+            <span className="nxMapStopPin" data-testid={`map-stop-pin-${i}`} title={s.label} aria-label={`Stop ${stopLabel(i)}: ${s.label}`}>
+              {stopLabel(i)}
+            </span>
           </Marker>
         ))}
+
+        {whatsHere && (
+          <Popup longitude={whatsHere.lng} latitude={whatsHere.lat} anchor="bottom" offset={14} maxWidth="240px" className="nxMapPopup nxMapPopup--info" closeButton={false} onClose={() => setWhatsHere(null)}>
+            <div data-testid="map-whatshere">
+              <div className="nxMapWhatsHereLabel">{whatsHere.label}</div>
+              <div className="nxMapWhatsHereCoord">{whatsHere.lat.toFixed(5)}, {whatsHere.lng.toFixed(5)}</div>
+            </div>
+          </Popup>
+        )}
 
         {popupRow && (
           <Popup longitude={popupRow.lng} latitude={popupRow.lat} anchor="bottom" offset={clusterRender ? 12 : 30} maxWidth="280px" className="nxMapPopup" closeButton={false} onClose={() => setPopupId(null)}>
@@ -728,6 +1028,16 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
                 <Button ref={popupOpenRef} size="sm" variant="primary" data-testid="map-popup-open" onClick={() => onOpen(String(popupRow.row.id))}>
                   Open
                 </Button>
+                {opts.tools.route && (
+                  <>
+                    <Button size="sm" variant="secondary" data-testid="map-popup-dir-from" onClick={() => openDirectionsFromRecord(popupRow, "start")}>
+                      From here
+                    </Button>
+                    <Button size="sm" variant="secondary" data-testid="map-popup-dir-to" onClick={() => openDirectionsFromRecord(popupRow, "end")}>
+                      To here
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </Popup>
@@ -738,17 +1048,28 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       <div className="nxMapTopLeft">
         <MapSearch query={query} onQuery={setQuery} hits={searchHits} onPick={pickSearch} onClear={() => { setQuery(""); setGeoHits([]); setSearchMarker(null); }} geocodeEnabled={opts.tools.geocode} />
         <div className="nxMapControlsRow">
-          <BasemapSwitcher offered={opts.basemaps} active={basemap} onPick={(id) => onViewState({ mapBasemap: id })} />
+          <MapTypeMenu
+            offered={opts.basemaps}
+            active={basemap}
+            onPick={pickBasemap}
+            open={typeof viewState.mapTypeOpen === "boolean" ? viewState.mapTypeOpen : false}
+            onOpenChange={(v) => onViewState({ mapTypeOpen: v })}
+            buildings3d={buildings3d}
+            hillshade={hillshade}
+            vectorActive={vectorActive}
+            onToggleBuildings={(on) => onViewState({ mapBuildings3d: on })}
+            onToggleHillshade={(on) => onViewState({ mapHillshade: on })}
+          />
           <LayersPanel
-          open={typeof viewState.mapLayersOpen === "boolean" ? viewState.mapLayersOpen : false}
-          onOpenChange={(v) => onViewState({ mapLayersOpen: v })}
-          points={pointsOn(viewState)}
-          clusters={clustersOn(opts, viewState)}
-          heatmap={heatmapOn(opts, viewState)}
-          heatmapOffered
-          clusterRadius={clusRadius}
-          colorFieldLabel={colorField?.label}
-          sizeFieldLabel={sizeField?.label}
+            open={typeof viewState.mapLayersOpen === "boolean" ? viewState.mapLayersOpen : false}
+            onOpenChange={(v) => onViewState({ mapLayersOpen: v })}
+            points={pointsOn(viewState)}
+            clusters={clustersOn(opts, viewState)}
+            heatmap={heatmapOn(opts, viewState)}
+            heatmapOffered
+            clusterRadius={clusRadius}
+            colorFieldLabel={colorField?.label}
+            sizeFieldLabel={sizeField?.label}
             onToggle={(layer, on) => onViewState({ [layer === "points" ? "mapPoints" : layer === "clusters" ? "mapClusters" : "mapHeatmap"]: on })}
             onRadius={(r) => onViewState({ clusterRadius: r })}
           />
@@ -759,16 +1080,16 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
         <div className="nxMapLeftRail">
           <DrawTools
             drawMode={drawMode}
-            onDraw={(m) => { setDraft([]); setHover(null); setDrawMode(m); }}
+            onDraw={(m) => { setDraft([]); setHover(null); setDrawMode(m); setItinOpen(false); }}
             hasShapes={hasDraw}
             onClear={clearDraw}
             drawEnabled={opts.tools.draw}
             addPointEnabled={canAddPoint}
             addPointOn={addPointOn}
-            onAddPoint={(on) => { setAddPointOn(on); if (on) { setDrawMode(null); setRouteOn(false); } }}
+            onAddPoint={(on) => { setAddPointOn(on); if (on) { setDrawMode(null); setItinOpen(false); } }}
             routeEnabled={opts.tools.route}
-            routeOn={routeOn}
-            onRoute={(on) => { setRouteOn(on); setRouteSel([]); if (on) { setDrawMode(null); setAddPointOn(false); } }}
+            routeOn={itinOpen}
+            onRoute={(on) => { setItinOpen(on); if (on) { setDrawMode(null); setAddPointOn(false); } else clearItinerary(); }}
           />
         </div>
       )}
@@ -782,17 +1103,31 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
         </div>
       )}
 
+      {itinOpen && (
+        <ItineraryPanel
+          stops={stops}
+          profile={profile}
+          result={routeResult}
+          loading={routeLoading}
+          addHint={pickingStop}
+          onProfile={(p: Profile) => onViewState({ mapRouteProfile: p })}
+          onRemoveStop={(i) => setStops((prev) => prev.filter((_, k) => k !== i))}
+          onMoveStop={(from, to) => setStops((prev) => moveStop(prev, from, to))}
+          onReverse={() => setStops((prev) => [...prev].reverse())}
+          onClear={clearItinerary}
+          onClose={closeItinerary}
+        />
+      )}
+
       {opts.legend && <Legend colorField={colorField} sizeFieldLabel={sizeField?.label} sizeExtent={ext} />}
 
-      <ReadoutChips
-        drawHint={drawHint}
-        measure={measureText}
-        area={areaText}
-        inArea={inArea}
-        onClearArea={clearDraw}
-        route={routeText}
-        onClearRoute={clearRoute}
-      />
+      <ReadoutChips drawHint={drawHint} measure={measureText} area={areaText} inArea={inArea} onClearArea={clearDraw} />
+
+      {opts.controls.minimap && overview && !isMobile && (
+        <Minimap center={overview.center} zoom={overview.zoom} ring={overview.ring} accent={accent} onRecenter={(lng, lat) => flyTo(lng, lat, mapRef.current?.getZoom())} />
+      )}
+
+      {ctx && <MapContextMenu style={ctxStyle} items={ctx.items} onClose={closeCtx} />}
 
       {withoutLocation > 0 && (
         <span className="nxMapChip nxMapChip--without" role="status" data-testid="map-without-location">

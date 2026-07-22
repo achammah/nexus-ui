@@ -28,9 +28,19 @@ const definition: ViewDefinition = {
     { key: "titleField", label: "Title", kind: "field" },
     { key: "colorField", label: "Color markers by", kind: "field", fieldTypes: ["select"] },
     { key: "sizeField", label: "Size markers by", kind: "field", fieldTypes: ["number", "currency", "money"] },
-    // basemaps
+    // basemaps (six types: streets/light/dark/satellite/hybrid/terrain)
     { key: "basemaps", label: "Basemaps offered", kind: "multiSelect", options: [...ALL_BASEMAPS] },
     { key: "defaultBasemap", label: "Default basemap", kind: "select", options: [...ALL_BASEMAPS] },
+    // 3D / relief
+    { key: "buildings3d", label: "3D buildings (vector basemaps)", kind: "boolean" },
+    { key: "hillshade", label: "Terrain shading by default", kind: "boolean" },
+    { key: "terrainDemUrl", label: "3D terrain DEM tiles URL (seam)", kind: "text" },
+    { key: "terrainExaggeration", label: "Terrain exaggeration", kind: "number" },
+    // camera
+    { key: "maxPitch", label: "Max tilt (0–85°)", kind: "number" },
+    { key: "initialPitch", label: "Initial tilt (°)", kind: "number" },
+    { key: "initialBearing", label: "Initial bearing (°)", kind: "number" },
+    { key: "doubleClickAction", label: "Double-click action", kind: "select", options: ["zoom", "addPoint"] },
     // layers
     { key: "clustering", label: "Cluster nearby points", kind: "boolean" },
     { key: "clusterRadius", label: "Cluster radius (px)", kind: "number" },
@@ -41,16 +51,20 @@ const definition: ViewDefinition = {
     // tools
     { key: "draw", label: "Draw + measure tools", kind: "boolean" },
     { key: "filterByArea", label: "Filter by drawn area", kind: "boolean" },
-    { key: "geocode", label: "Address search (geocode)", kind: "boolean" },
-    { key: "route", label: "Route between records", kind: "boolean" },
+    { key: "geocode", label: "Address search + reverse geocode", kind: "boolean" },
+    { key: "route", label: "Directions / itinerary", kind: "boolean" },
+    { key: "routeProfile", label: "Default travel mode", kind: "select", options: ["driving", "walking", "cycling"] },
     { key: "addPoint", label: "Click to add a record", kind: "boolean" },
+    { key: "contextMenu", label: "Right-click context menu", kind: "boolean" },
     // controls
     { key: "scaleControl", label: "Scale bar", kind: "boolean" },
     { key: "geolocateControl", label: "Locate-me control", kind: "boolean" },
     { key: "fullscreenControl", label: "Fullscreen control", kind: "boolean" },
-    // provider seam (optional endpoint URLs → real geocode/route, else the mock)
+    { key: "minimap", label: "Overview minimap", kind: "boolean" },
+    // provider seams (optional endpoint URLs → real geocode/route, else the mock)
     { key: "geocodeEndpoint", label: "Geocode endpoint URL", kind: "text" },
     { key: "routeEndpoint", label: "Route endpoint URL", kind: "text" },
+    { key: "osrmBaseUrl", label: "OSRM base URL (\"\" = mock only)", kind: "text" },
   ],
   defaultConfig: mapDefaultConfig,
   validateConfig: (object, cfg) => {
@@ -70,6 +84,12 @@ const definition: ViewDefinition = {
       const bad = cfg.basemaps.find((b) => !(ALL_BASEMAPS as string[]).includes(b as BasemapId));
       if (bad !== undefined) return `basemaps includes “${bad}”, not one of ${ALL_BASEMAPS.join(", ")}`;
     }
+    const dca = cfg.doubleClickAction;
+    if (typeof dca === "string" && dca && !["zoom", "addPoint"].includes(dca))
+      return `doubleClickAction “${dca}” is not one of zoom, addPoint`;
+    const rp = cfg.routeProfile;
+    if (typeof rp === "string" && rp && !["driving", "walking", "cycling"].includes(rp))
+      return `routeProfile “${rp}” is not one of driving, walking, cycling`;
     return null;
   },
 };

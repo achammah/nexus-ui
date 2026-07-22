@@ -1,7 +1,6 @@
 import * as React from "react";
 import {
   Layers,
-  Map as MapIcon,
   Pentagon,
   Circle as CircleIcon,
   MapPinPlus,
@@ -9,17 +8,12 @@ import {
   Search,
   X,
   Ruler,
+  Map as MapIcon,
+  Boxes,
+  Mountain,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
 import { Button } from "../../../primitives/Button";
-import { Badge, Checkbox, Input } from "../../../primitives/fields";
+import { Checkbox, Input } from "../../../primitives/fields";
 import { BASEMAP_LABELS, type BasemapId } from "./basemaps";
 import type { FieldDef } from "../../types";
 import { normalizeOption } from "../../types";
@@ -27,41 +21,103 @@ import { MARKER_MAX_R, MARKER_MIN_R } from "./geo";
 
 /* Presentational map chrome — all token-styled (map.css), light+dark, mobile.
    These are dumb components: MapView owns the map, the state and every handler.
-   Kept here so MapView reads as the map/layers/draw logic, not the toolbar JSX. */
+   Kept here so MapView reads as the map/layers/draw logic, not the toolbar JSX.
+   (Bigger surfaces — the right-click ContextMenu, the ItineraryPanel, the Minimap
+   inset — live in their own files.) */
 
-/* ── basemap switcher (streets/light/dark/satellite/terrain) ─────────────── */
-export function BasemapSwitcher({
+/* ── map-type menu: base appearance (streets/light/dark/satellite/hybrid/terrain)
+      as labeled swatches, Google-Maps style, + the 3D-buildings and terrain-shading
+      overlays. Base APPEARANCE lives here; DATA layers live in LayersPanel. ────── */
+export function MapTypeMenu({
   offered,
   active,
   onPick,
+  open,
+  onOpenChange,
+  buildings3d,
+  hillshade,
+  vectorActive,
+  onToggleBuildings,
+  onToggleHillshade,
 }: {
   offered: BasemapId[];
   active: BasemapId;
   onPick: (id: BasemapId) => void;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  buildings3d: boolean;
+  hillshade: boolean;
+  vectorActive: boolean;
+  onToggleBuildings: (on: boolean) => void;
+  onToggleHillshade: (on: boolean) => void;
 }) {
-  if (offered.length <= 1) return null;
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) onOpenChange(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open, onOpenChange]);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size="sm" variant="secondary" icon={<MapIcon size={14} />} data-testid="map-basemap-btn" className="nxMapCtrlBtn">
-          {BASEMAP_LABELS[active]}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="nxMapMenu">
-        <DropdownMenuLabel>Basemap</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={active} onValueChange={(v) => onPick(v as BasemapId)}>
-          {offered.map((id) => (
-            <DropdownMenuRadioItem key={id} value={id} data-testid={`map-basemap-${id}`}>
-              {BASEMAP_LABELS[id]}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="nxMapTypes" ref={rootRef}>
+      <Button
+        size="sm"
+        variant={open ? "primary" : "secondary"}
+        icon={<MapIcon size={14} />}
+        data-testid="map-basemap-btn"
+        aria-expanded={open}
+        aria-controls="nxMapTypePanel"
+        className="nxMapCtrlBtn"
+        onClick={() => onOpenChange(!open)}
+      >
+        {BASEMAP_LABELS[active]}
+      </Button>
+      {open && (
+        <div
+          className="nxMapTypePanel"
+          id="nxMapTypePanel"
+          role="group"
+          aria-label="Map type"
+          data-testid="map-type-panel"
+          onKeyDown={(e) => e.key === "Escape" && onOpenChange(false)}
+        >
+          <div className="nxMapTypeGrid">
+            {offered.map((id) => (
+              <button
+                key={id}
+                type="button"
+                className="nxMapTypeTile"
+                data-active={id === active || undefined}
+                aria-pressed={id === active}
+                data-testid={`map-basemap-${id}`}
+                onClick={() => onPick(id)}
+              >
+                <span className={`nxMapTypeSwatch nxMapTypeSwatch--${id}`} aria-hidden />
+                <span className="nxMapTypeLabel">{BASEMAP_LABELS[id]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="nxMapTypeToggles">
+            <label className="nxMapLayerRow" data-disabled={!vectorActive || undefined} title={vectorActive ? undefined : "Available on vector basemaps (streets/light/dark)"}>
+              <Checkbox checked={buildings3d && vectorActive} disabled={!vectorActive} onCheckedChange={(v) => onToggleBuildings(!!v)} data-testid="map-toggle-buildings" />
+              <Boxes size={14} />
+              <span>3D buildings</span>
+            </label>
+            <label className="nxMapLayerRow">
+              <Checkbox checked={hillshade} onCheckedChange={(v) => onToggleHillshade(!!v)} data-testid="map-toggle-hillshade" />
+              <Mountain size={14} />
+              <span>Terrain shading</span>
+            </label>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
-/* ── layers panel: points / clusters / heatmap toggles + cluster radius ───── */
+/* ── layers panel: points / clusters / heatmap toggles + cluster radius (DATA) ── */
 export function LayersPanel({
   open,
   onOpenChange,
@@ -171,30 +227,14 @@ export function DrawTools({
   routeOn: boolean;
   onRoute: (on: boolean) => void;
 }) {
-  const tool = (
-    id: string,
-    label: string,
-    icon: React.ReactNode,
-    on: boolean,
-    onClick: () => void,
-    testid: string,
-  ) => (
-    <button
-      key={id}
-      type="button"
-      className="nxMapTool"
-      data-active={on || undefined}
-      data-testid={testid}
-      aria-pressed={on}
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-    >
+  const tool = (id: string, label: string, icon: React.ReactNode, on: boolean, onClick: () => void, testid: string) => (
+    <button key={id} type="button" className="nxMapTool" data-active={on || undefined} data-testid={testid} aria-pressed={on} aria-label={label} title={label} onClick={onClick}>
       {icon}
     </button>
   );
   return (
     <div className="nxMapToolRail" role="toolbar" aria-label="Map tools" data-testid="map-tool-rail">
+      {routeEnabled && tool("route", "Directions", <RouteIcon size={16} />, routeOn, () => onRoute(!routeOn), "map-route-btn")}
       {drawEnabled && (
         <>
           {tool("line", "Measure distance", <Ruler size={16} />, drawMode === "line", () => onDraw(drawMode === "line" ? null : "line"), "map-draw-line")}
@@ -202,10 +242,7 @@ export function DrawTools({
           {tool("circle", "Draw radius", <CircleIcon size={16} />, drawMode === "circle", () => onDraw(drawMode === "circle" ? null : "circle"), "map-draw-circle")}
         </>
       )}
-      {addPointEnabled &&
-        tool("addpoint", "Add a point", <MapPinPlus size={16} />, addPointOn, () => onAddPoint(!addPointOn), "map-addpoint-btn")}
-      {routeEnabled &&
-        tool("route", "Route between records", <RouteIcon size={16} />, routeOn, () => onRoute(!routeOn), "map-route-btn")}
+      {addPointEnabled && tool("addpoint", "Add a point", <MapPinPlus size={16} />, addPointOn, () => onAddPoint(!addPointOn), "map-addpoint-btn")}
       {hasShapes && (
         <button type="button" className="nxMapTool nxMapTool--clear" data-testid="map-draw-clear" aria-label="Clear drawing" title="Clear drawing" onClick={onClear}>
           <X size={16} />
@@ -339,23 +376,19 @@ export function Legend({
   );
 }
 
-/* ── readout chips (measure / area / in-area / route / draw hint) ─────────── */
+/* ── readout chips (measure / area / in-area / draw hint) ─────────────────── */
 export function ReadoutChips({
   drawHint,
   measure,
   area,
   inArea,
   onClearArea,
-  route,
-  onClearRoute,
 }: {
   drawHint?: string;
   measure?: string;
   area?: string;
   inArea?: { count: number; total: number } | null;
   onClearArea: () => void;
-  route?: string;
-  onClearRoute: () => void;
 }) {
   return (
     <div className="nxMapReadouts">
@@ -378,14 +411,6 @@ export function ReadoutChips({
         <span className="nxMapReadout nxMapReadout--area" role="status" data-testid="map-inarea-chip">
           {inArea.count} of {inArea.total} in area
           <button type="button" onClick={onClearArea} aria-label="Clear area filter" data-testid="map-inarea-clear">
-            <X size={12} />
-          </button>
-        </span>
-      )}
-      {route && (
-        <span className="nxMapReadout nxMapReadout--route" role="status" data-testid="map-route-readout">
-          <RouteIcon size={13} /> {route}
-          <button type="button" onClick={onClearRoute} aria-label="Clear route" data-testid="map-route-clear">
             <X size={12} />
           </button>
         </span>

@@ -88,7 +88,7 @@
 .nxMapPopup.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--nx-bg-raised); }
 .nxMapPopup.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--nx-bg-raised); }
 @keyframes nxPopupIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-.nxMapPopupActions { display: flex; justify-content: flex-end; margin-top: 8px; }
+.nxMapPopupActions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; margin-top: 8px; }
 
 /* ── native maplibre controls on tokens (zoom/scale/fullscreen/geolocate/attrib) ── */
 .nxMapView .maplibregl-ctrl-group {
@@ -166,10 +166,10 @@
   box-shadow: var(--nx-shadow-1);
 }
 .nxMapControlsRow > .nxMapLayers { border-left: 1px solid var(--nx-border); }
-/* tool rail on the left edge, vertically centred — clear of the top-left controls
-   AND the bottom-left legend (they used to overlap, stealing the lower buttons'
-   clicks) */
-.nxMapLeftRail { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); z-index: 5; }
+/* tool rail on the RIGHT edge, vertically centred — clear of the top-right nav
+   stack, the bottom-right scale/minimap, AND the top-left directions dock (which
+   overlays the search + type controls when open) */
+.nxMapLeftRail { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); z-index: 5; }
 
 /* the group's buttons are transparent (the group provides the surface); the label
    + icon drive the token fg so they stay legible over a dark basemap (the shadcn
@@ -180,6 +180,8 @@
   box-shadow: none !important;
   border-radius: var(--nx-radius-m) !important;
   color: var(--nx-fg) !important;
+  padding-inline: 10px !important;
+  gap: 6px;
 }
 .nxMapCtrlBtn svg { color: var(--nx-fg-muted); }
 
@@ -400,13 +402,211 @@
   background: color-mix(in oklab, var(--nx-bg) 55%, transparent);
 }
 
+/* ── basemap crossfade — a soft blur + opacity dip on the canvas while the new
+   style loads, so a switch morphs instead of hard-flipping ── */
+.nxMapView .maplibregl-canvas { transition: opacity 260ms var(--nx-ease), filter 260ms var(--nx-ease); }
+.nxMapView[data-map-switching="1"] .maplibregl-canvas { opacity: 0.5; filter: blur(5px); }
+
+/* ── map-type menu: base appearance (swatches) + 3D/relief toggles ── */
+.nxMapTypes { position: relative; }
+.nxMapTypePanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 9;
+  width: 232px;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-2);
+  padding: 8px;
+  animation: nxPopupIn var(--nx-t-fast) var(--nx-ease-settle) both;
+}
+.nxMapTypeGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.nxMapTypeTile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: var(--nx-radius-s);
+  background: transparent;
+  cursor: pointer;
+  color: var(--nx-fg-muted);
+}
+.nxMapTypeTile:hover { background: var(--nx-bg-sunken); }
+.nxMapTypeTile:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; }
+.nxMapTypeTile[data-active] { border-color: var(--nx-accent); color: var(--nx-accent); }
+.nxMapTypeLabel { font: var(--nx-text-micro); text-align: center; letter-spacing: 0; text-transform: none; }
+.nxMapTypeSwatch {
+  width: 100%;
+  height: 32px;
+  border-radius: var(--nx-radius-s);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+  background-size: cover;
+  position: relative;
+  overflow: hidden;
+}
+.nxMapTypeSwatch--streets { background: linear-gradient(135deg, #f4f2ec, #e6e2d8); }
+.nxMapTypeSwatch--light { background: linear-gradient(135deg, #fbfbfa, #ebe9e4); }
+.nxMapTypeSwatch--dark { background: linear-gradient(135deg, #2b2b30, #131316); }
+.nxMapTypeSwatch--satellite { background: linear-gradient(135deg, #2e4a2a, #5b6c39 55%, #384a58); }
+.nxMapTypeSwatch--hybrid { background: linear-gradient(135deg, #2e4a2a, #5b6c39 55%, #384a58); }
+.nxMapTypeSwatch--hybrid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent 46%, rgb(255 255 255 / 0.5) 47%, transparent 48%),
+    linear-gradient(20deg, transparent 62%, rgb(255 255 255 / 0.4) 63%, transparent 64%);
+}
+.nxMapTypeSwatch--terrain { background: linear-gradient(135deg, #eae1c9, #bdd9a1 60%, #8fb37a); }
+.nxMapTypeToggles { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--nx-border); display: flex; flex-direction: column; gap: 2px; }
+.nxMapTypeToggles .nxMapLayerRow svg { color: var(--nx-fg-muted); }
+
+/* ── right-click context menu ── */
+.nxMapBackdrop { position: absolute; inset: 0; z-index: 11; background: transparent; border: 0; padding: 0; cursor: default; }
+.nxMapContextMenu {
+  position: absolute;
+  z-index: 12;
+  min-width: 200px;
+  max-width: 260px;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-2);
+  padding: 4px;
+  animation: nxPopupIn var(--nx-t-fast) var(--nx-ease-settle) both;
+}
+.nxMapContextItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--nx-radius-s);
+  text-align: left;
+  cursor: pointer;
+  color: var(--nx-fg);
+  font: var(--nx-text-meta);
+}
+.nxMapContextItem:hover:not(:disabled),
+.nxMapContextItem:focus-visible { background: var(--nx-bg-sunken); outline: none; }
+.nxMapContextItem:disabled { opacity: 0.45; cursor: default; }
+.nxMapContextIcon { display: inline-flex; color: var(--nx-fg-muted); flex: none; }
+.nxMapContextLabel { display: flex; flex-direction: column; line-height: 1.25; }
+.nxMapContextSub { font: var(--nx-text-micro); color: var(--nx-fg-faint); }
+
+/* ── directions / itinerary dock (top-left; overlays search + type controls) ── */
+.nxMapItinerary {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 9;
+  width: min(330px, calc(100% - 20px));
+  max-height: calc(100% - 20px);
+  overflow-y: auto;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-l);
+  box-shadow: var(--nx-shadow-2);
+  animation: nxPopupIn var(--nx-t-med) var(--nx-ease-settle) both;
+}
+.nxMapItinHeader {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: var(--nx-bg-raised);
+  border-bottom: 1px solid var(--nx-border);
+}
+.nxMapItinTitle { display: inline-flex; align-items: center; gap: 6px; flex: 1; font: var(--nx-text-title); color: var(--nx-fg); }
+.nxMapItinTitle svg { color: var(--nx-accent); }
+.nxMapProfileRow { display: inline-flex; gap: 2px; background: var(--nx-bg-sunken); border-radius: var(--nx-radius-m); padding: 2px; }
+.nxMapProfileBtn { display: grid; place-items: center; width: 30px; height: 26px; border: 0; background: transparent; color: var(--nx-fg-muted); border-radius: var(--nx-radius-s); cursor: pointer; transition: color var(--nx-t-fast) var(--nx-ease); }
+.nxMapProfileBtn:hover { color: var(--nx-fg); }
+.nxMapProfileBtn[data-active] { background: var(--nx-bg-raised); color: var(--nx-accent); box-shadow: var(--nx-shadow-1); }
+.nxMapProfileBtn:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; }
+.nxMapItinClose { display: inline-flex; padding: 4px; border: 0; background: transparent; color: var(--nx-fg-faint); cursor: pointer; border-radius: var(--nx-radius-s); }
+.nxMapItinClose:hover { color: var(--nx-fg); background: var(--nx-bg-sunken); }
+.nxMapStops { list-style: none; margin: 0; padding: 8px 10px 4px; display: flex; flex-direction: column; gap: 4px; }
+.nxMapStop { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: var(--nx-radius-s); }
+.nxMapStop:hover { background: var(--nx-bg-sunken); }
+.nxMapStopBadge { display: inline-flex; align-items: center; gap: 1px; min-width: 30px; padding: 2px 6px; border-radius: 999px; background: var(--nx-accent-soft); color: var(--nx-accent); font: var(--nx-text-micro); flex: none; }
+.nxMapStopGrip { color: var(--nx-fg-faint); }
+.nxMapStopLabel { flex: 1; font: var(--nx-text-meta); color: var(--nx-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nxMapStopControls { display: inline-flex; gap: 1px; flex: none; }
+.nxMapStopControls button { display: inline-flex; padding: 3px; border: 0; background: transparent; color: var(--nx-fg-faint); cursor: pointer; border-radius: var(--nx-radius-s); }
+.nxMapStopControls button:hover:not(:disabled) { color: var(--nx-fg); background: var(--nx-bg-raised); }
+.nxMapStopControls button:disabled { opacity: 0.35; cursor: default; }
+.nxMapItinHint { margin: 2px 10px 8px; padding: 8px 10px; border-radius: var(--nx-radius-s); background: color-mix(in oklab, var(--nx-accent) 12%, var(--nx-bg-raised)); color: var(--nx-accent); font: var(--nx-text-meta); }
+.nxMapItinActions { display: flex; gap: 6px; padding: 0 10px 8px; }
+.nxMapItinSummary { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 8px 10px; margin: 0 10px; border-top: 1px solid var(--nx-border); }
+.nxMapItinSummary strong { font: var(--nx-text-title); color: var(--nx-fg); }
+.nxMapItinProvider { font: var(--nx-text-micro); color: var(--nx-fg-faint); }
+.nxMapItinLoading { padding: 8px 12px; font: var(--nx-text-meta); color: var(--nx-fg-muted); }
+.nxMapSteps { list-style: none; margin: 0; padding: 4px 8px 10px; display: flex; flex-direction: column; }
+.nxMapStepRow { display: flex; align-items: center; gap: 9px; padding: 8px 4px; border-top: 1px solid var(--nx-border); font: var(--nx-text-meta); color: var(--nx-fg); }
+.nxMapStepRow:first-child { border-top: 0; }
+.nxMapStepIcon { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 50%; background: var(--nx-bg-sunken); color: var(--nx-accent); }
+.nxMapStepText { flex: 1; }
+.nxMapStepDist { font: var(--nx-text-micro); color: var(--nx-fg-muted); flex: none; }
+
+/* itinerary stop pin (A, B, C …) on the map */
+.nxMapStopPin {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--nx-accent);
+  color: var(--nx-accent-fg);
+  border: 2px solid var(--nx-bg-raised);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+  font: var(--nx-text-micro);
+  line-height: 1;
+  animation: nxPinIn var(--nx-t-med) var(--nx-ease-spring) both;
+}
+
+/* what's-here info popup (reverse geocode) */
+.nxMapPopup--info .maplibregl-popup-content { min-width: 140px; }
+.nxMapWhatsHereLabel { font: var(--nx-text-body); color: var(--nx-fg); font-weight: 600; }
+.nxMapWhatsHereCoord { font: var(--nx-text-micro); color: var(--nx-fg-faint); margin-top: 2px; }
+
+/* ── minimap / overview inset (bottom-right, above scale) ── */
+.nxMapMinimap {
+  position: absolute;
+  right: 10px;
+  bottom: 42px;
+  z-index: 5;
+  width: 156px;
+  height: 112px;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-2);
+  overflow: hidden;
+}
+.nxMapMinimap .maplibregl-map { border-radius: var(--nx-radius-m); }
+
 @media (prefers-reduced-motion: reduce) {
   .nxMapPin,
+  .nxMapStopPin,
   .nxMapPopup .maplibregl-popup-content,
   .nxMapLayersPanel,
+  .nxMapTypePanel,
+  .nxMapContextMenu,
+  .nxMapItinerary,
   .nxMapSearchResults,
   .nxMapReadout { animation: none !important; }
+  .nxMapView .maplibregl-canvas,
   .nxMapPin svg { transition: none !important; }
+  .nxMapView[data-map-switching="1"] .maplibregl-canvas { opacity: 1 !important; filter: none !important; }
 }
 
 /* ── mobile 390px: compact controls, touch targets, no hover-only affordance ── */
@@ -414,6 +614,19 @@
   .nxMapView { height: clamp(380px, 64dvh, 640px); border-radius: var(--nx-radius-m); }
   .nxMapTopLeft { max-width: calc(100% - 20px); right: 10px; }
   .nxMapTool { width: 40px; height: 40px; } /* bigger touch targets; rail stays vertical + centred */
-  .nxMapLegend { gap: 10px; padding: 7px 8px; font-size: 11px; max-width: 60%; }
+  .nxMapLegend { gap: 10px; padding: 7px 8px; font-size: 11px; max-width: 55%; }
   .nxMapReadouts { bottom: 8px; }
+  .nxMapTypePanel { width: min(272px, calc(100vw - 40px)); }
+  .nxMapContextMenu { min-width: 180px; }
+  /* directions dock as a bottom sheet on phones */
+  .nxMapItinerary {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 62dvh;
+    border-radius: var(--nx-radius-l) var(--nx-radius-l) 0 0;
+    box-shadow: 0 -6px 22px rgb(0 0 0 / 0.28);
+  }
 }
