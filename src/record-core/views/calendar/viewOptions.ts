@@ -99,6 +99,15 @@ export interface CalFcOptions {
 
 /* whether the config permits editing / range-selection (BEFORE the permission AND
    — CalendarView combines these with readOnly / create rights) */
+/* Should the calendar FILL its surface (page-style) or size to its CONTENT?
+   Returns undefined when unset — the view then DETECTS it (see CalendarView's
+   bounded-parent probe), because the two real contexts genuinely differ: a
+   calendar PAGE has a bounded content area the grid should stretch into, while a
+   calendar embedded in a record page sits in a content-growing column and must
+   not eat the content below it. `fillHeight: true|false` forces either way. */
+export const configFillHeight = (cfg: Record<string, unknown>): boolean | undefined =>
+  typeof cfg.fillHeight === "boolean" ? cfg.fillHeight : undefined;
+
 export const configEditable = (cfg: Record<string, unknown>): boolean => parseBool(cfg.editable, true);
 export const configSelectable = (cfg: Record<string, unknown>): boolean => parseBool(cfg.selectable, true);
 

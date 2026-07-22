@@ -200,3 +200,24 @@
   :root:not([data-motion="always"]) .nxCalAgendaEvent { transition: none !important; }
   :root:not([data-motion="always"]) .nxCalEditColor { transition: none !important; transform: none !important; }
 }
+
+/* ── fill the surface (page-style) ───────────────────────────────────────────
+   When the calendar IS the page, its content area is bounded and the grid must
+   stretch into it instead of collapsing to content height (which left a dead
+   band below the calendar). `.nxCalendar` becomes a bounded flex column and the
+   FullCalendar body takes whatever is left under the header.
+
+   This degrades on purpose: a percentage height resolves to AUTO when the parent
+   is content-sized — e.g. a calendar embedded in a record page, which must not
+   eat the content below it — so the embedded case keeps its old behaviour with
+   no configuration. `fillHeight: false` opts out entirely. */
+.nxCalendar[data-fill="1"] {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.nxCalendar[data-fill="1"] > .fc {
+  flex: 1 1 auto;
+  min-height: 0;
+}

@@ -30,6 +30,7 @@ import {
 } from "./events";
 import {
   configEditable,
+  configFillHeight,
   configSelectable,
   defaultView,
   enabledViews,
@@ -264,10 +265,44 @@ export default function CalendarView({
   });
 
   const timed = fcView.startsWith("timeGrid");
+  /* ── fill vs content-size: DETECTED, not assumed ───────────────────────────
+     A calendar PAGE gives us a bounded content area and the grid should stretch
+     into it (otherwise a dead band sits below). A calendar embedded in a RECORD
+     page sits in a content-growing column and must size to its content, or it
+     collapses / eats the content below. A percentage height does NOT degrade
+     between those two cases, so we probe: collapse ourselves to 0 for one
+     measurement and see whether the parent's height changes. Unchanged parent =
+     the parent is bounded independently of us = fill. `fillHeight` in the view
+     config overrides the probe either way. */
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  const fillCfg = configFillHeight(viewConfig);
+  const [detectedFill, setDetectedFill] = React.useState(false);
+  React.useLayoutEffect(() => {
+    if (typeof fillCfg === "boolean") return; // explicit config wins, no probe
+    const probe = () => {
+      const el = rootRef.current;
+      const parent = el?.parentElement;
+      if (!el || !parent) return;
+      const prev = el.style.height;
+      const before = parent.getBoundingClientRect().height;
+      el.style.height = "0px";
+      const after = parent.getBoundingClientRect().height;
+      el.style.height = prev;
+      // parent kept its height while we were 0-high → it is bounded by something
+      // other than our content → safe (and correct) to fill it
+      setDetectedFill(Math.abs(after - before) < 2 && after > 0);
+    };
+    probe();
+    window.addEventListener("resize", probe);
+    return () => window.removeEventListener("resize", probe);
+  }, [fillCfg]);
+  const fill = typeof fillCfg === "boolean" ? fillCfg : detectedFill;
 
   return (
     <div
+      ref={rootRef}
       className="nxCalendar"
+      data-fill={fill ? "1" : undefined}
       data-testid={`calendar-${object.key}`}
       data-cal-view={curView}
       data-can-create={onCreateDraft ? "true" : undefined}
@@ -323,7 +358,10 @@ export default function CalendarView({
           eventTimeFormat={EVENT_TIME_FORMAT}
           allDaySlot={opts.allDaySlot}
           expandRows
-          height={timed ? gridH : "auto"}
+          /* "100%" fills the bounded page surface AND degrades to content height
+             when the parent is unbounded; gridH remains the bounded fallback for
+             the time grid so it can never expand to a full unbounded 24h column. */
+          height={fill ? "100%" : timed ? gridH : "auto"}
           dayMaxEvents
           navLinks
           navLinkDayClick={(date) => onViewState({ calView: enabled.includes("day" as never) ? "day" : curView, calDate: localDay(date) })}
