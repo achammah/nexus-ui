@@ -1,145 +1,253 @@
-# Recipes
+# RECIPES — the page workspace & document surface
 
-Task-shaped guides for composing the kit. Each recipe says what you get, what to
-pass, and where the seams are.
+A Notion×Google-Docs **linked page workspace**: everything is a page, pages nest and reference each other, and each page is a block-rich document portable to Word. Three entry points, largest first:
 
----
+- **`PageWorkspace`** (`src/blocks/document`) — the whole workspace: a page-tree sidebar + breadcrumbs + Cmd-K quick-switcher + backlinks, hosting a document per page. Free-surface (host owns the whole `PageStore`). **This is what a Pages host mounts for a `kind:"document"` page.**
+- **`DocumentSurface`** (`src/blocks/document`) — a single page: cover, icon, title, outline rail, word count, page-width toggle, find & replace, export/import menu, over the editor. `PageWorkspace` mounts one of these per page.
+- **`NotionEditor`** (`src/record-core/NotionEditor`) — the bare block editor. This is the `richText` field editor; use it directly when you only want the editing canvas.
 
-## Workbook: dialling Excel depth per company
+Everything is `--nx-*`-tokened (light + dark), config-composable, and mobile-by-construction.
 
-The workbook block (`src/blocks/workbook/`) mounts Univer as a full spreadsheet
-surface. Every Excel capability beyond the core grid is **config-gated**, so the same
-component serves a bare read-mostly grid and a full financial model.
+## PageWorkspace (the page system)
 
 ```tsx
-import { LazyWorkbookSurface, MINIMAL_WORKBOOK_CONFIG } from "@nexus/ui";
+import { PageWorkspace, type PageStore } from "@nexus/ui";
 
-// full Excel (the default — every flag on)
-<LazyWorkbookSurface value={snapshot} onChange={save} />
-
-// a plain grid: formulas + editing only
-<LazyWorkbookSurface value={snapshot} onChange={save} config={MINIMAL_WORKBOOK_CONFIG} />
-
-// dial individual capabilities; omitted keys keep the full-Excel default
-<LazyWorkbookSurface
-  value={snapshot}
-  onChange={save}
-  config={{ notes: false, dataValidation: false }}
+<PageWorkspace
+  value={pageStore}                // PageStore | null (null seeds a nested demo workspace)
+  onChange={(next) => save(next)}  // fired on every mutation — the host persists the store
+  reloadNonce={n}                  // bump to force a fresh mount from `value`
+  documentConfig={docConfig}       // forwarded to each page's DocumentSurface
+  breadcrumbs={false}              // set false when the HOST renders its own page breadcrumb
 />
 ```
 
-### The flags
+### Mounting it inside an app shell
 
-| Flag | Default | What it adds |
-|---|---|---|
-| `filters` | on | Column autofilter — per-column dropdown with value counts, search, sort, and by-value / by-colour / by-condition modes |
-| `sort` | on | Range sort (ascending / descending / custom) from the toolbar and context menu |
-| `conditionalFormatting` | on | Colour scales, data bars and highlight rules (see the seam below) |
-| `dataValidation` | on | Dropdown lists, number/date ranges, checkboxes — rendered as in-cell pickers |
-| `findReplace` | on | Workbook-wide find & replace |
-| `notes` | on | Cell notes / comments (`Add Note` in the cell context menu) |
-| `importExport` | on | XLSX + CSV import and export actions in the workbook's own toolbar |
+The workspace paints **no background of its own** and renders **one** header row, so it reads
+as a native surface rather than a panel dropped into the shell. Two things the host controls:
 
-Everything else — the formula engine (400+ functions across Financial, Logical, Text,
-Date & Time, Lookup & Reference, Math & Trig, Statistical, Engineering, Information
-and Database), multi-sheet tabs, freeze panes, merge, number formats, insert/delete
-rows and columns, undo/redo, the formula bar and the status-bar aggregation — is core
-and always present.
+- **Breadcrumbs are mutually exclusive.** Either the host shows a breadcrumb for the page and
+  you pass `breadcrumbs={false}`, or you let the workspace render the trail (recommended — it
+  is tree-aware, so it shows the full root→here path for nested sub-pages, and each crumb
+  navigates).
+- **Give it a real height.** It fills its container (`height:100%`), so the mount point needs
+  to be a flex child with `flex:1; min-height:0` (or an explicit height) — not an auto-height
+  block, which collapses the internal scroll container.
 
-Turning a flag off removes the whole capability from the mount: its Univer preset is
-never registered, so it costs nothing in the chunk and its menu items never appear.
+What you get, out of the box: nested **sub-pages** (infinite), a **tree sidebar** (expand/collapse, drag-to-move before/after/inside, new/duplicate/delete/favorite), **breadcrumbs** (root→here), inline **sub-page blocks** (`/page` or the tree `+`), **`[[`/`@` page-link autocomplete** → clickable links, a **backlinks** panel (“linked references”, with parent/sub-page/link kinds), a **⌘K quick-switcher**, and **full-text search** across pages.
 
-### Import / export
-
-`importExport` puts **Export** and **Import** in the toolbar band.
-
-- **Export** offers Excel (`.xlsx`) or CSV. XLSX carries every sheet with values,
-  formulas, fonts (bold/italic/underline/strike, size, family, colour), fills, number
-  formats, alignment, wrap, merges, column widths, row heights and frozen panes. CSV
-  writes the active sheet's values.
-- **Import** accepts `.xlsx` or `.csv`. Because it REPLACES the open workbook, it
-  always routes through an inline confirm naming the file. Both actions report a
-  transient result pill.
-
-The conversion lives in `xlsx-io.ts` and is built on **exceljs** (MIT), imported
-lazily — the library only enters the bundle when someone actually imports or exports.
-Univer's OSS engine has no client-side xlsx exchange of its own (that ships in its
-licensed "advanced" preset, which also expects a server), so this is the entire path.
-
-You can call the converters directly, without the UI:
+### The page store (what you persist)
 
 ```ts
-import { exportWorkbookToXlsx, importXlsxToWorkbook, triggerDownload } from "@nexus/ui";
-
-const blob = await exportWorkbookToXlsx(snapshot);
-triggerDownload(blob, "budget.xlsx");
-
-const snapshot2 = await importXlsxToWorkbook(await file.arrayBuffer());
+interface PageNode { id; title; icon?; cover?; parentId: string | null; order: number; blocks: Block[]; favorite?; createdAt; updatedAt }
+interface PageStore { version; pages: Record<id, PageNode>; activeId?; expanded?: Record<id, boolean> }
 ```
 
-**Consumer dependency:** the block treats `@univerjs/*` and `exceljs` as peer
-dependencies the consuming app installs (the same pattern the engine already used).
-Install the presets matching the flags you enable, plus `exceljs` if `importExport`
-is on.
+The store is a **flat adjacency list** — pages keyed by id, each pointing at its `parentId`, ordered by a **fractional `order`** key. The tree, breadcrumbs, backlinks and search are all *derived* by scanning `pages` (never stored redundantly), which makes it **external-writer-tolerant**: a concurrent writer patches one page's entry, so a merge is per-page with no structural tree conflicts. Persist the whole `PageStore` as one blob under `pageStoreKey(pageKey)`; `isPageStore(x)` guards a corrupt blob; `seedPageStore()` is the demo. Pure store ops (all node-testable) are exported: `createPage`, `duplicatePage`, `deletePage`, `movePage`, `renamePage`, `setPageBlocks`, `toggleFavorite`, `breadcrumb`, `backlinksOf`, `searchPages`, `childrenOf`, …
 
-### The demo seed
+Links: an inline **`[[page:<id>|<title>]]`** token in block text (a clickable link, title re-resolved from the store so renames propagate) and a **sub-page block** `{ type:"page"; pageId }`. The editor renders and creates both through the `pageContext` seam — so `NotionEditor` stays entity-agnostic (a `richText` field with no `pageContext` degrades a page ref to a static chip).
 
-`seedWorkbook()` returns a four-sheet workbook that demonstrates the feature set on
-load — useful as a fixture, a first-run state, or a showcase:
+> **Scale note:** the store persists as one blob, so a large workspace loads all pages + block bodies at once (fine for typical use). The flat store + `pageStoreKey` cleanly support a per-page-lazy split later (metadata in one blob; each page's `blocks` under `pageStoreKey(key)+':'+pageId`, load-on-open) paired with a maintained search/backlink index — no model change needed. See `docs/DEPENDENCIES.md`.
 
-- **Budget** — a Q1 model: merged title, per-row and per-column `=SUM`, an `=AVERAGE`
-  row, `$` formats, frozen header row + first column.
-- **Ops** — a 12-line operating table wired to the data features: an autofilter over
-  the header range, a Status dropdown (data validation), a Spend colour scale, and
-  dates rendered through a date number format.
-- **Summary** — a live tour of the formula library: `SUM`/`AVERAGE`/`MAX`/`COUNTA`,
-  `SUMIF`/`COUNTIF`, `VLOOKUP`, `INDEX`+`MATCH`, `IF`, `TEXT`+`MIN`, `UPPER`,
-  percentage shares, and cross-sheet references into both other sheets.
-- **Notes** — a small cross-sheet reference sheet.
+## DocumentSurface
 
-Plugin state (filter, conditional formatting, data validation) rides
-`IWorkbookData.resources` as `{name, data}` pairs. Those payload shapes were captured
-from Univer's own facade rather than hand-written; if you need new ones, drive the
-facade (`createFilter`, `newConditionalFormattingRule`, `newDataValidation`) and read
-the shapes back out of `fWorkbook.save()`.
+```tsx
+import { DocumentSurface, type DocumentSnapshot } from "@nexus/ui";
 
-### Seams and limits
+<DocumentSurface
+  value={snapshot}                 // DocumentSnapshot | null (null seeds a rich demo)
+  onChange={(next) => save(next)}  // fired on every edit — the host debounces
+  reloadNonce={n}                  // bump to force a fresh mount from `value`
+  actions={<SaveChip/>}            // optional host controls in the toolbar's right end
+  readOnly={false}
+  config={documentConfig}          // optional — see below
+/>
+```
 
-- **Conditional formatting does not paint.** On Univer `0.25.1` the rules register,
-  persist through save/load, and are editable through the CF panel — but the canvas
-  does not render them. Verified four ways: a colour scale from the snapshot, a colour
-  scale applied live through the facade, a plain `whenNumberGreaterThan` +
-  `setBackground` highlight rule, and the same with a forced recompute — none paint,
-  with no console error, on both the themed surface and a stock unthemed page. The
-  flag stays because the model and UI work; treat the visual as pending an engine fix.
-- **Charts and pivot tables** live in Univer's licensed `preset-sheets-advanced`
-  (which also expects a license key and, for exchange, a server). They are not wired
-  here. A chart is reachable without that preset by reading the selected range and
-  rendering with `recharts` (already a dependency) in a panel beside the grid — a
-  deliberate follow-on, not half-built here.
-- **Import fidelity.** Rich text collapses to plain text and hyperlinks import as
-  their display text. Charts, images, pivot tables and macros in a source `.xlsx` are
-  not imported. Dates convert through Excel serials.
-- **CSV** is single-sheet by nature: export writes the active sheet's values (not
-  formulas), and import produces a one-sheet workbook.
-- **Comments are notes, not threads.** The `notes` flag gives Excel-style sticky notes
-  (one body per cell). Threaded comments — replies, resolve — are a separate Univer
-  preset, not wired here (below).
-- **No collaboration layer.** No presence, co-editing, version history or track
-  changes. The surface is single-writer: the host owns one snapshot.
+### The snapshot (what you persist)
 
-### Free presets available but not wired
+```ts
+interface DocumentSnapshot {
+  id: string;
+  title: string;
+  blocks: Block[];               // the document body — the same Block[] the richText field stores
+  icon?: string;                 // a title emoji
+  cover?: string;                // a preset key ("preset:dusk") or a data: URI image
+  pageWidth?: "narrow" | "wide";
+  version?: number;
+}
+```
 
-These exist on npm at `0.25.1`, need no license, and each slots into the same
-`WorkbookConfig` pattern — the cheapest way to add parity:
+Persist the whole object as one blob under an app-state key. Helpers: `documentStoreKey(pageKey)`, `isDocumentSnapshot(x)` (recover a corrupt blob to a fresh doc), `seedDocument()` (the demo). This mirrors the workbook block's snapshot contract exactly.
 
-| Preset | Adds |
-|---|---|
-| `@univerjs/preset-sheets-thread-comment` | threaded comments (replies, resolve) |
-| `@univerjs/preset-sheets-table` | Excel-style structured tables |
-| `@univerjs/preset-sheets-hyper-link` | hyperlinks (also fixes import flattening) |
-| `@univerjs/preset-sheets-drawing` | images / floating objects |
+### DocumentConfig — every affordance is a flag (default = on)
 
-To wire one: add a flag to `WorkbookConfig`, import the preset + its `locales/en-US`
-and `lib/index.css`, and push it into `buildPresets()` in `WorkbookSurface.tsx` behind
-the flag. That is the whole pattern.
+```ts
+interface DocumentConfig {
+  editor?: EditorConfig;      // passed to the editor (see below)
+  outline?: boolean;          // the live outline rail + its toolbar toggle
+  importExport?: boolean;     // the Export/Import menu
+  chrome?: boolean;           // cover + icon + title header
+  cover?: boolean;            // allow a cover
+  wordCount?: boolean;        // the word/char readout
+  findReplace?: boolean;      // the find & replace bar
+  pageWidthToggle?: boolean;  // narrow/wide toggle
+}
+```
+
+Examples:
+
+```tsx
+// a lean note-taking surface: no cover, no page-width toggle, keep outline + export
+config={{ cover: false, pageWidthToggle: false }}
+
+// read-only published view: no import/export, no find/replace
+<DocumentSurface value={doc} readOnly config={{ importExport: false, findReplace: false }} />
+
+// restrict the block palette (e.g. a comment box — text + lists only, no toolbar)
+config={{ editor: { blocks: ["p", "ul", "ol", "quote"], toolbar: false } }}
+```
+
+## NotionEditor (bare editor / richText field)
+
+```tsx
+import { NotionEditor, type Block, type EditorConfig } from "@nexus/ui";
+
+<NotionEditor
+  blocks={blocks}
+  onChange={setBlocks}
+  readOnly={false}
+  config={editorConfig}          // optional
+  changes={suggestions}          // optional — inline tracked-changes (the suggestions layer)
+  hoveredChange={id} onHoverChange={setHover}
+/>
+```
+
+```ts
+interface EditorConfig {
+  blocks?: BlockType[];          // which block types the slash menu offers (default: all)
+  toolbar?: boolean;             // the inline formatting toolbar on selection (default: true)
+  markdownShortcuts?: boolean;   // # / - / [] / ``` / > … (default: true)
+  slashMenu?: boolean;           // "/" command menu (default: true)
+}
+```
+
+### Blocks
+
+`p · h1 · h2 · h3 · quote · ul · ol · todo · toggle · callout · code · divider · image · table`, each with an optional `indent` (0–5) for nesting. The model is a **flat `Block[]`** — additive over the original union, so the richText field, `useSuggestions`, and `DataTable` all keep working unchanged.
+
+### Editing
+
+- **Slash menu** — `/` (or the block handle's `+` on touch) inserts any block type.
+- **Markdown shortcuts** — `# ` `## ` `### ` headings · `- ` `* ` bullet · `1. ` numbered · `[] ` / `[x] ` to-do · `> ` quote · `| ` callout · `` ``` `` (or `` ```ts ``) code · `--- ` divider.
+- **Inline toolbar** — select text: bold / italic / underline / strikethrough / inline-code / link / highlight / text-color (9 token colors).
+- **Nesting** — Tab / Shift-Tab indent; Backspace at line start outdents then merges.
+- **Reorder** — drag the block handle (mouse HTML5 drag; touch pointer-drag).
+- **Toggles** collapse their deeper-indented followers; **code** blocks own Enter (newline; Enter on a blank last line exits).
+- **Paste** — Word / Google-Docs / web HTML is normalized to clean blocks (foreign styles stripped, structure + inline marks + nested lists preserved).
+
+## Import / export (`src/record-core/editor-io`)
+
+```ts
+import { exportMarkdown, exportHtml, exportPdf, exportDocx, importFile } from "@nexus/ui";
+
+exportMarkdown(blocks, title);   // → .md download
+exportHtml(blocks, title);       // → self-contained styled .html
+exportPdf(blocks, title);        // → opens a print-styled window (Save as PDF)
+await exportDocx(blocks, title); // → .docx (lazy-loads `docx`)
+
+const { blocks, warnings } = await importFile(file); // .docx (lazy `mammoth`) | .html | .md/.txt
+```
+
+Fidelity: **Markdown** and **HTML** round-trip losslessly (HTML preserves to-do/toggle/callout + nesting). **DOCX** preserves headings, lists, tables, and all text; Word has no native to-do/callout/code-block, so those degrade to paragraphs on the round-trip (the same boundary Google Docs hits). `docxBlob(blocks, title)` returns the Blob without downloading (for tests/uploads).
+
+## The live outline (`DocumentOutline`)
+
+Rendered by `DocumentSurface`; use it standalone over any editor container:
+
+```tsx
+import { DocumentOutline } from "@nexus/ui";
+const scrollRef = useRef<HTMLElement>(null);
+<div ref={scrollRef} /* the scroll container that holds the editor */>…</div>
+<DocumentOutline blocks={blocks} containerRef={scrollRef} />
+```
+
+It derives entries from headings (h1–h3), click-scrolls, highlights the active section on scroll, and collapses — all live.
+
+## Pages wiring (kind:"document")
+
+`DocumentSurface` is the document twin of `WorkbookSurface`: same free-surface contract (`value` / `onChange` / `reloadNonce` / `actions`). A Pages host mounts a `kind:"document"` page by rendering `<DocumentSurface value={page.doc} onChange={persist} />` and persisting the returned `DocumentSnapshot` under `documentStoreKey(page.key)`. The surface is exported eagerly (it is light; only docx/mammoth are heavy and they are lazy), so no Suspense boundary is required.
+
+## Composability — one surface, simple doc → full Notion
+
+The document surface is **one composable primitive dialable across a spectrum**: from a simple Word-like document (write, suggest, accept/reject, import/export — no navigation) all the way to a full Notion workspace (nested pages, tree, backlinks, links, search) — and every coherent point between. Every structural element is an independent toggle; named **presets** mark points on the range. Pass `config` (a `WorkspaceConfig`); explicit flags override the preset, anything left `undefined` inherits it. The surface **degrades coherently** — turn the tree off and its collapse control goes with it, drop breadcrumbs and the ⌘K entry moves to the tree head; the minimal end reads as a focused document editor, not a stripped-down workspace.
+
+```tsx
+import { PageWorkspace, type WorkspaceConfig } from "@nexus/ui";
+
+<PageWorkspace value={store} onChange={persist} config={{ preset: "doc" }} />        // a simple doc with review
+<PageWorkspace value={store} onChange={persist} config={{ preset: "workspace" }} />  // the full Notion
+```
+
+### The preset spectrum (`config.preset`)
+
+| Preset | Tree | Breadcrumbs | Backlinks | ⌘K | Suggestions | Use it for |
+|---|---|---|---|---|---|---|
+| `doc` | off | — | — | — | ✓ | a single focused document (a Word-like doc with review) |
+| `review` | off | — | — | — | ✓ | a single document tuned for review — fixed width, no cover |
+| `wiki` (default) | sidebar | ✓ | ✓ | ✓ | ✓ | a nested knowledge base |
+| `workspace` | sidebar | ✓ | ✓ | ✓ | ✓ | the full Notion — everything on |
+| `library` | **table** | ✓ | ✓ | ✓ | ✓ | browse pages as a record table, click a row to open |
+| `single-doc` | off | — | — | — | ✓ | alias of `doc` (back-compat) |
+
+**`suggestions` (track-changes) is ORTHOGONAL** — ON at every preset, so "simple doc + suggestions" and "full notion + suggestions" are each one flag; a company that wants documents without review sets `suggestions: false`.
+
+### Element toggles (each overrides the preset)
+
+`tree` (`"sidebar" | "off" | "table"`) · `breadcrumbs` · `backlinks` · `cmdK` · `suggestions` · `outline` · `cover` · `icons` · `export` · `wordCount` · `pageWidth` · `findReplace` — all optional booleans (except `tree`).
+
+### Worked examples — each end of the range
+
+```tsx
+// A company that just wants documents with review (a Word replacement):
+<PageWorkspace value={store} onChange={persist}
+  config={{ preset: "doc" }} />              // single doc, no nav, suggesting available, import/export on
+
+// The same, but review is the whole point — no distractions:
+<PageWorkspace value={store} onChange={persist}
+  config={{ preset: "review" }} />          // fixed reading width, no cover, suggesting available
+
+// A full knowledge base with review, but the app owns the ⌘K palette:
+<PageWorkspace value={store} onChange={persist}
+  config={{ preset: "workspace", cmdK: false }}
+  onPageIndex={(pages) => appSearch.index(pages)}    // feed the app's unified search
+  onOpenPageRef={(open) => (openHandbookPage = open)} />
+
+// Documents only, review turned OFF for a company that doesn't want it:
+<PageWorkspace value={store} onChange={persist}
+  config={{ preset: "doc", suggestions: false }} />
+```
+
+- **`tree: "table"`** renders the navigation as a record-table list (icon + title indented by depth, sub-page count, last-edited) — the same record-object idiom as the app's `DataTable`, a pure config swap with the nested tree.
+- **Unified search seam** — `onPageIndex(entries: {id,title,path,icon}[])` fires whenever the page set changes; hand it to the app's "search everything" so handbook pages surface alongside records, and set `config.cmdK:false` so there is a single ⌘K palette. `onOpenPageRef(open)` gives the host a function to jump to a hit.
+- The host's `breadcrumbs={false}` prop still wins over the config (used when the host renders its own trail).
+- Per-page chrome flags fold into each page's `DocumentSurface` `DocumentConfig`; `documentConfig` still carries editor/chrome options untouched. Precedence: WorkspaceConfig flag > `documentConfig` flag > preset default.
+
+## Suggesting mode — Word × Notion tracked changes
+
+`DocumentSurface` ships a full **Editing ↔ Suggesting** review flow, composing the app's existing suggestions engine (`useSuggestions` + the tracked-change widget + `SuggestionPanel`). Toggle it off with `config.suggestions === false`.
+
+```tsx
+<DocumentSurface value={doc} onChange={persist} author={{ name: "Ada Lovelace", color: "#7c3aed" }} />
+```
+
+- **Mode toggle** in the toolbar. In **Suggesting** mode a block edit is captured as a tracked change (`original → replacement`, keyed to the block) instead of committing — the change **materialises on blur** as an inline `del`/`ins` widget, so typing stays caret-safe. Insertions have an empty original, deletions an empty replacement; each is **anchored to its block + offset** (not a substring search), so empty-original changes never leak into other blocks.
+- **Author attribution** — the `author` prop names the reviewer; it shows on the widget (hover title) and each panel card.
+- **Review panel** — pending/resolved count, **jump-to** (click a card → scroll to the change), accept/reject per change, **accept-all / reject-all**, undo, and **comments-on-change** (a note per pending change).
+- **Persistence** — changes live on `DocumentSnapshot.suggestions` (and `PageNode.suggestions` in a workspace), so a review survives a reload; the accepted text lives in `blocks`, the review state alongside.
+- **Export honesty** — with pending changes, every export (md/html/pdf/docx) renders them as visible marks `[-old-][+new+]` and the menu notes `N tracked changes marked`, so nothing is silently shipped.
+
+The **record `richText` field** path (server-proposed substring substitutions, no `blockId`) is unchanged — `changesFor`/`foldChange` fall back to the original first-occurrence substring match when a change carries no `blockId`.
+
+> v1 tracks TEXT edits within a block, one active change per block per pass; structural edits (adding/removing/retyping a block) commit directly. Resolve a block's change before re-editing that block.
