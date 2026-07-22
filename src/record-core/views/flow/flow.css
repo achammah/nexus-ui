@@ -40,7 +40,27 @@
 }
 
 /* ---------- xyflow chrome → native (restyled classes) ---------- */
-.nxFlowWrap .react-flow__panel { margin: var(--nx-gap-3); }
+/* ‼ Collision guard, load-bearing: xyflow tags its overlay elements with BARE
+   utility classes (top/bottom/left/right/line/handle on resize controls +
+   panels; selected/draggable/nopan on nodes). A host app's OWN generic rules
+   for those names (a `.top` header bar, a `.selected` state) bleed straight
+   into the canvas — measured: a host `.top{padding;background;border-bottom}`
+   ballooned the two 8px top corner resize handles into ~50×22 outlined ghost
+   boxes flanking the node label, striped the top resize line, and painted a
+   phantom backdrop behind the top panels. Every box-affecting prop on these
+   elements is therefore pinned explicitly. */
+.nxFlowWrap .react-flow__panel {
+  margin: var(--nx-gap-3);
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+.nxFlowWrap .react-flow__node {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+}
 
 /* zoom cluster (FlowControls — ours, not xyflow's): one toolbar card holding
    zoom out · live % readout · zoom in · fit · layout lock, in the same card +
@@ -275,6 +295,13 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--nx-t-fast) var(--nx-ease);
+  /* collision guard (see banner above): host `.top`/`.left`/… rules must not
+     re-box these bare-classed elements */
+  display: block !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
 }
 /* reveal on hover only on pointer devices — on touch (data-touch=1) a tap goes
    sticky-:hover and would leave the handles stranded on the tapped node */
@@ -282,13 +309,22 @@
   opacity: 1;
   pointer-events: all;
 }
-.nxFlowResizeLine { border-color: var(--nx-accent) !important; }
-.nxFlowResizeHandle {
+.nxFlowWrap .react-flow__resize-control.line {
+  background: transparent !important;
+  border-style: solid;
+  border-color: var(--nx-accent) !important;
+}
+/* each line draws ONLY its own edge, whatever border a host rule adds */
+.nxFlowWrap .react-flow__resize-control.line.top { border-width: 1px 0 0 0 !important; }
+.nxFlowWrap .react-flow__resize-control.line.bottom { border-width: 0 0 1px 0 !important; }
+.nxFlowWrap .react-flow__resize-control.line.left { border-width: 0 0 0 1px !important; }
+.nxFlowWrap .react-flow__resize-control.line.right { border-width: 0 1px 0 0 !important; }
+.nxFlowWrap .react-flow__resize-control.handle {
+  width: 8px !important;
+  height: 8px !important;
   background: var(--nx-bg-raised) !important;
   border: 1.5px solid var(--nx-accent) !important;
   border-radius: 2px !important;
-  width: 8px !important;
-  height: 8px !important;
 }
 
 /* connect handles: display-only anchors by default; when drag-to-relate is on
@@ -297,6 +333,8 @@
 .nxFlowWrap .react-flow__handle {
   opacity: 0;
   pointer-events: none;
+  padding: 0 !important; /* collision guard: bare source/target/nodrag classes */
+  margin: 0 !important;
   width: 10px;
   height: 10px;
   border-radius: 999px;
