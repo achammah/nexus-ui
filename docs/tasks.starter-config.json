@@ -1,0 +1,305 @@
+{
+  "key": "tasks",
+  "label": "Tasks",
+  "labelOne": "Task",
+  "icon": "SquareCheck",
+  "fields": [
+    {
+      "key": "title",
+      "label": "Title",
+      "type": "text",
+      "primary": true,
+      "width": 260
+    },
+    {
+      "key": "status",
+      "label": "Status",
+      "type": "select",
+      "options": [
+        {
+          "value": "Backlog",
+          "color": "gray"
+        },
+        {
+          "value": "Todo",
+          "color": "blue"
+        },
+        {
+          "value": "In progress",
+          "color": "yellow"
+        },
+        {
+          "value": "In review",
+          "color": "purple"
+        },
+        {
+          "value": "Done",
+          "color": "green"
+        }
+      ],
+      "width": 120
+    },
+    {
+      "key": "assignee",
+      "label": "Assignee",
+      "type": "user",
+      "width": 130
+    },
+    {
+      "key": "priority",
+      "label": "Priority",
+      "type": "select",
+      "options": [
+        {
+          "value": "Urgent",
+          "color": "red"
+        },
+        {
+          "value": "High",
+          "color": "orange"
+        },
+        {
+          "value": "Medium",
+          "color": "blue"
+        },
+        {
+          "value": "Low",
+          "color": "gray"
+        }
+      ],
+      "width": 100
+    },
+    {
+      "key": "labels",
+      "label": "Labels",
+      "type": "multiselect",
+      "options": [
+        {
+          "value": "marketing",
+          "color": "pink"
+        },
+        {
+          "value": "design",
+          "color": "purple"
+        },
+        {
+          "value": "web",
+          "color": "blue"
+        },
+        {
+          "value": "backend",
+          "color": "teal"
+        },
+        {
+          "value": "product",
+          "color": "orange"
+        },
+        {
+          "value": "billing",
+          "color": "yellow"
+        },
+        {
+          "value": "qa",
+          "color": "green"
+        },
+        {
+          "value": "data",
+          "color": "blue"
+        },
+        {
+          "value": "launch",
+          "color": "red"
+        },
+        {
+          "value": "bug",
+          "color": "red"
+        },
+        {
+          "value": "support",
+          "color": "gray"
+        },
+        {
+          "value": "content",
+          "color": "pink"
+        },
+        {
+          "value": "legal",
+          "color": "gray"
+        }
+      ],
+      "width": 150
+    },
+    {
+      "key": "startDate",
+      "label": "Start",
+      "type": "date",
+      "width": 110
+    },
+    {
+      "key": "dueDate",
+      "label": "Due",
+      "type": "date",
+      "width": 110
+    },
+    {
+      "key": "estimate",
+      "label": "Estimate (h)",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "timeSpent",
+      "label": "Time spent (h)",
+      "type": "number",
+      "width": 100
+    },
+    {
+      "key": "progress",
+      "label": "Progress %",
+      "type": "number",
+      "width": 90
+    },
+    {
+      "key": "repeat",
+      "label": "Repeat",
+      "type": "select",
+      "options": [
+        "None",
+        "Daily",
+        "Weekly",
+        "Biweekly",
+        "Monthly"
+      ],
+      "width": 100
+    },
+    {
+      "key": "parent",
+      "label": "Parent task",
+      "type": "relation",
+      "relation": "tasks",
+      "inverseLabel": "Subtasks"
+    },
+    {
+      "key": "blockedBy",
+      "label": "Blocked by",
+      "type": "relation",
+      "relation": "tasks",
+      "multiple": true,
+      "inverseLabel": "Blocks"
+    },
+    {
+      "key": "description",
+      "label": "Description",
+      "type": "richText"
+    },
+    {
+      "key": "timeEntries",
+      "label": "Time log",
+      "type": "json"
+    },
+    {
+      "key": "plannedFor",
+      "label": "Planned for",
+      "type": "date",
+      "width": 110
+    },
+    {
+      "key": "focusOrder",
+      "label": "Focus order",
+      "type": "number"
+    }
+  ],
+  "stageField": "status",
+  "columns": [
+    "status",
+    "assignee",
+    "priority",
+    "dueDate",
+    "labels"
+  ],
+  "views": [
+    {
+      "type": "focus",
+      "titleField": "title",
+      "statusField": "status",
+      "assigneeField": "assignee",
+      "dueDateField": "dueDate",
+      "estimateField": "estimate",
+      "timeEntriesField": "timeEntries",
+      "plannedForField": "plannedFor",
+      "focusOrderField": "focusOrder",
+      "doneStatuses": "Done",
+      "newTaskStatus": "Todo"
+    },
+    {
+      "type": "table"
+    },
+    {
+      "type": "kanban",
+      "groupField": "status",
+      "cardFields": [
+        "assignee",
+        "priority",
+        "dueDate"
+      ]
+    },
+    {
+      "type": "timeline",
+      "startDateField": "startDate",
+      "dueDateField": "dueDate",
+      "titleField": "title",
+      "statusField": "status",
+      "assigneeField": "assignee",
+      "progressField": "progress",
+      "parentField": "parent",
+      "dependenciesField": "blockedBy",
+      "doneStatuses": "Done",
+      "defaultZoom": "week",
+      "criticalPath": true
+    },
+    {
+      "type": "calendar",
+      "startDateField": "startDate",
+      "endDateField": "dueDate",
+      "titleField": "title",
+      "colorField": "status"
+    }
+  ],
+  "defaultView": "focus",
+  "sampleRows": [
+    {"id":"tsk-01","title":"Launch website refresh","status":"In progress","assignee":"Maya","priority":"High","labels":["marketing"],"startDate":"2026-07-12","dueDate":"2026-08-07","progress":45,"repeat":"None","parent":null},
+    {"id":"tsk-02","title":"Messaging & positioning doc","status":"Done","assignee":"Maya","priority":"Medium","labels":["marketing"],"startDate":"2026-07-12","dueDate":"2026-07-19","progress":100,"repeat":"None","parent":"tsk-01","timeEntries":[{"id":"te--9-9-60","start":"2026-07-13T07:00:00.000Z","end":"2026-07-13T13:00:00.000Z"},{"id":"te--8-10-50","start":"2026-07-14T08:00:00.000Z","end":"2026-07-14T13:00:00.000Z"}],"timeSpent":11},
+    {"id":"tsk-03","title":"Homepage wireframes","status":"In review","assignee":"Leo","priority":"Medium","labels":["design"],"startDate":"2026-07-18","dueDate":"2026-07-24","progress":80,"repeat":"None","parent":"tsk-01","blockedBy":["tsk-02"],"timeEntries":[{"id":"te--4-9-40","start":"2026-07-18T07:00:00.000Z","end":"2026-07-18T11:00:00.000Z"},{"id":"te--3-9-35","start":"2026-07-19T07:00:00.000Z","end":"2026-07-19T10:30:00.000Z"}],"timeSpent":7.5},
+    {"id":"tsk-04","title":"Homepage copy","status":"In progress","assignee":"Maya","priority":"Medium","labels":["marketing"],"startDate":"2026-07-20","dueDate":"2026-07-26","progress":50,"repeat":"None","parent":"tsk-01","blockedBy":["tsk-02"],"timeEntries":[{"id":"te--1-16-13","start":"2026-07-21T14:00:00.000Z","end":"2026-07-21T15:15:00.000Z"}],"timeSpent":1.25,"plannedFor":"2026-07-22","focusOrder":3},
+    {"id":"tsk-05","title":"Build homepage","status":"Todo","assignee":"Ines","priority":"High","labels":["web"],"startDate":"2026-07-25","dueDate":"2026-08-01","estimate":24,"progress":0,"repeat":"None","parent":"tsk-01","blockedBy":["tsk-03","tsk-04"]},
+    {"id":"tsk-06","title":"Cross-browser QA pass","status":"Todo","assignee":"Tom","priority":"Medium","labels":["web","qa"],"startDate":"2026-08-02","dueDate":"2026-08-04","estimate":8,"progress":0,"repeat":"None","parent":"tsk-01","blockedBy":["tsk-05"]},
+    {"id":"tsk-07","title":"Publish site","status":"Todo","assignee":"Ines","priority":"Urgent","labels":["web"],"startDate":"2026-08-06","dueDate":"2026-08-07","progress":0,"repeat":"None","parent":"tsk-01","blockedBy":["tsk-06"]},
+    {"id":"tsk-08","title":"Private beta program","status":"In progress","assignee":"Ravi","priority":"Urgent","labels":["product"],"startDate":"2026-07-08","dueDate":"2026-08-13","progress":35,"repeat":"None","parent":null},
+    {"id":"tsk-09","title":"Beta scope & success metrics","status":"Done","assignee":"Ravi","priority":"Medium","startDate":"2026-07-08","dueDate":"2026-07-14","progress":100,"repeat":"None","parent":"tsk-08"},
+    {"id":"tsk-10","title":"Feature flags & gating","status":"Done","assignee":"Ines","priority":"Medium","labels":["backend"],"startDate":"2026-07-15","dueDate":"2026-07-21","progress":100,"repeat":"None","parent":"tsk-08","blockedBy":["tsk-09"]},
+    {"id":"tsk-11","title":"Beta onboarding flow","status":"In progress","assignee":"Leo","priority":"High","labels":["design","web"],"startDate":"2026-07-19","dueDate":"2026-07-27","estimate":20,"progress":40,"repeat":"None","parent":"tsk-08","blockedBy":["tsk-10"],"timeEntries":[{"id":"te--3-10-30","start":"2026-07-19T08:00:00.000Z","end":"2026-07-19T11:00:00.000Z"},{"id":"te--1-14-25","start":"2026-07-21T12:00:00.000Z","end":"2026-07-21T14:30:00.000Z"},{"id":"te-0-11-8","start":"2026-07-22T09:00:00.000Z","end":"2026-07-22T09:45:00.000Z"}],"timeSpent":6.25,"plannedFor":"2026-07-22","focusOrder":2},
+    {"id":"tsk-12","title":"Invite first 50 accounts","status":"Todo","assignee":"Ravi","priority":"High","startDate":"2026-07-28","dueDate":"2026-07-30","progress":0,"repeat":"None","parent":"tsk-08","blockedBy":["tsk-11"]},
+    {"id":"tsk-13","title":"Usage telemetry dashboard","status":"In progress","assignee":"Tom","priority":"Medium","labels":["backend","data"],"startDate":"2026-07-24","dueDate":"2026-07-31","estimate":16,"progress":30,"repeat":"None","parent":"tsk-08","timeEntries":[{"id":"te--1-11-20","start":"2026-07-21T09:00:00.000Z","end":"2026-07-21T11:00:00.000Z"},{"id":"te-0-13-10","start":"2026-07-22T11:00:00.000Z","end":"2026-07-22T12:00:00.000Z"}],"timeSpent":3,"plannedFor":"2026-07-22","focusOrder":4},
+    {"id":"tsk-14","title":"Weekly beta feedback digest","status":"Todo","assignee":"Ravi","priority":"Medium","labels":["product"],"startDate":"2026-07-31","dueDate":"2026-08-13","progress":0,"repeat":"Weekly","parent":"tsk-08","blockedBy":["tsk-12","tsk-13"]},
+    {"id":"tsk-15","title":"Pricing & billing","status":"In progress","assignee":"Sara","priority":"High","labels":["product","billing"],"startDate":"2026-07-16","dueDate":"2026-08-09","progress":25,"repeat":"None","parent":null},
+    {"id":"tsk-16","title":"Competitor pricing benchmark","status":"Done","assignee":"Sara","priority":"Medium","startDate":"2026-07-16","dueDate":"2026-07-20","progress":100,"repeat":"None","parent":"tsk-15"},
+    {"id":"tsk-17","title":"Tier structure proposal","status":"In review","assignee":"Sara","priority":"Medium","startDate":"2026-07-21","dueDate":"2026-07-25","progress":90,"repeat":"None","parent":"tsk-15","blockedBy":["tsk-16"]},
+    {"id":"tsk-18","title":"Stripe products & webhooks","status":"Todo","assignee":"Ines","priority":"High","labels":["backend","billing"],"startDate":"2026-07-26","dueDate":"2026-08-02","estimate":28,"progress":0,"repeat":"None","parent":"tsk-15","blockedBy":["tsk-17"]},
+    {"id":"tsk-19","title":"Upgrade paywall screens","status":"Todo","assignee":"Leo","priority":"Medium","labels":["design"],"startDate":"2026-07-28","dueDate":"2026-08-03","estimate":12,"progress":0,"repeat":"None","parent":"tsk-15","blockedBy":["tsk-17"]},
+    {"id":"tsk-20","title":"Billing E2E test matrix","status":"Todo","assignee":"Tom","priority":"Medium","labels":["qa","billing"],"startDate":"2026-08-03","dueDate":"2026-08-06","estimate":10,"progress":0,"repeat":"None","parent":"tsk-15","blockedBy":["tsk-18","tsk-19"]},
+    {"id":"tsk-21","title":"Dunning emails","status":"Todo","assignee":"Maya","priority":"Medium","labels":["marketing","billing"],"startDate":"2026-08-04","dueDate":"2026-08-09","progress":0,"repeat":"None","parent":"tsk-15","blockedBy":["tsk-18"]},
+    {"id":"tsk-22","title":"Launch day","status":"Todo","assignee":"Ravi","priority":"Urgent","labels":["launch"],"startDate":"2026-08-07","dueDate":"2026-08-15","progress":0,"repeat":"None","parent":null},
+    {"id":"tsk-23","title":"Product Hunt assets","status":"Todo","assignee":"Leo","priority":"Medium","labels":["marketing","design"],"startDate":"2026-07-30","dueDate":"2026-08-05","estimate":10,"progress":0,"repeat":"None","parent":"tsk-22"},
+    {"id":"tsk-24","title":"Press & partner brief","status":"Todo","assignee":"Maya","priority":"Medium","labels":["marketing"],"startDate":"2026-08-01","dueDate":"2026-08-08","progress":0,"repeat":"None","parent":"tsk-22"},
+    {"id":"tsk-25","title":"Announcement email sequence","status":"Todo","assignee":"Maya","priority":"Medium","labels":["marketing"],"startDate":"2026-08-03","dueDate":"2026-08-10","progress":0,"repeat":"None","parent":"tsk-22","blockedBy":["tsk-24"]},
+    {"id":"tsk-26","title":"Launch-day runbook","status":"Todo","assignee":"Ravi","priority":"High","startDate":"2026-08-09","dueDate":"2026-08-12","progress":0,"repeat":"None","parent":"tsk-22","blockedBy":["tsk-23","tsk-25"]},
+    {"id":"tsk-27","title":"Go live + monitor","status":"Todo","assignee":"Tom","priority":"Urgent","labels":["launch"],"startDate":"2026-08-14","dueDate":"2026-08-15","progress":0,"repeat":"None","parent":"tsk-22"},
+    {"id":"tsk-28","title":"Fix OAuth token refresh bug","status":"In progress","assignee":"Ines","priority":"Urgent","labels":["backend","bug"],"startDate":"2026-07-17","dueDate":"2026-07-21","estimate":6,"progress":60,"repeat":"None","parent":null,"timeEntries":[{"id":"te--2-14-15","start":"2026-07-20T12:00:00.000Z","end":"2026-07-20T13:30:00.000Z"},{"id":"te--1-9-20","start":"2026-07-21T07:00:00.000Z","end":"2026-07-21T09:00:00.000Z"},{"id":"te-0-9-13","start":"2026-07-22T07:00:00.000Z","end":"2026-07-22T08:15:00.000Z"}],"timeSpent":4.75,"plannedFor":"2026-07-22","focusOrder":0},
+    {"id":"tsk-29","title":"Update security policy page","status":"Todo","assignee":"Sara","priority":"Medium","labels":["legal"],"startDate":"2026-07-14","dueDate":"2026-07-20","progress":0,"repeat":"None","parent":null},
+    {"id":"tsk-30","title":"Triage support inbox","status":"Todo","assignee":"Tom","priority":"Medium","labels":["support"],"startDate":"2026-07-22","dueDate":"2026-07-23","estimate":1,"progress":0,"repeat":"Daily","parent":null,"timeEntries":[{"id":"te-0-8-5","start":"2026-07-22T06:00:00.000Z","end":"2026-07-22T06:30:00.000Z"}],"timeSpent":0.5,"plannedFor":"2026-07-22","focusOrder":1},
+    {"id":"tsk-31","title":"Sprint retro notes","status":"Todo","assignee":"Ravi","priority":"Medium","startDate":"2026-07-24","dueDate":"2026-07-24","progress":0,"repeat":"Biweekly","parent":null},
+    {"id":"tsk-32","title":"Blog: beta learnings","status":"Todo","assignee":"Maya","priority":"Medium","labels":["marketing","content"],"startDate":"2026-07-27","dueDate":"2026-08-03","progress":0,"repeat":"None","parent":null},
+    {"id":"tsk-33","title":"Accessibility audit","status":"Todo","assignee":"Leo","priority":"Medium","labels":["design","qa"],"startDate":"2026-07-29","dueDate":"2026-08-05","estimate":12,"progress":0,"repeat":"None","parent":null},
+    {"id":"tsk-34","title":"Load test checkout path","status":"Todo","assignee":"Tom","priority":"Medium","labels":["backend","qa"],"startDate":"2026-08-05","dueDate":"2026-08-08","progress":0,"repeat":"None","parent":null,"blockedBy":["tsk-18"]}
+  ]
+}
