@@ -18,6 +18,7 @@ import { FitSlide, PresentMode } from "./PresentMode";
 import { AnalyticsPanel, RoomsPanel, SharePanel } from "./SharePanels";
 import { PresentationViewer } from "./PresentationViewer";
 import { exportDeckToPdf, exportDeckToPptx } from "./export";
+import { importPptx } from "./import";
 import "./presentation.css";
 
 export interface PresentationSurfaceProps {
@@ -64,6 +65,7 @@ export function PresentationSurface({
     analytics: true,
     rooms: true,
     pptxExport: true,
+    pptxImport: true,
     pdfExport: true,
     present: true,
     ...config?.features,
@@ -157,7 +159,9 @@ export function PresentationSurface({
   const [notesOpen, setNotesOpen] = React.useState(true);
   const [presenting, setPresenting] = React.useState(false);
   const [previewSlug, setPreviewSlug] = React.useState<string | null>(null);
-  const [busyExport, setBusyExport] = React.useState<null | "pptx">(null);
+  const [busyExport, setBusyExport] = React.useState<null | "pptx" | "import">(null);
+  const [importReport, setImportReport] = React.useState<{ n: number; warnings: string[] } | null>(null);
+  const pptxRef = React.useRef<HTMLInputElement>(null);
   const [selEls, setSelEls] = React.useState<string[]>([]);
   /* what an image pick should do: replace the layout's image region, or insert an element */
   const imageIntent = React.useRef<"region" | "element">("region");
@@ -278,6 +282,31 @@ export function PresentationSurface({
       ul,ol { margin: .3em 0 .3em 1.2em; } li { margin: .18em 0; }`;
     exportDeckToPdf(deck, themeCss);
   };
+  /* PPTX import — appends the imported slides after the current one, so an
+     import never destroys what is already in the deck. */
+  const onPptxFile = async (f: File | undefined) => {
+    if (!f) return;
+    setBusyExport("import");
+    try {
+      const res = await importPptx(f);
+      if (!res.slides.length) {
+        setImportReport({ n: 0, warnings: res.warnings.length ? res.warnings : ["Nothing could be read from that file."] });
+        return;
+      }
+      const slides = deck.slides.slice();
+      slides.splice(selIdx + 1, 0, ...res.slides);
+      commit({ ...deck, slides });
+      setSel(selIdx + 1);
+      setSelEls([]);
+      setImportReport({ n: res.slides.length, warnings: res.warnings });
+    } catch (err) {
+      setImportReport({ n: 0, warnings: [`Import failed: ${(err as Error).message}`] });
+    } finally {
+      setBusyExport(null);
+      if (pptxRef.current) pptxRef.current.value = "";
+    }
+  };
+
   const doPptx = async () => {
     setBusyExport("pptx");
     try {
@@ -398,13 +427,25 @@ export function PresentationSurface({
             </option>
           ))}
         </select>
+        {feat.pptxImport && (
+          <button
+            type="button"
+            className="nxPresBtn"
+            onClick={() => pptxRef.current?.click()}
+            disabled={busyExport === "import"}
+            title="Import a PowerPoint or Google Slides .pptx"
+            data-testid="import-pptx"
+          >
+            {busyExport === "import" ? "Importing…" : "Import"}
+          </button>
+        )}
         {feat.pdfExport && (
           <button type="button" className="nxPresBtn" onClick={doPdf} title="Print / save as PDF">
             PDF
           </button>
         )}
         {feat.pptxExport && (
-          <button type="button" className="nxPresBtn" onClick={doPptx} disabled={busyExport === "pptx"}>
+          <button type="button" className="nxPresBtn" onClick={doPptx} disabled={busyExport === "pptx"} data-testid="pptx-export">
             {busyExport === "pptx" ? "Exporting…" : "PPTX"}
           </button>
         )}
@@ -567,6 +608,37 @@ export function PresentationSurface({
       {tab === "rooms" && <RoomsPanel deck={deck} onChange={(d) => commit(d, "rooms-panel")} />}
 
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => onImageFile(e.target.files?.[0])} />
+      <input
+        ref={pptxRef}
+        type="file"
+        accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        hidden
+        onChange={(e) => onPptxFile(e.target.files?.[0])}
+        data-testid="pptx-input"
+      />
+
+      {importReport && (
+        <div className="nxPresImportReport" role="status" data-testid="import-report">
+          <div className="nxPresImportHead">
+            <strong>
+              {importReport.n ? `Imported ${importReport.n} slide${importReport.n === 1 ? "" : "s"}` : "Nothing imported"}
+            </strong>
+            <button type="button" className="nxPresBtn" onClick={() => setImportReport(null)} data-testid="import-report-close">
+              Close
+            </button>
+          </div>
+          {importReport.warnings.length > 0 && (
+            <>
+              <span className="nxPresImportSub">What did not come across:</span>
+              <ul className="nxPresImportList">
+                {importReport.warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       {presenting && <PresentMode deck={deck} startIndex={selIdx} onExit={() => setPresenting(false)} />}
     </div>

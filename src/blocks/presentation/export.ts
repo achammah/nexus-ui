@@ -98,6 +98,52 @@ export async function exportDeckToPptx(deck: DeckSnapshot): Promise<void> {
       default:
         add(b.body, { x: 0.7, y: 0.7, w: 12, h: 6, fontSize: 18, valign: "top" });
     }
+    /* free-placement elements — exported at their real geometry so a deck can
+       round-trip out to PowerPoint and back in without losing its layout */
+    for (const el of s.elements ?? []) {
+      const geo = { x: (el.x / 1280) * 13.33, y: (el.y / 720) * 7.5, w: (el.w / 1280) * 13.33, h: (el.h / 720) * 7.5 };
+      const rotate = el.rot ? { rotate: el.rot } : {};
+      const st = el.style ?? {};
+      if (el.kind === "image" && el.src) {
+        try {
+          slide.addImage({ data: await toDataUrl(el.src), ...geo, ...rotate });
+        } catch {
+          /* an unreachable image must not abort the whole export */
+        }
+      } else if (el.kind === "shape") {
+        slide.addShape(PPTX_SHAPE[el.shape ?? "rect"] ?? "rect", {
+          ...geo,
+          ...rotate,
+          fill: st.fill && st.fill !== "none" ? { color: hexOf(st.fill), transparency: Math.round((1 - (st.fillOpacity ?? 1)) * 100) } : { type: "none" },
+          line:
+            st.stroke && st.stroke !== "none"
+              ? { color: hexOf(st.stroke), width: st.strokeWidth ?? 1 }
+              : { type: "none" },
+          rectRadius: el.shape === "roundRect" ? 0.1 : undefined,
+        });
+        if (el.html && textOf(el.html)) {
+          slide.addText(htmlToRuns(el.html), {
+            ...geo,
+            ...rotate,
+            fontFace: "Helvetica",
+            fontSize: Math.round((st.fontSize ?? 24) * 0.75),
+            color: hexOf(st.color ?? "#ffffff"),
+            align: st.align ?? "center",
+            valign: st.valign ?? "middle",
+          });
+        }
+      } else if (el.kind === "text" && el.html) {
+        slide.addText(htmlToRuns(el.html), {
+          ...geo,
+          ...rotate,
+          fontFace: "Helvetica",
+          fontSize: Math.round((st.fontSize ?? 28) * 0.75),
+          color: hexOf(st.color ?? "#111111"),
+          align: st.align ?? "left",
+          valign: st.valign ?? "top",
+        });
+      }
+    }
     if (s.notes) slide.addNotes(s.notes);
   }
   await pptx.writeFile({ fileName: `${deck.title.replace(/[^\w\- ]+/g, "").trim() || "deck"}.pptx` });
@@ -112,7 +158,44 @@ interface PptxLike {
 interface PptxSlideLike {
   addText: (runs: TextRun[], opts: Record<string, unknown>) => void;
   addImage: (o: Record<string, unknown>) => void;
+  addShape: (shape: string, opts: Record<string, unknown>) => void;
   addNotes: (s: string) => void;
+}
+
+/* our shape kinds -> OOXML preset geometry names pptxgenjs understands */
+const PPTX_SHAPE: Record<string, string> = {
+  rect: "rect",
+  roundRect: "roundRect",
+  ellipse: "ellipse",
+  triangle: "triangle",
+  arrow: "rightArrow",
+  line: "line",
+  star: "star5",
+  callout: "wedgeRectCallout",
+};
+
+/* PPTX wants bare RRGGBB. A token (var(--pres-accent)) has no literal value at
+   export time, so it resolves against the live document; if that fails we fall
+   back to a neutral rather than emitting an invalid colour. */
+function hexOf(color: string): string {
+  let c = color.trim();
+  if (c.startsWith("var(")) {
+    const name = c.slice(4, -1).split(",")[0].trim();
+    const resolved = typeof getComputedStyle !== "undefined"
+      ? getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+      : "";
+    c = resolved || "#666666";
+  }
+  if (c.startsWith("rgb")) {
+    const n = c.match(/\d+/g);
+    if (n && n.length >= 3) return n.slice(0, 3).map((v) => Number(v).toString(16).padStart(2, "0")).join("");
+  }
+  if (c.startsWith("#")) {
+    const h = c.slice(1);
+    if (h.length === 3) return h.split("").map((x) => x + x).join("");
+    return h.slice(0, 6);
+  }
+  return "666666";
 }
 interface TextRun {
   text: string;

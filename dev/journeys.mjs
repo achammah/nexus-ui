@@ -13,6 +13,8 @@ const URL0 = "http://localhost:5342/";
 const KEY = "presentation:dev-demo";
 
 const results = [];
+const stripTagsJS = (h) => h.replace(/<[^>]*>/g, "");
+let SEED_N = 0; // slide count of the seeded deck, read once in J1
 const ok = (name, pass, detail = "") => {
   results.push({ name, pass, detail });
   console.log(`${pass ? "PASS" : "FAIL"}  ${name}${detail ? "  — " + detail : ""}`);
@@ -23,6 +25,7 @@ const ctx = await browser.newContext({
   viewport: { width: 1440, height: 900 },
   reducedMotion: "no-preference",
   colorScheme: "light",
+  acceptDownloads: true,
 });
 const page = await ctx.newPage();
 const deck = () => page.evaluate((k) => JSON.parse(localStorage.getItem(k) || "null"), KEY);
@@ -35,7 +38,8 @@ await page.waitForSelector(".nxPresFilmItem");
 {
   const film = await page.locator(".nxPresFilmItem").count();
   const title = await page.locator(".nxPresCanvasWell .nxPresTitle").textContent();
-  ok("J1 seed renders", film === 10 && /Atlas Q2/.test(title || ""), `film=${film}`);
+  SEED_N = film;
+  ok("J1 seed renders", film >= 10 && /Atlas Q2/.test(title || ""), `film=${film}`);
   await shot("pres-editor-light.png");
 }
 
@@ -73,18 +77,18 @@ await page.waitForSelector(".nxPresFilmItem");
   await page.locator('[data-testid="add-quote"]').click();
   await page.waitForTimeout(200);
   let d = await deck();
-  ok("J3a add slide", d.slides.length === 11 && d.slides[3].layout === "quote");
+  ok("J3a add slide", d.slides.length === SEED_N + 1 && d.slides[3].layout === "quote");
   await page.locator(".nxPresFilmItem").nth(3).click(); // focus lands on the (focusable) film item
   await page.keyboard.press("ControlOrMeta+d");
   await page.waitForTimeout(200);
   d = await deck();
-  ok("J3b duplicate ⌘D", d.slides.length === 12 && d.slides[4].layout === "quote");
+  ok("J3b duplicate ⌘D", d.slides.length === SEED_N + 2 && d.slides[4].layout === "quote");
   const item5 = page.locator(".nxPresFilmItem").nth(4);
   await item5.hover();
   await item5.locator('button[title="Delete"]').click();
   await page.waitForTimeout(200);
   d = await deck();
-  ok("J3c delete btn", d.slides.length === 11);
+  ok("J3c delete btn", d.slides.length === SEED_N + 1);
   const item4 = page.locator(".nxPresFilmItem").nth(3);
   await item4.hover();
   await item4.locator('button[title="Move down"]').click();
@@ -163,7 +167,7 @@ await page.waitForSelector(".nxPresFilmItem");
   });
   await page.waitForTimeout(400);
   const count1 = await page.locator(".nxPresPresentCount").first().textContent();
-  ok("J6a present nav", count0?.trim() === "1 / 10" && count1?.trim() === "2 / 10", `${count0} -> ${count1}`);
+  ok("J6a present nav", count0?.trim() === `1 / ${SEED_N}` && count1?.trim() === `2 / ${SEED_N}`, `${count0} -> ${count1}`);
   ok("J6b transition animates (no reduced-motion hiding)", anims > 0, `animations=${anims}`);
   await page.keyboard.press("p");
   await page.waitForSelector(".nxPresPresenter");
@@ -271,7 +275,7 @@ await page.waitForSelector(".nxPresFilmItem");
   const rows = await page.locator(".nxPresAnaRow").count();
   const sess = await page.locator(".nxPresSessRow").count();
   const probe = await page.locator(".nxPresSessWho", { hasText: "probe@example.com" }).count();
-  ok("J11 analytics renders", rows === 10 && sess >= 3 && probe === 1, `rows=${rows} sess=${sess}`);
+  ok("J11 analytics renders", rows === SEED_N && sess >= 3 && probe === 1, `rows=${rows} sess=${sess}`);
   await shot("pres-analytics.png");
 }
 
@@ -408,6 +412,326 @@ await page.waitForSelector(".nxPresFilmItem");
   await page.locator('[data-testid="undo-btn"]').click();
   ok("J17g share-link create is undoable", (await deck()).sharing.links.length === withLink - 1, `${withLink} -> ${(await deck()).sharing.links.length}`);
   await shot("pres-undo-toolbar.png");
+}
+
+/* J18 — shapes + free placement (the PowerPoint layer) */
+{
+  await p18();
+}
+async function p18() {
+  await page.goto(URL0);
+  await page.evaluate((k) => localStorage.removeItem(k), KEY);
+  await page.goto(URL0);
+  await page.waitForSelector(".nxPresFilmItem");
+
+  const canvasEl = (n = 0) => page.locator(".nxPresCanvas .nxPresEl").nth(n);
+  const slideNow = async () => {
+    const d = await deck();
+    return d ? d.slides.find((x) => x.elements && x.elements.length) : null;
+  };
+
+  /* the seeded deck ships a real diagram slide (shapes exercised out of the box) */
+  const seededIdx = await page.evaluate(() => {
+    const items = [...document.querySelectorAll(".nxPresFilmItem")];
+    return items.findIndex((it) => it.querySelector(".nxPresEl"));
+  });
+  ok("J18a seeded deck ships a shape diagram", seededIdx >= 0, `slide ${seededIdx + 1}`);
+
+  /* insert every shape kind */
+  await page.locator(".nxPresFilmItem").first().click();
+  const kinds = ["rect", "roundRect", "ellipse", "triangle", "arrow", "line", "star", "callout"];
+  for (const k of kinds) {
+    await page.locator('[data-testid="insert-shape-menu"]').click();
+    await page.locator(`[data-testid="insert-shape-${k}"]`).click();
+  }
+  let sl = await slideNow();
+  ok("J18b all 8 shape kinds insert", sl && kinds.every((k) => sl.elements.some((e) => e.shape === k)), `n=${sl?.elements.length}`);
+
+  /* start clean for the geometry journeys */
+  await page.evaluate((k) => localStorage.removeItem(k), KEY);
+  await page.goto(URL0);
+  await page.waitForSelector(".nxPresFilmItem");
+  await page.locator(".nxPresFilmItem").first().click();
+  await page.locator('[data-testid="insert-shape-menu"]').click();
+  await page.locator('[data-testid="insert-shape-rect"]').click();
+  ok("J18c element bar appears on selection", await page.locator('[data-testid="element-bar"]').isVisible());
+
+  /* drag to move — asserts the PERSISTED coords, not just the DOM */
+  const before = (await slideNow()).elements[0];
+  let box = await canvasEl().boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 140, box.y + box.height / 2 + 70, { steps: 10 });
+  await page.mouse.up();
+  let after = (await slideNow()).elements[0];
+  ok("J18d drag moves + persists", after.x > before.x + 40 && after.y > before.y + 20, `${before.x},${before.y} -> ${after.x},${after.y}`);
+
+  /* resize via the SE handle */
+  const preResize = (await slideNow()).elements[0];
+  const seHandle = page.locator(".nxPresElH-se");
+  box = await seHandle.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 120, box.y + 80, { steps: 8 });
+  await page.mouse.up();
+  after = (await slideNow()).elements[0];
+  ok("J18e resize handle resizes", after.w > preResize.w + 40 && after.h > preResize.h + 20, `${preResize.w}x${preResize.h} -> ${after.w}x${after.h}`);
+
+  /* rotate */
+  box = await page.locator(".nxPresElRot").boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 160, box.y + 120, { steps: 8 });
+  await page.mouse.up();
+  after = (await slideNow()).elements[0];
+  ok("J18f rotate handle rotates", Math.abs(after.rot || 0) > 5, `rot=${after.rot}`);
+
+  /* style: fill colour + fill opacity */
+  await page.locator('[data-testid="fill-well"]').click();
+  await page.locator('[data-testid="swatch-e5484d"]').click();
+  after = (await slideNow()).elements[0];
+  ok("J18g fill colour applies", after.style.fill === "#e5484d", after.style.fill);
+  await page.locator('[data-testid="opacity-range"]').fill("40");
+  after = (await slideNow()).elements[0];
+  ok("J18h fill opacity applies (text stays opaque)", Math.round(after.style.fillOpacity * 100) === 40 && (after.style.opacity ?? 1) === 1);
+
+  /* multi-select + group + align + z-order */
+  await page.locator('[data-testid="insert-shape-menu"]').click();
+  await page.locator('[data-testid="insert-shape-ellipse"]').click();
+  await canvasEl(0).click({ modifiers: ["Shift"] });
+  let sel = await page.locator('[data-testid="element-bar"] .nxPresElBarCount').textContent();
+  ok("J18i shift-click multi-selects", /2 selected/.test(sel || ""), sel);
+
+  await page.locator('[data-testid="align-left"]').click();
+  sl = await slideNow();
+  ok("J18j align left shares an x", sl.elements[0].x === sl.elements[1].x, `${sl.elements[0].x} / ${sl.elements[1].x}`);
+
+  await page.locator('[data-testid="group-btn"]').click();
+  sl = await slideNow();
+  const gid = sl.elements[0].groupId;
+  ok("J18k group assigns one groupId", !!gid && sl.elements[1].groupId === gid);
+
+  /* selecting ONE member selects the whole group (PowerPoint behaviour) */
+  await page.keyboard.press("Escape");
+  await canvasEl(0).click();
+  sel = await page.locator('[data-testid="element-bar"] .nxPresElBarCount').textContent();
+  ok("J18l clicking a group member selects the group", /2 selected/.test(sel || ""), sel);
+
+  await page.locator('[data-testid="ungroup-btn"]').click();
+  sl = await slideNow();
+  ok("J18m ungroup clears groupId", !sl.elements[0].groupId);
+
+  /* z-order: send the first element to the back = index 0 */
+  await page.keyboard.press("Escape");
+  await canvasEl(1).click();
+  const idBefore = (await slideNow()).elements[1].id;
+  await page.locator('[data-testid="z-back"]').click();
+  sl = await slideNow();
+  ok("J18n send to back reorders", sl.elements[0].id === idBefore);
+
+  /* marquee selection over empty space */
+  await page.keyboard.press("Escape");
+  const canvasBox = await page.locator(".nxPresCanvas .nxPresSlide").boundingBox();
+  /* a marquee must START on empty slide space — over a text region the pointer
+     belongs to that region (caret), which is the correct editor behaviour. */
+  const start = await page.evaluate((b) => {
+    for (let dy = 4; dy < b.height - 4; dy += 8) {
+      const el = document.elementFromPoint(b.x + 4, b.y + b.height - dy);
+      if (el && el.classList.contains("nxPresSlide")) return { x: b.x + 4, y: b.y + b.height - dy };
+    }
+    return null;
+  }, canvasBox);
+  ok("J18o0 empty slide space exists for a marquee", !!start);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox.x + canvasBox.width - 4, canvasBox.y + 4, { steps: 12 });
+  await page.mouse.up();
+  sel = await page.locator('[data-testid="element-bar"] .nxPresElBarCount').textContent();
+  ok("J18o marquee selects everything it covers", /2 selected/.test(sel || ""), sel);
+
+  /* snapping: drop near the slide centre and land EXACTLY on it */
+  await page.keyboard.press("Escape");
+  /* drive the TOPMOST element — overlapping siblings would intercept the click,
+     exactly as they would for a user */
+  sl = await slideNow();
+  const topId = sl.elements[sl.elements.length - 1].id;
+  await page.locator(`.nxPresCanvas [data-el-id="${topId}"]`).click();
+  const el0 = sl.elements[sl.elements.length - 1];
+  const k = 1280 / canvasBox.width;
+  const targetX = 640 - el0.w / 2 + 3; // 3 design-px off centre — inside the 6px tolerance
+  const targetY = 360 - el0.h / 2 + 3;
+  box = await page.locator(`.nxPresCanvas [data-el-id="${topId}"]`).boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    box.x + box.width / 2 + (targetX - el0.x) / k,
+    box.y + box.height / 2 + (targetY - el0.y) / k,
+    { steps: 10 },
+  );
+  const guideVisible = await page.locator(".nxPresGuide").count();
+  await page.mouse.up();
+  sl = await slideNow();
+  const snapped = sl.elements.find((e) => e.id === topId);
+  ok(
+    "J18p snapping locks to the slide centre + draws guides",
+    Math.abs(snapped.x + snapped.w / 2 - 640) <= 1 && guideVisible > 0,
+    `centre=${snapped.x + snapped.w / 2}, guides=${guideVisible}`,
+  );
+
+  /* text box: insert, type, persist */
+  await page.locator('[data-testid="insert-text"]').click();
+  const tb = page.locator(".nxPresCanvas .nxPresEl-text").first();
+  await tb.dblclick();
+  await page.keyboard.type("Free-placed text");
+  await page.keyboard.press("Escape");
+  sl = await slideNow();
+  const txt = sl.elements.find((e) => e.kind === "text");
+  ok("J18q text box types + persists", /Free-placed text/.test(txt?.html || ""), txt?.html);
+
+  /* keyboard nudge + delete + undo — drive the text box (it is the topmost element) */
+  await page.keyboard.press("Escape");
+  await page.locator(".nxPresCanvas .nxPresEl-text").first().click();
+  const textId = (await slideNow()).elements.find((e) => e.kind === "text").id;
+  const xOf = async () => (await slideNow()).elements.find((e) => e.id === textId).x;
+  const preNudge = await xOf();
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  const postNudge = await xOf();
+  ok("J18r arrow keys nudge the element", postNudge === preNudge + 2, `${preNudge} -> ${postNudge}`);
+
+  const countBefore = (await slideNow()).elements.length;
+  await page.locator('[data-testid="el-delete"]').click();
+  const countAfter = (await slideNow()).elements.length;
+  await page.locator('[data-testid="undo-btn"]').click();
+  const countUndo = (await slideNow()).elements.length;
+  ok("J18s delete element + undo restores", countAfter === countBefore - 1 && countUndo === countBefore);
+
+  await shot("pres-shapes-editor.png");
+
+  /* elements render in present mode + the read-only viewer, not just the editor */
+  await page.locator(".nxPresFilmItem").nth(seededIdx).click();
+  await page.locator('[data-testid="present-btn"]').click();
+  await page.waitForSelector('[data-testid="present-mode"]');
+  const presEls = await page.locator('[data-testid="present-mode"] .nxPresEl').count();
+  ok("J18t elements render in present mode", presEls >= 6, `${presEls} elements`);
+  await shot("pres-shapes-present.png");
+  await page.keyboard.press("Escape");
+}
+
+/* J19 — PPTX import: a FOREIGN file, then a full export -> import round-trip */
+{
+  await p19();
+}
+async function p19() {
+  await page.goto(URL0);
+  await page.evaluate((k) => localStorage.removeItem(k), KEY);
+  await page.goto(URL0);
+  await page.waitForSelector(".nxPresFilmItem");
+  const base = await page.locator(".nxPresFilmItem").count();
+
+  /* --- a foreign .pptx (theme colours, groups, placeholders, notes) --- */
+  await page.locator('[data-testid="pptx-input"]').setInputFiles(join(root, "dev", "fixture-foreign.pptx"));
+  await page.waitForSelector('[data-testid="import-report"]');
+  let d = await deck();
+  ok("J19a foreign pptx imports", d.slides.length === base + 2, `${base} -> ${d.slides.length}`);
+
+  /* presentation.xml declares slide2 FIRST — order must follow that, not names */
+  const imported = d.slides.slice(1, 3);
+  const firstText = (sl) => (sl.elements.find((e) => /Foreign Deck Title/.test(e.html || "")) ? "title" : "other");
+  ok("J19b slide order follows presentation.xml, not file names", firstText(imported[0]) === "title");
+
+  const s1 = imported[0];
+  const s2 = imported[1];
+  ok("J19c imported slides use the region-less canvas layout", s1.layout === "canvas" && s2.layout === "canvas");
+
+  /* text: title + bullets + inline italic */
+  const titleEl = s1.elements.find((e) => /Foreign Deck Title/.test(e.html || ""));
+  ok("J19d title text + centre alignment survive", !!titleEl && titleEl.style.align === "center", titleEl?.style?.align);
+  ok("J19e title colour survives (#223344)", titleEl.style.color === "#223344", titleEl.style.color);
+  const bullets = s1.elements.find((e) => /First bullet/.test(e.html || ""));
+  ok("J19f bullets import as a list", /<ul>[\s\S]*<li>First bullet<\/li>[\s\S]*<\/ul>/.test(bullets.html), bullets.html.slice(0, 90));
+  ok("J19g inline italic survives", /<i>Second, italic<\/i>/.test(bullets.html));
+  ok("J19h speaker notes import", /Imported speaker notes survive/.test(s1.notes), s1.notes);
+
+  /* geometry: a 900000 EMU offset on a 12192000 EMU slide = 94.5 design px */
+  ok("J19i geometry converts EMU -> design px", Math.abs(titleEl.x - 94.5) < 2 && Math.abs(titleEl.y - 84) < 2, `${titleEl.x},${titleEl.y}`);
+
+  /* group flattening: the child coordinate space is composed, not ignored */
+  const inGroup = s2.elements.find((e) => /In a group/.test(e.html || ""));
+  const themed = s2.elements.find((e) => /Theme colour/.test(e.html || ""));
+  ok("J19j grouped shapes flatten with composed transforms",
+    !!inGroup && Math.abs(inGroup.x - 105) < 3 && Math.abs(inGroup.y - 210) < 3 && Math.abs(inGroup.w - 210) < 3,
+    `${inGroup?.x},${inGroup?.y} ${inGroup?.w}x${inGroup?.h}`);
+  ok("J19k second group member offsets by its child coords", !!themed && themed.x > inGroup.x + 100, `${themed?.x}`);
+
+  /* shape kinds, rotation, stroke, theme-colour fallback */
+  const star = s2.elements.find((e) => e.shape === "star");
+  ok("J19l preset geometry maps to a real shape kind", !!star);
+  ok("J19m rotation converts from 60000ths of a degree", star.rot === 45, `rot=${star.rot}`);
+  ok("J19n outline colour + width import", star.style.stroke === "#112233" && star.style.strokeWidth > 0, `${star.style.stroke}/${star.style.strokeWidth}`);
+  ok("J19o srgb fill imports", inGroup.style.fill === "#FF8800", inGroup.style.fill);
+  ok("J19p theme colour falls back to the deck accent (documented)", themed.style.fill === "var(--pres-accent)", themed.style.fill);
+
+  /* pictures embed as data URLs */
+  const pic = s2.elements.find((e) => e.kind === "image");
+  ok("J19q embedded image imports as a data URL", !!pic && pic.src.startsWith("data:image/png;base64,") && pic.alt === "A red dot");
+
+  /* the report tells the truth about what did NOT come across */
+  const warnText = await page.locator('[data-testid="import-report"]').textContent();
+  ok("J19r import reports its fidelity limits", /Imported 2 slides/.test(warnText), warnText?.slice(0, 60));
+  await shot("pres-import-report.png");
+  await page.locator('[data-testid="import-report-close"]').click();
+
+  /* imported slides actually RENDER (not just parse) */
+  await page.locator(".nxPresFilmItem").nth(2).click();
+  const rendered = await page.locator(".nxPresCanvas .nxPresEl").count();
+  ok("J19s imported slide renders its elements", rendered >= 4, `${rendered} elements`);
+  await shot("pres-import-foreign.png");
+
+  /* --- round trip: export this deck to .pptx, re-import it, structure survives --- */
+  const dl = await Promise.race([
+    page.waitForEvent("download", { timeout: 60000 }),
+    page.locator('[data-testid="pptx-export"]').click().then(() => null),
+  ]);
+  const download = dl || (await page.waitForEvent("download", { timeout: 60000 }));
+  const rtPath = join(root, "dev", "roundtrip.pptx");
+  await download.saveAs(rtPath);
+
+  const beforeRT = await deck();
+  const beforeCount = beforeRT.slides.length;
+  const shapesBefore = beforeRT.slides.reduce((n, sl) => n + (sl.elements?.filter((e) => e.kind === "shape").length || 0), 0);
+
+  await page.locator('[data-testid="pptx-input"]').setInputFiles(rtPath);
+  await page.waitForSelector('[data-testid="import-report"]');
+  const afterRT = await deck();
+  const added = afterRT.slides.length - beforeCount;
+  ok("J19t round-trip re-imports every slide", added === beforeCount, `${beforeCount} out -> ${added} back`);
+
+  /* imported slides are INSERTED after the current slide, so identify the
+     round-tripped copies by content, not by position: every distinctive marker
+     must now appear TWICE (the original and its re-imported twin). */
+  const countText = (d, re) =>
+    d.slides.filter((sl) => (sl.elements || []).some((e) => re.test(stripTagsJS(e.html || "")))).length;
+  const countNotes = (d, re) => d.slides.filter((sl) => re.test(sl.notes || "")).length;
+
+  const shapesAfter = afterRT.slides.reduce((n, sl) => n + (sl.elements?.filter((e) => e.kind === "shape").length || 0), 0);
+  ok("J19u round-trip preserves the shapes", shapesAfter >= shapesBefore * 2, `${shapesBefore} -> ${shapesAfter}`);
+
+  const titleRe = /Atlas Q2 Business Review/;
+  ok(
+    "J19v round-trip preserves slide text",
+    countText(afterRT, titleRe) === countText(beforeRT, titleRe) + 1,
+    `${countText(beforeRT, titleRe)} -> ${countText(afterRT, titleRe)}`,
+  );
+  const notesRe = /best net-revenue quarter/;
+  ok(
+    "J19w round-trip preserves speaker notes",
+    countNotes(afterRT, notesRe) === countNotes(beforeRT, notesRe) + 1,
+    `${countNotes(beforeRT, notesRe)} -> ${countNotes(afterRT, notesRe)}`,
+  );
+  /* the notes body must NOT pick up the slide-number placeholder */
+  ok("J19x notes exclude the slide-number placeholder", !afterRT.slides.some((sl) => /silence\.\d+$/.test(sl.notes || "")));
+  await shot("pres-import-roundtrip.png");
 }
 
 const fails = results.filter((r) => !r.pass);

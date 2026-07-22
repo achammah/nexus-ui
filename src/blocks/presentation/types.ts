@@ -9,7 +9,10 @@ export type SlideLayout =
   | "image"
   | "quote"
   | "section"
-  | "blank";
+  | "blank"
+  /* no regions at all — pure free placement. Imported PowerPoint/Slides decks
+     land here, because their content is already absolutely positioned. */
+  | "canvas";
 
 export type SlideTransition = "none" | "fade" | "slide" | "zoom";
 
@@ -180,6 +183,8 @@ export interface PresentationConfig {
     analytics?: boolean;
     rooms?: boolean;
     pptxExport?: boolean;
+    /* .pptx import (PowerPoint / Google Slides export) — lazy-loads JSZip */
+    pptxImport?: boolean;
     pdfExport?: boolean;
     present?: boolean;
   };

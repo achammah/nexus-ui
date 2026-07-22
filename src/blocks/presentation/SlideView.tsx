@@ -75,6 +75,10 @@ export const LAYOUTS: Record<SlideLayout, { label: string; spec: SlideRegions }>
     label: "Blank",
     spec: { regions: [{ key: "body", placeholder: "Anything goes", className: "nxPresBody nxPresBlank" }] },
   },
+  canvas: {
+    label: "Canvas",
+    spec: { regions: [] },
+  },
 };
 
 export interface SlideViewProps {

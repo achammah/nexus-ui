@@ -661,3 +661,23 @@
   cursor: pointer;
 }
 .nxPresSwatch:hover { outline: 2px solid var(--nx-accent); outline-offset: 1px; }
+
+/* ---- import report ---- */
+.nxPresImportReport {
+  position: absolute;
+  right: var(--nx-gap-4);
+  bottom: var(--nx-gap-4);
+  z-index: 60;
+  max-width: 460px;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-2, var(--nx-shadow-1));
+  padding: var(--nx-gap-3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.nxPresImportHead { display: flex; align-items: center; justify-content: space-between; gap: var(--nx-gap-3); font: 600 var(--nx-text-body) var(--nx-font-sans); }
+.nxPresImportSub { font: 600 var(--nx-text-micro) var(--nx-font-sans); text-transform: var(--nx-label-transform, uppercase); letter-spacing: var(--nx-label-tracking); color: var(--nx-fg-faint); }
+.nxPresImportList { margin: 0; padding-left: 1.1em; font: 400 var(--nx-text-meta) var(--nx-font-sans); color: var(--nx-fg-muted); display: flex; flex-direction: column; gap: 3px; max-height: 180px; overflow-y: auto; }
