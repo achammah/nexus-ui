@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Copy, Link2, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
@@ -57,6 +58,28 @@ function TypeDot({ color }: { color?: string }) {
   return <span className="nxFlowMenuDot" style={{ background: color ? `var(--nx-opt-${color})` : "var(--nx-border-strong)" }} aria-hidden />;
 }
 
+/* The cursor anchor is PORTALED to <body>: position:fixed resolves against the
+   nearest transformed ancestor, and .nxFlowWrap keeps an identity transform
+   from its entrance animation — an in-tree phantom therefore lands offset by
+   exactly the wrap's viewport origin (measured: menu dx/dy == wrap x/y), so
+   the menu opened far from the cursor. Body carries no transform; anchored
+   there, the phantom's rect IS the cursor. Radix's asChild merges its ref +
+   trigger props through the forwardRef into the portaled span. */
+const CursorAnchor = React.forwardRef<
+  HTMLSpanElement,
+  React.HTMLAttributes<HTMLSpanElement> & { x: number; y: number }
+>(function CursorAnchor({ x, y, style: _ignored, ...rest }, ref) {
+  return createPortal(
+    <span
+      {...rest}
+      ref={ref}
+      style={{ position: "fixed", left: x, top: y, width: 1, height: 1, pointerEvents: "none" }}
+      aria-hidden
+    />,
+    document.body,
+  );
+});
+
 export default function FlowContextMenu({
   menu, onClose, typeField,
   canAdd, canRename, canDuplicate, canConnect, canDelete,
@@ -72,8 +95,7 @@ export default function FlowContextMenu({
     // key forces a fresh mount per invocation so the popper re-measures at the new cursor anchor
     <DropdownMenu key={menu ? `${menu.kind}:${menu.x}:${menu.y}` : "closed"} open={!!menu} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DropdownMenuTrigger asChild>
-        {/* phantom anchor at the cursor — never visible, never interactive */}
-        <span style={{ position: "fixed", left: at.x, top: at.y, width: 1, height: 1, pointerEvents: "none" }} aria-hidden />
+        <CursorAnchor x={at.x} y={at.y} />
       </DropdownMenuTrigger>
       {menu?.kind === "pane" && (
         <DropdownMenuContent align="start" sideOffset={2} className="nxFlowMenu" data-testid="flow-menu-pane">
