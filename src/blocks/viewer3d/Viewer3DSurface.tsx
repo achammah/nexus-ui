@@ -69,6 +69,8 @@ interface Engine {
      ResizeObserver must preserve it, not recompute from the fit sphere) */
   orthoHalfH: number | null;
   anim: Anim | null;
+  /* view-to-view camera transition: eased step closure driven by the tick */
+  viewAnim: { t0: number; ms: number; step: (e: number) => void; done: () => void } | null;
   frame: number;
   /* re-run framing/ground/shadow fit after the model content changed */
   refit: () => void;
@@ -220,7 +222,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       renderer, scene, persp, ortho, camera: persp, controls, key, sun, model, levels,
       sphere: new THREE.Sphere(new THREE.Vector3(), 3), box: new THREE.Box3(),
       raycaster: new THREE.Raycaster(), pmrem, clip: new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0),
-      orthoHalfH: null, anim: null, frame: 0, userRelease: null,
+      orthoHalfH: null, anim: null, viewAnim: null, frame: 0, userRelease: null,
       refit: () => {},
       dispose: () => {
         cancelAnimationFrame(engine.frame);
@@ -349,6 +351,12 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     const v = new THREE.Vector3();
     const tick = (now: number) => {
       engine.frame = requestAnimationFrame(tick);
+      const va = engine.viewAnim;
+      if (va) {
+        const p = Math.min((now - va.t0) / va.ms, 1);
+        va.step(EASE(p));
+        if (p >= 1) { engine.viewAnim = null; va.done(); }
+      }
       const a = engine.anim;
       if (a) {
         const p = Math.min((now - a.t0) / a.ms, 1);
@@ -553,66 +561,228 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     e.anim = { kind: "fly", t0: performance.now(), ms, fromP: e.persp.position.clone(), fromT: e.controls.target.clone(), toP, toT };
   }, []);
 
-  /* floorplan view rig: camera type, clipping, sun — all in one effect */
+  /* ---- floorplan view rig ----
+     Three concerns, three effects: (1) the CAMERA rig — with eased transitions
+     between views (dolly-zoom perspective↔orthographic, orbiting ortho↔ortho,
+     the section plane sweeping in), because plan/3D/elevation/section are views
+     of ONE model, not separate screens; (2) the SECTION cut position; (3) the
+     SUN + ground treatment. prefers-reduced-motion snaps everything. */
+
+  const prevViewRef = React.useRef<PlanView | null>(null);
+
+  /* target ortho pose for a view (facade-fit, aimed at the box center) */
+  const orthoPose = React.useCallback((e: Engine, view: PlanView, dir3: [number, number, number], aspect: number) => {
+    const r = Math.max(e.sphere.radius, 1);
+    const bc = e.box.getCenter(new THREE.Vector3());
+    const bs = e.box.getSize(new THREE.Vector3());
+    const facadeW = view === "axon" ? r * 2 : (Math.abs(dir3[0]) > 0.5 ? bs.z : bs.x);
+    const facadeH = view === "axon" ? r * 2 : bs.y;
+    const halfH = Math.max(facadeH / 2, facadeW / (2 * aspect)) * ORTHO.fitMul;
+    return { bc, halfH, dir: new THREE.Vector3(...dir3).normalize(), r };
+  }, []);
+
+  /* spherical direction interpolation (shortest azimuth path) */
+  const dirLerp = (a: THREE.Vector3, b: THREE.Vector3, t: number): THREE.Vector3 => {
+    const sa = new THREE.Spherical().setFromVector3(a), sb = new THREE.Spherical().setFromVector3(b);
+    let dTheta = sb.theta - sa.theta;
+    if (dTheta > Math.PI) dTheta -= Math.PI * 2;
+    if (dTheta < -Math.PI) dTheta += Math.PI * 2;
+    const phi = THREE.MathUtils.clamp(sa.phi + (sb.phi - sa.phi) * t, 0.02, Math.PI - 0.02);
+    return new THREE.Vector3().setFromSpherical(new THREE.Spherical(1, phi, sa.theta + dTheta * t));
+  };
+
+  const sectionCut = React.useCallback((e: Engine, axis: "x" | "z", pos: number): number => {
+    const bb = e.box;
+    return axis === "x" ? bb.min.x + (bb.max.x - bb.min.x) * pos : bb.min.z + (bb.max.z - bb.min.z) * pos;
+  }, []);
+
+  /* (1) camera rig + transitions */
   React.useEffect(() => {
     const e = engineRef.current;
     if (!e || mode !== "floorplan" || phase !== "ready") return;
+    if (planView === "plan") { prevViewRef.current = null; return; }
     const host = hostRef.current;
     const aspect = host && host.clientHeight ? host.clientWidth / host.clientHeight : 1.6;
-    const r = Math.max(e.sphere.radius, 1);
-    const c = e.sphere.center;
-    const orthoView = planView === "elevation" || planView === "section" || planView === "axon";
+    const prev = prevViewRef.current;
+    prevViewRef.current = planView;
 
-    if (orthoView) {
-      const dir = planView === "axon" ? AXON_DIR : ELEV_DIRS[sectionOrElevDir(planView, elevDir, sectionAxis)];
-      /* frame the BOX for flat views: fit the facade's width AND height, and aim
-         at the box center (the nav target sits low for perspective framing) */
-      const bc = e.box.getCenter(new THREE.Vector3());
-      const bs = e.box.getSize(new THREE.Vector3());
-      const facadeW = planView === "axon" ? r * 2 : (Math.abs(dir[0]) > 0.5 ? bs.z : bs.x);
-      const facadeH = planView === "axon" ? r * 2 : bs.y;
-      const halfH = Math.max(facadeH / 2, facadeW / (2 * aspect)) * ORTHO.fitMul;
-      e.orthoHalfH = halfH;
-      e.ortho.left = -halfH * aspect; e.ortho.right = halfH * aspect;
-      e.ortho.top = halfH; e.ortho.bottom = -halfH;
-      e.ortho.near = 0.01; e.ortho.far = r * 20;
+    const isPersp = planView === "3d" || planView === "render";
+    const wasPersp = prev === "3d" || prev === "render";
+    const dir3 = planView === "axon" ? AXON_DIR : ELEV_DIRS[sectionOrElevDir(planView, elevDir, sectionAxis)];
+    const pose = isPersp ? null : orthoPose(e, planView, dir3, aspect);
+
+    const applyOrtho = () => {
+      const p = pose as NonNullable<typeof pose>;
+      e.orthoHalfH = p.halfH;
+      e.ortho.left = -p.halfH * aspect; e.ortho.right = p.halfH * aspect;
+      e.ortho.top = p.halfH; e.ortho.bottom = -p.halfH;
+      e.ortho.near = 0.01; e.ortho.far = p.r * 20;
       e.ortho.zoom = 1;
-      e.ortho.position.copy(bc).addScaledVector(new THREE.Vector3(...dir).normalize(), r * ORTHO.camDistMul);
+      e.ortho.position.copy(p.bc).addScaledVector(p.dir, p.r * ORTHO.camDistMul);
       e.ortho.up.set(0, 1, 0);
-      e.ortho.lookAt(bc);
-      e.controls.target.copy(bc);
+      e.ortho.lookAt(p.bc);
       e.ortho.updateProjectionMatrix();
       e.camera = e.ortho;
       e.controls.object = e.ortho;
+      e.controls.target.copy(p.bc);
       e.controls.enableRotate = planView === "axon";
       e.controls.minZoom = ORTHO.zoomMin; e.controls.maxZoom = ORTHO.zoomMax;
-    } else {
+      e.controls.update();
+    };
+    const applyPersp = () => {
+      e.persp.fov = LOOK.camera.fov;
+      e.persp.updateProjectionMatrix();
       e.camera = e.persp;
       e.controls.object = e.persp;
       e.controls.enableRotate = true;
-    }
-    e.controls.update();
+      e.controls.update();
+    };
 
-    /* section: one global clipping plane, positioned along the chosen axis */
-    if (planView === "section") {
-      const bb = e.box;
-      const world = e.model.position;
-      if (sectionAxis === "x") {
-        const cut = bb.min.x + (bb.max.x - bb.min.x) * sectionPos;
-        e.clip.normal.set(-1, 0, 0);
+    /* section clip: entering sweeps the plane in; leaving clears after the fly */
+    const enteringSection = planView === "section" && prev !== "section";
+    const leavingSection = prev === "section" && planView !== "section";
+    const cut = sectionCut(e, sectionAxis, sectionPos);
+    const setClipNow = () => {
+      if (planView === "section") {
+        e.clip.normal.set(sectionAxis === "x" ? -1 : 0, 0, sectionAxis === "x" ? 0 : -1);
         e.clip.constant = cut;
-        void world;
+        e.renderer.clippingPlanes = [e.clip];
       } else {
-        const cut = bb.min.z + (bb.max.z - bb.min.z) * sectionPos;
-        e.clip.normal.set(0, 0, -1);
-        e.clip.constant = cut;
+        e.renderer.clippingPlanes = [];
       }
-      e.renderer.clippingPlanes = [e.clip];
-    } else {
-      e.renderer.clippingPlanes = [];
-    }
+    };
+    const clipEdge = sectionAxis === "x" ? e.box.max.x + 0.2 : e.box.max.z + 0.2;
 
-    /* render mode: sun on, environment eased down so shadows read */
+    const snapAll = () => { if (isPersp) applyPersp(); else applyOrtho(); setClipNow(); };
+
+    if (prefersReducedMotion() || prev === null || prev === planView) { e.viewAnim = null; snapAll(); return; }
+    if (isPersp && wasPersp) { setClipNow(); return; } // 3d↔render: lights change, camera stays
+
+    const ms = LOOK.feel.flyMs + 250;
+    const center0 = e.controls.target.clone();
+    const fromDir = e.camera === e.ortho
+      ? e.ortho.position.clone().sub(center0).normalize()
+      : e.persp.position.clone().sub(center0).normalize();
+    const fromHalfH = e.camera === e.ortho
+      ? (e.orthoHalfH ?? e.ortho.top) / e.ortho.zoom
+      : e.persp.position.distanceTo(center0) * Math.tan((e.persp.fov * Math.PI) / 360);
+
+    /* clip sweep state */
+    if (enteringSection) {
+      e.clip.normal.set(sectionAxis === "x" ? -1 : 0, 0, sectionAxis === "x" ? 0 : -1);
+      e.clip.constant = clipEdge;
+      e.renderer.clippingPlanes = [e.clip];
+    }
+    const clipFrom = e.clip.constant;
+    const clipTo = planView === "section" ? cut : clipEdge;
+    const stepClip = (t: number) => {
+      if (enteringSection || leavingSection || planView === "section") {
+        e.clip.constant = clipFrom + (clipTo - clipFrom) * t;
+      }
+    };
+
+    if (!isPersp) {
+      /* → ortho: dolly-zoom the perspective camera down to a near-parallel view,
+         then swap in the exact orthographic camera. From another ortho view the
+         camera orbits the model instead (fov stays parallel-ish via the ortho). */
+      const p = pose as NonNullable<typeof pose>;
+      if (wasPersp) {
+        const fovFrom = LOOK.camera.fov, fovTo = 5;
+        const tFrom = center0.clone(), tTo = p.bc.clone();
+        e.camera = e.persp; e.controls.object = e.persp; e.controls.enableRotate = false;
+        e.viewAnim = {
+          t0: performance.now(), ms,
+          step: (t) => {
+            const fov = fovFrom + (fovTo - fovFrom) * t;
+            const halfH = fromHalfH + (p.halfH - fromHalfH) * t;
+            const d = halfH / Math.tan((fov * Math.PI) / 360);
+            const dir = dirLerp(fromDir, p.dir, t);
+            const tgt = tFrom.clone().lerp(tTo, t);
+            e.persp.fov = fov;
+            e.persp.position.copy(tgt).addScaledVector(dir, d);
+            e.persp.lookAt(tgt);
+            e.persp.updateProjectionMatrix();
+            e.controls.target.copy(tgt);
+            stepClip(t);
+          },
+          done: () => { applyOrtho(); setClipNow(); },
+        };
+      } else {
+        /* ortho → ortho: orbit the ortho camera between poses */
+        const p0 = { halfH: fromHalfH, bc: center0.clone() };
+        e.camera = e.ortho; e.controls.object = e.ortho; e.controls.enableRotate = false;
+        e.viewAnim = {
+          t0: performance.now(), ms,
+          step: (t) => {
+            const halfH = p0.halfH + (p.halfH - p0.halfH) * t;
+            const bc = p0.bc.clone().lerp(p.bc, t);
+            const dir = dirLerp(fromDir, p.dir, t);
+            e.orthoHalfH = halfH;
+            e.ortho.left = -halfH * aspect; e.ortho.right = halfH * aspect;
+            e.ortho.top = halfH; e.ortho.bottom = -halfH;
+            e.ortho.zoom = 1;
+            e.ortho.position.copy(bc).addScaledVector(dir, p.r * ORTHO.camDistMul);
+            e.ortho.lookAt(bc);
+            e.ortho.updateProjectionMatrix();
+            e.controls.target.copy(bc);
+            stepClip(t);
+          },
+          done: () => { applyOrtho(); setClipNow(); },
+        };
+      }
+    } else {
+      /* ortho → perspective: start the persp camera at a matching narrow-fov
+         pose far out, widen back in to the standard framing */
+      const r = Math.max(e.sphere.radius, 1);
+      const fit = fitFor(mode);
+      const toDir = new THREE.Vector3(...fit.dir).normalize();
+      const toT = e.sphere.center.clone();
+      const toDist = fitDistance(r, aspect, fit.mul);
+      const toHalfH = toDist * Math.tan((LOOK.camera.fov * Math.PI) / 360);
+      const fovFrom = 5, fovTo = LOOK.camera.fov;
+      e.camera = e.persp; e.controls.object = e.persp; e.controls.enableRotate = false;
+      e.viewAnim = {
+        t0: performance.now(), ms,
+        step: (t) => {
+          const fov = fovFrom + (fovTo - fovFrom) * t;
+          const halfH = fromHalfH + (toHalfH - fromHalfH) * t;
+          const d = halfH / Math.tan((fov * Math.PI) / 360);
+          const dir = dirLerp(fromDir, toDir, t);
+          const tgt = center0.clone().lerp(toT, t);
+          e.persp.fov = fov;
+          e.persp.position.copy(tgt).addScaledVector(dir, d);
+          e.persp.lookAt(tgt);
+          e.persp.updateProjectionMatrix();
+          e.controls.target.copy(tgt);
+          stepClip(t);
+        },
+        done: () => {
+          e.persp.fov = LOOK.camera.fov;
+          e.persp.position.copy(toT).addScaledVector(toDir, toDist);
+          e.persp.updateProjectionMatrix();
+          applyPersp();
+          e.controls.target.copy(toT);
+          setClipNow();
+        },
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planView, elevDir, sectionAxis, mode, phase]);
+
+  /* (2) live section cut position (slider / A–A marker) — no re-animation */
+  React.useEffect(() => {
+    const e = engineRef.current;
+    if (!e || mode !== "floorplan" || phase !== "ready" || planView !== "section" || e.viewAnim) return;
+    e.clip.constant = sectionCut(e, sectionAxis, sectionPos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionPos, sectionAxis, planView, mode, phase]);
+
+  /* (3) sun + ground treatment */
+  React.useEffect(() => {
+    const e = engineRef.current;
+    if (!e || mode !== "floorplan" || phase !== "ready") return;
+    const r = Math.max(e.sphere.radius, 1);
+    const c = e.sphere.center;
     if (planView === "render") {
       const sd = sunFor(sunHour);
       e.sun.visible = true;
@@ -628,12 +798,10 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       e.key.intensity = LOOK.lights.key.intensity;
       e.scene.environmentIntensity = envIntensity();
     }
-
-    /* render mode earns a real contact shadow; nav/technical views keep it airy */
     const ground = e.scene.getObjectByName("nx-ground") as THREE.Mesh | undefined;
     if (ground) (ground.material as THREE.ShadowMaterial).opacity =
       planView === "render" ? groundShadowOpacity(false) : groundShadowOpacity(true);
-  }, [planView, elevDir, sectionAxis, sectionPos, sunHour, mode, phase]);
+  }, [planView, sunHour, mode, phase]);
 
   // re-theme materials + env when the app theme flips or a skin lands
   React.useEffect(() => {

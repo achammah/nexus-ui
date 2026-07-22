@@ -164,3 +164,35 @@ The lazy engine chunk (three.js + loaders + the drawing set) measures ~732 kB mi
 ~194 kB gzip in a vite production build — ~67 kB min (~20 kB gzip) over the previous
 object-only viewer; the eager light module grew ~2 kB. The demo `.glb` (5.4 MB) is
 referenced only by pages that opt into it.
+
+## Editing — the plan is a drafting surface, not a picture
+
+Floorplan mode is EDITABLE in place; every edit funnels through `plan-edit.ts`
+(5 cm snap, min-room / min-opening clamps) and lands in the snapshot via
+`onChange`, so a typed value and a dragged value obey identical rules and the
+dims, areas, schedule and the 3D model all recompute from the same polygons.
+
+- **Select** a room, wall, door or window in the plan — the **technical apron**
+  (persistent right dock; `Panel` toggles it, `controls.schedule:false` removes it)
+  shows its real spec: room name/type/finish/ceiling (editable) + area, envelope,
+  volume, perimeter; opening width/sill/head (editable) + swing flip; wall length,
+  thickness, face area, bounding rooms, openings.
+- **Drag a wall** (axis-aligned) — the shared line moves: every room polygon on it,
+  the openings riding it, the chain dims, areas, schedule totals and the 3D walls.
+- **Drag a door/window** along its wall; resize by width in the apron.
+- **A–A section marker** on the plan drags the 3D cut plane; double-click opens the
+  section view. **Facade markers** (triangles on each side) open that elevation.
+- **Layers** (dimensions / room labels / openings / markers), the **level tree**
+  and the **sheet metadata** (title block) are all editable panes in the apron.
+- The apron stays docked in every view (3D/render/elevation/section/axon) —
+  drawing + technical panel is the screen, as in CAD. On narrow screens it
+  stacks under the drawing as a bottom sheet.
+
+## View transitions
+
+Plan/3D/render/elevation/section/axon are views of ONE model, so switching is an
+eased camera move, not a hard cut: perspective↔orthographic runs a dolly-zoom
+(fov narrows as the camera pulls out, then the true ortho camera swaps in),
+ortho↔ortho orbits between facades, and entering a section SWEEPS the clip plane
+in from outside the building. The SVG plan cross-fades against the canvas.
+`prefers-reduced-motion` snaps every one of these.
