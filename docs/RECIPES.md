@@ -116,3 +116,13 @@ Text fields carry a `format` (`any` / `email` / `number` / `phone` / `date`). A 
 ### What the surface does and does not claim
 
 This is a product surface, not a compliance product. Signing happens client-side against the snapshot: the certificate id is a SHA-256 over the terminal envelope state, which detects tampering with the snapshot you hold but is not a cryptographic signature bound to an identity. Identity verification, tamper-evident server-side sealing, timestamping authorities, and the evidence retention that eIDAS or ESIGN/UETA expect are backend concerns — put them behind `onSend` and your own signing service. Treat the built-in flow as the demo and preparation layer.
+
+The certificate deliberately carries no IP or device metadata. A browser cannot observe its own IP, and a client-declared one is not evidence — recording it would fabricate an audit trail. Capture that server-side, at the moment you issue and serve each signing link.
+
+### What the download flattens
+
+`Download signed PDF` returns the source document with every filled field painted onto the page as content (text and embedded images), plus an appended certificate page. Page geometry, existing annotations and links, and document metadata are all preserved.
+
+**One caveat worth knowing before you ship it:** "flatten" applies to the e-signature field values only. If your source PDF contains its own AcroForm fields, they are carried through and **remain interactive** — a recipient can still edit them after completion. If that matters, flatten the delivered file server-side (pdf-lib's `form.flatten()`, qpdf, or your PDF service) before archiving or distributing it.
+
+Typed signatures are rasterised through a browser canvas at flatten time, so glyph shapes depend on the fonts present on the signing machine. The snapshot retains the typed text and font name, so a server-side re-render is available and more consistent if you need reproducibility.

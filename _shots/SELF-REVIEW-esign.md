@@ -38,16 +38,49 @@ Now the default seed is a **draft** — palette live, fields placeable, signers 
 
 **A guard that could not fail.** My first regression guard for that bug passed in both the broken and fixed states. I rewrote it rather than keep it. Likewise a validation assertion I wrote as `>= 0` (always true) was replaced with one that actually asserts the invalid state, the block, and the recovery.
 
-## Honest gaps and seams
+## Limits — what you must add before this is a signing system
 
-- **This is a product surface, not a compliance product.** Signing happens client-side against the snapshot. The certificate id is a SHA-256 over the terminal envelope state: it detects tampering with the snapshot you hold, but it is not a signature cryptographically bound to a verified identity. Identity verification, server-side sealing, timestamping authorities and evidence retention (eIDAS, ESIGN/UETA) are backend concerns. Stated in `docs/RECIPES.md` rather than implied away.
-- **No IP/device metadata in the certificate.** A browser cannot observe its own IP, and inventing one would be fabricated evidence. That line belongs to the backend that receives `onSend`.
-- **Delivery is a labeled seam.** Without `onSend` the surface performs a demo send: the envelope moves to `sent`, the audit records it, and the review dialog says plainly that no email is delivered. Reminders and expiry are recorded and handed to the seam, but nothing here can schedule mail.
-- **Signing is local, not per-recipient.** Real recipients open their own emailed link; here you act for each signer from the Sign tab. The UI says so.
-- **Validation is client-side only.** Re-run `fieldFormatError` server-side; it is a usability feature, not a trust boundary.
-- **Not implemented:** multi-select and align/distribute across fields, snap-to-text, auto-detection of printed signature lines, multi-document envelopes, a page-thumbnail navigator. Field editing is one field at a time.
-- **Adopted signatures live for the session only** — they are deliberately not persisted into the snapshot, since a stored signature image is a credential.
-- **Templates key to roles by order**, so a template whose role count differs from the envelope's signer count is refused rather than partially applied.
+Written for someone adopting this surface who did not build it. Each item says what is true, what breaks if you ignore it, and what to do.
+
+### 1. The certificate is not legal evidence — build the audit record server-side
+
+**What it is:** `certificateId` is a SHA-256 over the terminal envelope state (envelope id, document name, each signer's id/email/`signedAt`, each field's id/type/page/filled-flag, `completedAt`). Recomputing it over a snapshot tells you that snapshot has not been altered.
+
+**What it is not:** it is not bound to a verified identity, not countersigned by anyone, and not timestamped by an authority. Anyone holding the snapshot can produce a matching certificate, because the input is the snapshot itself.
+
+**What is missing and cannot be added here:** IP address, user agent provenance you can trust, geolocation, an authenticated identity, and a trusted timestamp. A browser cannot observe its own IP, and a client-declared one is worthless as evidence — writing one into a certificate of completion would be fabricating an audit record, which in a signing product is a corrupt record rather than a cosmetic lie. This surface therefore emits none.
+
+**Do this:** treat `onSend` as the boundary where the real record begins. Your backend issues the signing links, and records per recipient, at the moment they act: source IP, user agent, authentication method and identity, and a server clock (ideally an RFC 3161 timestamp). Store that server-side and treat it as authoritative. Use the client audit trail as a UX convenience, never as the evidence of record. Under eIDAS or ESIGN/UETA the evidence, identity binding and retention obligations all sit on that backend.
+
+### 2. What the flatten does and does not preserve
+
+Verified by running a probe PDF (an AcroForm text field, a link annotation, document metadata) through the real download path and comparing before and after with `pdf-lib`:
+
+| | Source | After flatten |
+|---|---|---|
+| Original pages | 1 | 1, plus an appended certificate page |
+| Page geometry | 612×792 | 612×792, unchanged |
+| Existing AcroForm fields | `existing.customerRef` | `existing.customerRef` — **still present and still interactive** |
+| Page annotations (incl. links) | 2 | 2, preserved |
+| Metadata (title/author/subject) | present | preserved |
+| E-signature field values | — | painted as page content (text and embedded images); no new form fields |
+
+**The one that will surprise you:** "flatten" describes *our* field values only. They are drawn onto the page and cannot be edited afterwards. The document's **own pre-existing form fields are carried through untouched and remain fillable** — so if your source PDF is an interactive form, the delivered document still has editable fields in it, and a recipient can change them after completion. Nothing detects that today.
+
+**Do this:** if your sources contain AcroForm fields, flatten them server-side after download (pdf-lib's `form.flatten()`, qpdf, or your PDF service) before you archive or distribute. If you need the delivered artifact to be tamper-evident, seal it server-side; the client output is not sealed.
+
+Also true of the current flatten: typed signatures are rendered to an image at flatten time using a browser canvas, so the exact glyph shapes depend on the fonts available on the signing machine. The stored snapshot keeps the typed text and font name, so a server-side re-render is possible and will be more consistent.
+
+### 3. Delivery, signing and validation are all seams
+
+- **Delivery.** Without `onSend` the surface performs a demo send: the envelope moves to `sent`, the audit records it, and the review dialog states that no email is delivered. `reminders` and `cc` are carried in `EsignSendRequest` and recorded, but nothing here can schedule or send mail — your backend must.
+- **Signing is local, not per-recipient.** Real recipients open their own emailed link; here you act for each signer from the Sign tab, which the UI says plainly. There is no per-recipient authentication in this surface.
+- **Validation is client-side only.** `fieldFormatError` is exported — re-run it on the server. It is a usability feature, never a trust boundary.
+- **Adopted signatures live for the session only.** They are deliberately not written into the snapshot: a stored signature image is a credential, and persisting it into a blob that gets passed around is a leak waiting to happen. If you want a saved signature, store it against an authenticated user server-side.
+
+### 4. Not implemented (scoped out, not overlooked)
+
+Multi-select and align/distribute across fields, snap-to-text, auto-detection of printed signature lines, multi-document envelopes, and a page-thumbnail navigator. Field editing is one field at a time. Templates key to roles by order, so a template whose role count differs from the envelope's signer count is refused rather than partially applied.
 
 ## Bundle
 
