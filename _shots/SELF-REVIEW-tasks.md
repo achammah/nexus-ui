@@ -134,6 +134,44 @@ harness live at `localhost:5741` and reading the render, not by inspecting sourc
   dependency in `package.json` — `tsc` reports module-not-found there on a clean install. Zero
   errors elsewhere. Flagging rather than fixing (another lane owns that block).
 
+## Parity table — against Linear / Asana / super-productivity
+
+Not a self-certification. `≈` means present and comparable, `~` present but thinner than the
+reference, `✗` absent.
+
+| Capability | Reference | Us | Honest note |
+|---|---|---|---|
+| Task CRUD, status workflow, assignee, priority, labels | all three | ≈ | config-declared, arbitrary workflow states |
+| Subtasks | Linear (sub-issues), Asana | ≈ | unlimited depth, derived tree, rollup counts |
+| Dependencies (blocks / blocked-by) | Asana, Linear | ~ | modelled + drawn + drive critical path, but **no scheduling enforcement**: rescheduling a bar does not push its dependents, and there is no circular-dependency warning at edit time |
+| Gantt/timeline with arrows | Asana Timeline | ≈ | bars, arrows, drag, resize, zoom, today, critical path |
+| Timeline: auto-schedule / push dependents | Asana | ✗ | the gap I'd close first — today a drag moves one bar only |
+| Timeline: baselines / slippage vs plan | MS-Project-class | ✗ | no stored baseline to compare against |
+| Per-task timer, one at a time | super-productivity | ≈ | entry log, derived elapsed, reload-safe |
+| Spent vs estimate | super-productivity | ≈ | per-task meter + day roll-up |
+| Idle detection / "you left this running" | super-productivity | ✗ | an overnight timer just reads as a long session |
+| Pomodoro / focus mode | super-productivity | ✗ | deliberately skipped as dilution; the brief allowed it only if free |
+| Worklog / timesheet view (time by day × person) | Toggl-class, super-productivity | ✗ | the data is all there (`trackedSecondsOn`), the surface is not |
+| Today / day planning distinct from backlog | super-productivity, Things | ≈ | explicit pull-in, ordered, day stepper |
+| Quick-add | Linear (⌘K-fast) | ~ | title + enter into the day; **no natural-language parse** ("fix login fri 2h" → dates/labels) and no ⌘K command palette |
+| Keyboard-first | Linear | ~ | focus list is fully keyed (j/k/t/x/[/]/⌫); **the timeline has no keyboard path for drag/reschedule**, and there is no global command palette or shortcut cheatsheet |
+| Inline edit from list/board | all three | ≈ | pre-existing DataTable/board editing, works on tasks unchanged |
+| Bulk select + bulk edit | Linear, Asana | ~ | selection + bulk patch exist via the shared contract; no bulk *dependency* or bulk *reparent* |
+| Saved views / filters | all three | ≈ | reuses the host filter system + view-state bag |
+| "My tasks" perspective | all three | ≈ | `focusUser` scope, and the timeline has its own assignee filter |
+| Recurrence | super-productivity, Asana | ~ | daily/weekly/biweekly/monthly roll-forward on completion; **no RRULE, no "every 2nd Tuesday", no skip/reschedule-this-occurrence** |
+| Issue-provider sync | Linear↔GitHub, Asana↔Jira | ~ (seam) | shapes + mapping + conservative diff are real and tested; **no auth, no polling, no webhook, no write-back** — by design, the consumer owns those |
+| Board swimlanes / grouping beyond one field | Linear, Asana | ~ | group-by any select/user field; no two-axis swimlanes |
+| Comments / activity / mentions | all three | ✗ | RecordPage has an activity+notes surface, not wired into the task views |
+| Notifications / assignment alerts | all three | ✗ | out of scope for a component library, but it's why this isn't a product yet |
+| Estimates in points + velocity/cycle analytics | Linear | ✗ | estimate is hours only; no cycle/burndown |
+| Offline / local-first | Linear | ✗ | host-owned concern |
+
+**The three I would fund first**, in order: (1) dependency-aware rescheduling on the timeline —
+it's the one place the current behaviour can actively mislead a planner; (2) keyboard parity for
+the timeline plus a command palette, which is what "keyboard-first" actually means at Linear's
+bar; (3) a worklog/timesheet surface, which is nearly free given the entry log already exists.
+
 ## Where I think it stands against the bar
 
 The Today view and the timer model are the parts I would defend hardest: the explicit-planning
