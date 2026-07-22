@@ -13,7 +13,9 @@ import { groupableFields, measurableFields, resolveGroupBy } from "../group";
 import { GroupByMenu } from "../controls";
 
 /* Board view — the registry wrapper around KanbanBoard. Config keys:
-   `groupField` (a select/user field key; defaults to the object's stageField).
+   `groupField` (a select/user field key; defaults to the object's stageField) ·
+   `cardFields` (field keys shown on the card meta line, in order; default: the
+   first two non-primary, non-grouped fields).
    State keys in the bag: `groupBy` (shared with the chart) · `aggregate`
    ({fn, field} per-column rollup). */
 
@@ -32,6 +34,7 @@ function KanbanView({ object, rows, users, readOnly, viewConfig, viewState, onOp
       groupOptions={groupFieldDef?.type === "user" ? users : undefined}
       readOnly={readOnly}
       aggregate={(viewState.aggregate as Agg | null) ?? undefined}
+      cardFields={Array.isArray(viewConfig.cardFields) ? (viewConfig.cardFields as string[]) : undefined}
     />
   );
 }

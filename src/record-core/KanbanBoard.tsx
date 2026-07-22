@@ -20,16 +20,22 @@ import "./record-core.css";
 /* KanbanBoard — columns from the config's stageField options; drag commits a PATCH
    of the stage field (the VISIBLE outcome journeys assert). */
 
-function Card({ row, config, onOpen, groupKey }: { row: RecordRow; config: ObjectConfig; onOpen: (id: string) => void; groupKey?: string }) {
+function Card({ row, config, onOpen, groupKey, cardFields }: { row: RecordRow; config: ObjectConfig; onOpen: (id: string) => void; groupKey?: string; cardFields?: string[] }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: row.id });
   const primary = config.fields.find((f) => f.primary) ?? config.fields[0];
-  const metaFields = config.fields.filter((f) => !f.primary && f.key !== (groupKey ?? config.stageField)).slice(0, 2);
+  /* `cardFields` NAMES the meta line (order preserved); without it the card keeps
+     its default of the first two non-primary, non-grouped fields */
+  const metaFields = cardFields?.length
+    ? cardFields
+        .map((k) => config.fields.find((f) => f.key === k))
+        .filter((f): f is NonNullable<typeof f> => !!f && !f.primary && f.key !== (groupKey ?? config.stageField))
+    : config.fields.filter((f) => !f.primary && f.key !== (groupKey ?? config.stageField)).slice(0, 2);
   const fmt = (f: (typeof metaFields)[number]): React.ReactNode => {
     const v = row[f.key];
     // installed field types render their own card cell (a whiteboard thumbnail)
     const Cell = getFieldTypeDefinition(f.type)?.cell;
     if (Cell) return <Cell field={f} row={row} value={v} />;
-    if (["money", "emails", "phones", "links", "address", "fullName"].includes(f.type)) return formatCell(v, f.type);
+    if (["money", "emails", "phones", "links", "address", "fullName", "date", "dateTime"].includes(f.type)) return formatCell(v, f.type);
     return (f.type === "number" || f.type === "currency") && typeof v === "number"
       ? new Intl.NumberFormat("en-US").format(v)
       : String(v ?? "");
@@ -67,6 +73,7 @@ function Column({
   onOpen,
   groupKey,
   aggregate,
+  cardFields,
 }: {
   stage: string;
   rows: RecordRow[];
@@ -74,6 +81,7 @@ function Column({
   onOpen: (id: string) => void;
   groupKey?: string;
   aggregate?: { fn: keyof typeof AGG_FNS; field: string };
+  cardFields?: string[];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `col:${stage}` });
   const aggValue = aggregate
@@ -97,7 +105,7 @@ function Column({
       </div>
       <div className="nxKCards">
         {rows.map((r) => (
-          <Card key={r.id} row={r} config={config} onOpen={onOpen} groupKey={groupKey} />
+          <Card key={r.id} row={r} config={config} onOpen={onOpen} groupKey={groupKey} cardFields={cardFields} />
         ))}
       </div>
     </div>
@@ -113,6 +121,7 @@ export function KanbanBoard({
   groupOptions,
   readOnly,
   aggregate,
+  cardFields,
 }: {
   config: ObjectConfig;
   rows: RecordRow[];
@@ -124,6 +133,9 @@ export function KanbanBoard({
   groupOptions?: string[];
   /* permission-driven: cards stay clickable, dragging is off */
   readOnly?: boolean;
+  /* field keys shown on the card's meta line, in order (default: the first two
+     non-primary, non-grouped fields) */
+  cardFields?: string[];
   /* per-column rollup shown in every column head: fn over a numeric field */
   aggregate?: { fn: "sum" | "avg" | "min" | "max"; field: string };
 }) {
@@ -151,7 +163,7 @@ export function KanbanBoard({
     <DndContext sensors={sensors} onDragStart={(e) => setActiveId(String(e.active.id))} onDragEnd={onDragEnd}>
       <div className="nxKanban" data-testid={`kanban-${config.key}`}>
         {stages.map((s) => (
-          <Column key={s} stage={s} config={config} onOpen={onOpen} groupKey={groupKey} aggregate={aggregate} rows={rows.filter((r) => r[stageField.key] === s)} />
+          <Column key={s} stage={s} config={config} onOpen={onOpen} groupKey={groupKey} aggregate={aggregate} cardFields={cardFields} rows={rows.filter((r) => r[stageField.key] === s)} />
         ))}
       </div>
       <DragOverlay>{active && (() => { const p = config.fields.find((f) => f.primary) ?? config.fields[0]; return <div className="nxKCard nxKCard--overlay"><div className="nxKTitle">{formatCell(active[p.key], p.type)}</div></div>; })()}</DragOverlay>

@@ -1,0 +1,353 @@
+/* Focus (Today) view — all chrome through --nx-* tokens (light + dark come from
+   the canvas; nothing hardcoded). */
+
+.nxFocus {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  background: var(--nx-bg-raised);
+  overflow: hidden;
+  min-height: 360px;
+}
+
+/* ------------------------------------------------------ running banner */
+.nxFocusRunning {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-gap-2);
+  padding: 8px 12px;
+  font: var(--nx-text-meta);
+  color: var(--nx-fg);
+  background: var(--nx-accent-soft);
+  border-bottom: 1px solid var(--nx-border);
+}
+.nxFocusRunning strong { font-weight: 600; }
+.nxFocusRunDot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--nx-accent);
+  animation: nxFocusPulse 2s var(--nx-ease) infinite;
+}
+@keyframes nxFocusPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .nxFocusRunDot { animation: none; } }
+.nxFocusClock {
+  margin-left: auto;
+  font-family: var(--nx-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.nxFocusStop {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--nx-border-strong);
+  border-radius: var(--nx-radius-s);
+  background: var(--nx-bg-raised);
+  color: var(--nx-fg);
+  font: var(--nx-text-micro);
+  cursor: pointer;
+}
+.nxFocusStop:hover { background: var(--nx-bg-sunken); }
+
+/* -------------------------------------------------------------- panes */
+.nxFocusPanes { display: flex; flex: 1; min-height: 0; }
+.nxFocusToday {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--nx-border);
+}
+.nxFocusPick {
+  flex: none;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  background: var(--nx-bg-sunken);
+  overflow-y: auto;
+}
+
+/* --------------------------------------------------------- day header */
+.nxFocusHead {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--nx-border);
+}
+.nxFocusDay { display: flex; align-items: center; gap: 4px; }
+.nxFocusDay h3 {
+  font: var(--nx-text-title);
+  font-weight: 650;
+  margin: 0 4px;
+  color: var(--nx-fg);
+}
+.nxFocusStep, .nxFocusToday-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px; padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--nx-radius-s);
+  background: transparent;
+  color: var(--nx-fg-muted);
+  font: var(--nx-text-micro);
+  cursor: pointer;
+}
+.nxFocusStep:hover, .nxFocusToday-btn:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxFocusToday-btn { border-color: var(--nx-border); margin-left: 4px; }
+
+.nxFocusStats {
+  display: flex; align-items: center; gap: var(--nx-gap-3);
+  margin-top: 6px;
+  font: var(--nx-text-meta);
+  color: var(--nx-fg-muted);
+}
+.nxFocusStats span { display: inline-flex; align-items: center; gap: 4px; }
+.nxFocusEst { color: var(--nx-fg-faint); }
+.nxFocusLoad {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--nx-bg-sunken);
+  overflow: hidden;
+}
+.nxFocusLoad span {
+  display: block; height: 100%;
+  background: var(--nx-accent);
+  transition: width var(--nx-t-med) var(--nx-ease);
+}
+
+/* ----------------------------------------------------------- quick add */
+.nxFocusAdd {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--nx-border);
+  color: var(--nx-fg-faint);
+}
+.nxFocusAddInput {
+  flex: 1;
+  border: 0; outline: none; background: transparent;
+  font: var(--nx-text-body);
+  color: var(--nx-fg);
+}
+.nxFocusAddInput::placeholder { color: var(--nx-fg-faint); }
+
+/* --------------------------------------------------------- day list */
+.nxFocusList { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+
+.nxFocusItem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--nx-gap-2);
+  padding: 9px 12px 9px 8px;
+  border-bottom: 1px solid color-mix(in oklab, var(--nx-border) 55%, transparent);
+  outline: none;
+}
+.nxFocusItem:hover { background: var(--nx-bg-sunken); }
+.nxFocusItem:focus-visible { background: var(--nx-accent-soft); box-shadow: inset 2px 0 0 var(--nx-accent); }
+.nxFocusItem--live { background: color-mix(in oklab, var(--nx-accent-soft) 60%, transparent); }
+.nxFocusItem--drag { opacity: .5; }
+.nxFocusItem--done .nxFocusTitle { color: var(--nx-fg-faint); text-decoration: line-through; }
+.nxFocusItem[data-health="overdue"] .nxFocusTitle { color: var(--nx-danger); }
+
+.nxFocusGrip { flex: none; margin-top: 3px; color: var(--nx-fg-faint); cursor: grab; }
+.nxFocusItem:not(:hover) .nxFocusGrip { opacity: 0; }
+
+.nxFocusCheck {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; margin-top: 1px;
+  border: 0; background: transparent; padding: 0;
+  color: var(--nx-ok);
+  cursor: pointer;
+}
+.nxFocusCheck:disabled { cursor: default; }
+.nxFocusCheckDot {
+  width: 15px; height: 15px;
+  border: 1.5px solid var(--nx-border-strong);
+  border-radius: 50%;
+}
+.nxFocusCheck:hover .nxFocusCheckDot { border-color: var(--nx-ok); }
+
+.nxFocusMain { flex: 1; min-width: 0; }
+.nxFocusTitle {
+  display: block;
+  border: 0; background: transparent; padding: 0;
+  font: var(--nx-text-body);
+  color: var(--nx-fg);
+  text-align: left;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nxFocusTitle:hover { text-decoration: underline; }
+
+.nxFocusMeta {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin-top: 4px;
+  font: var(--nx-text-micro);
+  color: var(--nx-fg-muted);
+}
+.nxFocusChipBtn {
+  border: 0; background: transparent; padding: 0;
+  cursor: pointer; display: inline-flex; align-items: center;
+}
+.nxFocusWho {
+  padding: 1px 6px;
+  border: 1px solid var(--nx-border);
+  border-radius: 999px;
+  color: var(--nx-fg-muted);
+  font: var(--nx-text-micro);
+}
+.nxFocusDue {
+  padding: 1px 6px;
+  border-radius: var(--nx-radius-s);
+  background: var(--nx-bg-sunken);
+  font-variant-numeric: tabular-nums;
+}
+.nxFocusDue--late { background: var(--nx-danger-soft); color: var(--nx-danger); }
+.nxFocusTodaySpent { color: var(--nx-fg-faint); }
+
+/* spent-vs-estimate meter */
+.nxFocusBudget { display: flex; align-items: center; gap: 6px; margin-top: 6px; max-width: 320px; }
+.nxFocusBudgetBar {
+  flex: 1; height: 3px; border-radius: 999px;
+  background: var(--nx-bg-sunken); overflow: hidden;
+}
+.nxFocusBudgetBar span {
+  display: block; height: 100%;
+  background: var(--nx-ok);
+  transition: width var(--nx-t-med) var(--nx-ease);
+}
+.nxFocusBudget[data-over="true"] .nxFocusBudgetBar span { background: var(--nx-warn); }
+.nxFocusBudgetText { font: var(--nx-text-micro); color: var(--nx-fg-faint); font-variant-numeric: tabular-nums; }
+.nxFocusBudget[data-over="true"] .nxFocusBudgetText { color: var(--nx-warn); }
+
+/* row actions */
+.nxFocusActions { flex: none; display: flex; align-items: center; gap: 4px; margin-top: 1px; }
+.nxFocusSpent {
+  font: var(--nx-text-micro);
+  font-family: var(--nx-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--nx-fg-muted);
+  min-width: 62px; text-align: right;
+  white-space: nowrap;
+}
+.nxFocusItem--live .nxFocusSpent { color: var(--nx-accent); font-weight: 600; }
+.nxFocusTimer, .nxFocusMore, .nxFocusRemove {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s);
+  background: var(--nx-bg-raised);
+  color: var(--nx-fg-muted);
+  cursor: pointer;
+  font: var(--nx-text-micro);
+}
+.nxFocusTimer:hover, .nxFocusMore:hover, .nxFocusRemove:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxFocusTimer[data-live="true"] {
+  background: var(--nx-accent); border-color: var(--nx-accent); color: var(--nx-accent-fg);
+}
+.nxFocusItem:not(:hover):not(:focus-within) .nxFocusRemove { opacity: 0; }
+
+/* empty + hint */
+.nxFocusEmpty {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--nx-fg-muted);
+  font: var(--nx-text-meta);
+}
+.nxFocusEmpty p { margin: 6px 0 0; }
+.nxFocusEmpty strong { color: var(--nx-fg); }
+.nxFocusHint {
+  margin: 0;
+  padding: 7px 14px;
+  border-top: 1px solid var(--nx-border);
+  font: var(--nx-text-micro);
+  color: var(--nx-fg-faint);
+}
+.nxFocusHint kbd {
+  display: inline-block;
+  padding: 0 4px; margin: 0 1px;
+  border: 1px solid var(--nx-border);
+  border-radius: 3px;
+  background: var(--nx-bg-sunken);
+  font-family: var(--nx-font-mono);
+}
+
+/* ----------------------------------------------------------- pick pane */
+.nxFocusPickHead {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--nx-gap-2);
+  padding: 12px 12px 8px;
+}
+.nxFocusPickHead h4 {
+  margin: 0;
+  font: var(--nx-text-meta);
+  font-weight: 650;
+  color: var(--nx-fg);
+}
+.nxFocusScope {
+  padding: 2px 8px;
+  border: 1px solid var(--nx-border);
+  border-radius: 999px;
+  background: var(--nx-bg-raised);
+  color: var(--nx-fg-muted);
+  font: var(--nx-text-micro);
+  cursor: pointer;
+}
+.nxFocusScope:hover { color: var(--nx-fg); }
+.nxFocusPickLabel {
+  margin: 8px 0 2px;
+  padding: 0 12px;
+  font: var(--nx-text-micro);
+  letter-spacing: var(--nx-label-tracking);
+  text-transform: var(--nx-label-transform);
+  color: var(--nx-fg-faint);
+}
+.nxFocusPickList { list-style: none; margin: 0; padding: 0 6px 8px; }
+.nxFocusPickItem {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 6px;
+  border-radius: var(--nx-radius-s);
+  font: var(--nx-text-micro);
+  color: var(--nx-fg-muted);
+}
+.nxFocusPickItem:hover { background: var(--nx-bg-raised); }
+.nxFocusPickItem[data-health="overdue"] .nxFocusPickTitle { color: var(--nx-danger); }
+.nxFocusPickAdd {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s);
+  background: var(--nx-bg-raised);
+  color: var(--nx-fg-muted);
+  cursor: pointer;
+}
+.nxFocusPickAdd:hover { background: var(--nx-accent); border-color: var(--nx-accent); color: var(--nx-accent-fg); }
+.nxFocusPickTitle {
+  flex: 1; min-width: 0;
+  border: 0; background: transparent; padding: 0;
+  text-align: left;
+  color: var(--nx-fg);
+  font: var(--nx-text-micro);
+  cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nxFocusPickTitle:hover { text-decoration: underline; }
+.nxFocusPickEmpty { padding: 8px 6px; color: var(--nx-fg-faint); font: var(--nx-text-micro); }
+
+/* ------------------------------------------------------------- mobile */
+.nxFocusTabs {
+  display: flex;
+  border-top: 1px solid var(--nx-border);
+  background: var(--nx-bg-raised);
+}
+.nxFocusTabs .nxSegBtn { flex: 1; padding: 9px 6px; }
+
+@media (max-width: 640px) {
+  .nxFocusPick { width: 100%; border-right: 0; }
+  .nxFocusToday { border-right: 0; }
+  .nxFocusBudget { max-width: none; }
+  /* the actions column keeps the timer (the reason the surface exists) and
+     drops the secondary affordances rather than crushing every control */
+  .nxFocusRemove { display: none; }
+  .nxFocusSpent { min-width: 44px; }
+  /* no keyboard to hint at */
+  .nxFocusHint { display: none; }
+}
