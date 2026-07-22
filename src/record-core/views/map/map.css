@@ -1,11 +1,13 @@
-/* Map view — container, token overrides for maplibre chrome, pins, overlay chips.
-   maplibre's own stylesheet (imported by MapView.tsx) is plain BEM classes with no
-   CSS-var layer, so this file IS the token bridge for its chrome. Ships in the
-   view's lazy chunk. */
+/* Map view — container + token overrides for ALL chrome: maplibre's native
+   controls (zoom/scale/fullscreen/geolocate/attribution) AND the app's own map
+   overlays (search, basemap switcher, layers panel, tool rail, legend, readouts).
+   maplibre's stylesheet is plain BEM with no CSS-var layer, so this file is the
+   token bridge for its chrome; everything re-derives on theme/skin change. Ships
+   in the view's lazy chunk. */
 
 .nxMapView {
   position: relative;
-  height: clamp(420px, 68vh, 760px);
+  height: clamp(440px, 70vh, 780px);
   border: 1px solid var(--nx-border);
   border-radius: var(--nx-radius-l);
   overflow: hidden;
@@ -14,7 +16,8 @@
 .nxMapView .maplibregl-map { font: var(--nx-text-meta); }
 .nxMapView .maplibregl-canvas:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: -2px; }
 
-/* pins — real buttons, token-colored via --pin-color (option palette or accent) */
+/* ── record pins — real buttons, token-colored via --pin-color, sized by field
+      via --pin-scale (marker size legend) ── */
 .nxMapPin {
   border: 0;
   padding: 0;
@@ -24,15 +27,40 @@
   line-height: 0;
   animation: nxPinIn var(--nx-t-med) var(--nx-ease-spring) both;
 }
-.nxMapPin svg { display: block; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.35)); transition: transform var(--nx-t-fast) var(--nx-ease); }
-.nxMapPin:hover svg, .nxMapPin:focus-visible svg { transform: scale(1.12); }
+.nxMapPin svg {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.35));
+  transform: scale(var(--pin-scale, 1));
+  transform-origin: bottom center;
+  transition: transform var(--nx-t-fast) var(--nx-ease);
+}
+.nxMapPin:hover svg,
+.nxMapPin:focus-visible svg { transform: scale(calc(var(--pin-scale, 1) * 1.14)); }
 .nxMapPin:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 2px; border-radius: var(--nx-radius-s); }
 @keyframes nxPinIn { from { opacity: 0; transform: translateY(-4px) scale(0.8); } to { opacity: 1; transform: none; } }
 
-/* popup — the library shell restyled to tokens; content = RecordCard + Open.
-   Floats above maplibre's own chrome (the ctrl corners sit at z-index 2) so a pin
-   whose popup opens over a control — e.g. a top-right pin overlapping the zoom
-   control at 390px — keeps its Open action tappable, not pointer-intercepted. */
+/* search result pin (geocode) + route waypoint pin */
+.nxMapSearchPin {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: var(--nx-accent);
+  border: 2px solid var(--nx-bg-raised);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+}
+.nxMapRoutePin {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--nx-accent);
+  border: 2px solid var(--nx-bg-raised);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--nx-accent) 40%, transparent);
+}
+
+/* ── popup — library shell restyled to tokens; content = RecordCard + Open ── */
 .nxMapPopup { z-index: 7; }
 .nxMapPopup .maplibregl-popup-content {
   background: var(--nx-bg-raised);
@@ -46,7 +74,6 @@
   animation: nxPopupIn var(--nx-t-med) var(--nx-ease-settle) both;
 }
 .nxMapPopup .maplibregl-popup-close-button { display: none; }
-/* the tip takes the popup surface color per anchor side */
 .nxMapPopup.maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: var(--nx-bg-raised); }
 .nxMapPopup.maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: var(--nx-bg-raised); }
 .nxMapPopup.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: var(--nx-bg-raised); }
@@ -54,7 +81,7 @@
 @keyframes nxPopupIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .nxMapPopupActions { display: flex; justify-content: flex-end; margin-top: 8px; }
 
-/* zoom/attribution controls on tokens */
+/* ── native maplibre controls on tokens (zoom/scale/fullscreen/geolocate/attrib) ── */
 .nxMapView .maplibregl-ctrl-group {
   background: var(--nx-bg-raised);
   border: 1px solid var(--nx-border);
@@ -64,6 +91,15 @@
 }
 .nxMapView .maplibregl-ctrl-group button { background: transparent; }
 .nxMapView .maplibregl-ctrl-group button + button { border-top: 1px solid var(--nx-border); }
+.nxMapView .maplibregl-ctrl-scale {
+  background: color-mix(in oklab, var(--nx-bg-raised) 82%, transparent);
+  color: var(--nx-fg-muted);
+  border: 1px solid var(--nx-border);
+  border-top: none;
+  border-radius: 0 0 var(--nx-radius-s) var(--nx-radius-s);
+  font: var(--nx-text-micro);
+  padding: 1px 5px;
+}
 .nxMapView .maplibregl-ctrl-attrib {
   background: color-mix(in oklab, var(--nx-bg-raised) 80%, transparent);
   color: var(--nx-fg-faint);
@@ -71,34 +107,266 @@
   border-radius: var(--nx-radius-s);
 }
 .nxMapView .maplibregl-ctrl-attrib a { color: var(--nx-fg-muted); }
-/* maplibre ships dark icon glyphs — invert them on dark surfaces */
+/* maplibre ships dark icon glyphs — invert on dark app surfaces + over dark basemaps */
 :root[data-theme="dark"] .nxMapView .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(180deg); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .nxMapView .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(180deg); }
 }
+.nxMapView[data-map-dark="1"] .maplibregl-ctrl-attrib { background: color-mix(in oklab, #0b0e13 62%, transparent); color: rgb(255 255 255 / 0.7); }
+.nxMapView[data-map-dark="1"] .maplibregl-ctrl-attrib a { color: rgb(255 255 255 / 0.85); }
 
-/* overlay chips (without-location · tiles fallback) + full-surface states.
-   role="status" badges are informational only — pointer-events:none so they never
-   intercept a tap/click meant for a pin, popup action or the map beneath them
-   (a corner chip can overlap the popup on small viewports). */
+/* ── overlay containers ── */
+.nxMapTopLeft {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(340px, calc(100% - 20px));
+}
+.nxMapControlsRow { display: flex; gap: 6px; align-items: flex-start; }
+/* tool rail on the left edge, vertically centred — clear of the top-left controls
+   AND the bottom-left legend (they used to overlap, stealing the lower buttons'
+   clicks) */
+.nxMapLeftRail { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); z-index: 5; }
+
+/* floating control buttons (basemap switcher, layers) */
+.nxMapCtrlBtn {
+  box-shadow: var(--nx-shadow-1);
+  background: var(--nx-bg-raised) !important;
+  border: 1px solid var(--nx-border) !important;
+}
+
+/* ── layers panel ── */
+.nxMapLayers { position: relative; }
+.nxMapLayersPanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 9;
+  min-width: 190px;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-2);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: nxPopupIn var(--nx-t-fast) var(--nx-ease-settle) both;
+}
+.nxMapLayerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: var(--nx-radius-s);
+  font: var(--nx-text-meta);
+  color: var(--nx-fg);
+  cursor: pointer;
+}
+.nxMapLayerRow:hover { background: var(--nx-bg-sunken); }
+.nxMapLayerRow[data-disabled] { opacity: 0.5; cursor: default; }
+.nxMapSlider { display: flex; align-items: center; gap: 8px; padding: 4px 6px 8px; }
+.nxMapSlider input[type="range"] { flex: 1; accent-color: var(--nx-accent); }
+.nxMapSliderLabel { font: var(--nx-text-micro); color: var(--nx-fg-muted); }
+.nxMapSliderValue { font: var(--nx-text-micro); color: var(--nx-fg-muted); min-width: 34px; text-align: right; }
+.nxMapLayersMeta { display: flex; flex-direction: column; gap: 2px; padding: 6px 6px 2px; border-top: 1px solid var(--nx-border); margin-top: 4px; font: var(--nx-text-micro); color: var(--nx-fg-muted); }
+
+/* radix dropdown for the basemap menu, token-styled */
+.nxMapMenu { font: var(--nx-text-meta); }
+
+/* ── tool rail (draw/measure/add/route) ── */
+.nxMapToolRail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-1);
+  padding: 4px;
+}
+.nxMapTool {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--nx-radius-s);
+  background: transparent;
+  color: var(--nx-fg-muted);
+  cursor: pointer;
+  transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease);
+}
+.nxMapTool:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxMapTool:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; }
+.nxMapTool[data-active] { background: var(--nx-accent); color: var(--nx-accent-fg); }
+.nxMapTool--clear { color: var(--nx-fg-faint); border-top: 1px solid var(--nx-border); border-radius: 0 0 var(--nx-radius-s) var(--nx-radius-s); }
+
+/* ── search box ── */
+.nxMapSearch { position: relative; display: flex; align-items: center; }
+.nxMapSearchIcon { position: absolute; left: 9px; color: var(--nx-fg-faint); pointer-events: none; display: inline-flex; }
+.nxMapSearch .nxInput,
+.nxMapSearch input {
+  width: 100%;
+  padding-left: 30px;
+  padding-right: 28px;
+  background: var(--nx-bg-raised);
+  box-shadow: var(--nx-shadow-1);
+  border: 1px solid var(--nx-border);
+}
+.nxMapSearchClear {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--nx-fg-faint);
+  cursor: pointer;
+  border-radius: var(--nx-radius-s);
+}
+.nxMapSearchClear:hover { color: var(--nx-fg); background: var(--nx-bg-sunken); }
+.nxMapSearchResults {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 9;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-2);
+  padding: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  animation: nxPopupIn var(--nx-t-fast) var(--nx-ease-settle) both;
+}
+.nxMapSearchEmpty { padding: 8px 10px; font: var(--nx-text-meta); color: var(--nx-fg-muted); }
+.nxMapSearchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--nx-radius-s);
+  text-align: left;
+  cursor: pointer;
+  color: var(--nx-fg);
+  font: var(--nx-text-meta);
+}
+.nxMapSearchRow:hover { background: var(--nx-bg-sunken); }
+.nxMapSearchKind {
+  flex: none;
+  font: var(--nx-text-micro);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--nx-bg-sunken);
+  color: var(--nx-fg-muted);
+}
+.nxMapSearchKind--record { background: color-mix(in oklab, var(--nx-accent) 16%, var(--nx-bg-raised)); color: var(--nx-accent); }
+.nxMapSearchLabel { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nxMapSearchLabel em { color: var(--nx-fg-faint); font-style: normal; }
+.nxMapSearchSub { color: var(--nx-fg-faint); font: var(--nx-text-micro); }
+
+/* ── legend ── */
+.nxMapLegend {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 5;
+  display: flex;
+  gap: 14px;
+  background: color-mix(in oklab, var(--nx-bg-raised) 92%, transparent);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-1);
+  padding: 8px 10px;
+  max-width: calc(100% - 20px);
+}
+.nxMapLegendBlock { display: flex; flex-direction: column; gap: 4px; }
+.nxMapLegendTitle { font: var(--nx-text-micro); text-transform: uppercase; letter-spacing: 0.04em; color: var(--nx-fg-faint); }
+.nxMapLegendRow { display: flex; align-items: center; gap: 7px; font: var(--nx-text-meta); color: var(--nx-fg); }
+.nxMapLegendSwatch { width: 11px; height: 11px; border-radius: 3px; flex: none; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12); }
+.nxMapLegendSize { gap: 10px; }
+.nxMapLegendDot { display: inline-block; border-radius: 50%; background: color-mix(in oklab, var(--nx-accent) 55%, transparent); border: 1px solid var(--nx-accent); flex: none; }
+.nxMapLegendScale { font: var(--nx-text-micro); color: var(--nx-fg-muted); }
+
+/* ── readout chips (measure/area/in-area/route/hint) + draw actions ── */
+.nxMapReadouts {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+  pointer-events: none;
+}
+.nxMapReadout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: 999px;
+  box-shadow: var(--nx-shadow-1);
+  padding: 5px 11px;
+  font: var(--nx-text-meta);
+  color: var(--nx-fg);
+  animation: nxPopupIn var(--nx-t-fast) var(--nx-ease-settle) both;
+}
+.nxMapReadout--hint { background: color-mix(in oklab, var(--nx-accent) 14%, var(--nx-bg-raised)); color: var(--nx-accent); border-color: color-mix(in oklab, var(--nx-accent) 30%, var(--nx-border)); }
+.nxMapReadout--area, .nxMapReadout--route { padding-right: 6px; }
+.nxMapReadout button { display: inline-flex; padding: 2px; border: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 50%; opacity: 0.7; }
+.nxMapReadout button:hover { opacity: 1; background: color-mix(in oklab, currentColor 16%, transparent); }
+.nxMapDrawActions {
+  position: absolute;
+  left: 50%;
+  bottom: 52px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  gap: 6px;
+}
+
+/* ── overlay chips (without-location · tiles fallback) + full-surface states ── */
 .nxMapChip { position: absolute; z-index: 5; pointer-events: none; }
-.nxMapChip--without { left: 10px; bottom: 10px; }
-.nxMapChip--tiles { right: 10px; top: 10px; }
+.nxMapChip--without { right: 10px; bottom: 26px; }
+.nxMapChip--tiles { right: 10px; top: 96px; }
 .nxMapEmpty { position: absolute; inset: 0; display: grid; place-items: center; z-index: 4; pointer-events: none; }
 .nxMapLoading {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  z-index: 6;
+  z-index: 8;
   background: color-mix(in oklab, var(--nx-bg) 55%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nxMapPin, .nxMapPopup .maplibregl-popup-content { animation: none !important; }
+  .nxMapPin,
+  .nxMapPopup .maplibregl-popup-content,
+  .nxMapLayersPanel,
+  .nxMapSearchResults,
+  .nxMapReadout { animation: none !important; }
   .nxMapPin svg { transition: none !important; }
 }
 
+/* ── mobile 390px: compact controls, touch targets, no hover-only affordance ── */
 @media (max-width: 768px) {
-  .nxMapView { height: clamp(360px, 62dvh, 620px); border-radius: var(--nx-radius-m); }
+  .nxMapView { height: clamp(380px, 64dvh, 640px); border-radius: var(--nx-radius-m); }
+  .nxMapTopLeft { max-width: calc(100% - 20px); right: 10px; }
+  .nxMapTool { width: 40px; height: 40px; } /* bigger touch targets; rail stays vertical + centred */
+  .nxMapLegend { gap: 10px; padding: 7px 8px; font-size: 11px; max-width: 60%; }
+  .nxMapReadouts { bottom: 8px; }
 }

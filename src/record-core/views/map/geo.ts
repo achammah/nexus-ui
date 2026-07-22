@@ -51,18 +51,70 @@ export function splitRows(
   return { located, withoutLocation };
 }
 
-/* GeoJSON for the cluster source. Properties carry the row id + the color-field
-   OPTION VALUE — the paint layer maps values to resolved literals, because GL
-   cannot read CSS custom properties. */
-export function toFeatureCollection(located: LocatedRow[], colorKey?: string) {
+/* a finite number from a raw field value — plain numbers, and the `amount` of a
+   shaped money/currency value (so size/heatmap-weight can read a currency field) */
+export function numericValue(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (v && typeof v === "object" && typeof (v as { amount?: unknown }).amount === "number")
+    return (v as { amount: number }).amount;
+  return undefined;
+}
+
+/* GeoJSON for the point/cluster/heatmap sources. Properties carry the row id, the
+   color-field OPTION VALUE (the paint layer maps values → resolved literals, since
+   GL can't read CSS custom properties), the numeric SIZE (marker radius by field)
+   and the heatmap WEIGHT — each present only when its field is configured and the
+   row holds a number. */
+export function toFeatureCollection(located: LocatedRow[], colorKey?: string, sizeKey?: string, weightKey?: string) {
   return {
     type: "FeatureCollection" as const,
-    features: located.map(({ row, lat, lng }) => ({
-      type: "Feature" as const,
-      geometry: { type: "Point" as const, coordinates: [lng, lat] as [number, number] },
-      properties: { id: String(row.id), ...(colorKey ? { option: String(row[colorKey] ?? "") } : {}) },
-    })),
+    features: located.map(({ row, lat, lng }) => {
+      const properties: Record<string, unknown> = { id: String(row.id) };
+      if (colorKey) properties.option = String(row[colorKey] ?? "");
+      if (sizeKey) {
+        const s = numericValue(row[sizeKey]);
+        if (s !== undefined) properties.size = s;
+      }
+      if (weightKey) {
+        const w = numericValue(row[weightKey]);
+        if (w !== undefined) properties.weight = w;
+      }
+      return {
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: [lng, lat] as [number, number] },
+        properties,
+      };
+    }),
   };
+}
+
+/* marker radius scale by a number field: the [min,max] of the located values, and
+   a value → pixel-radius map inside [MARKER_MIN_R, MARKER_MAX_R]. Null extent (no
+   size field / no numeric values) → the neutral default radius. */
+export const MARKER_MIN_R = 6;
+export const MARKER_MAX_R = 22;
+export const MARKER_DEFAULT_R = 9;
+
+export function sizeExtent(located: LocatedRow[], sizeKey?: string): { min: number; max: number } | null {
+  if (!sizeKey) return null;
+  let min = Infinity;
+  let max = -Infinity;
+  let seen = false;
+  for (const { row } of located) {
+    const v = numericValue(row[sizeKey]);
+    if (v === undefined) continue;
+    seen = true;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  return seen ? { min, max } : null;
+}
+
+export function radiusFor(value: number | undefined, ext: { min: number; max: number } | null): number {
+  if (value === undefined || !ext) return MARKER_DEFAULT_R;
+  if (ext.max === ext.min) return (MARKER_MIN_R + MARKER_MAX_R) / 2;
+  const t = Math.max(0, Math.min(1, (value - ext.min) / (ext.max - ext.min)));
+  return MARKER_MIN_R + t * (MARKER_MAX_R - MARKER_MIN_R);
 }
 
 /* [[minLng,minLat],[maxLng,maxLat]] over the located rows; null when empty */
