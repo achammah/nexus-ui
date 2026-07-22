@@ -12,7 +12,7 @@ A free-surface block (`src/blocks/presentation/`): a slide deck editor (filmstri
 import {
   LazyPresentationSurface,      // or PresentationSurface (eager; it is light — pptxgenjs lazy-loads itself)
   presentationStoreKey,
-  isDeckSnapshot,
+  isDeckSnapshot,               // also exported as isPresentationSnapshot
   seedDeck,
   type DeckSnapshot,
 } from "@nexus/ui";
@@ -84,7 +84,19 @@ the snapshot **in the same browser profile** — a true external viewer needs th
 ### Exports
 
 - **PDF** — `exportDeckToPdf(deck, themeCss)`: opens a print window (16:9 landscape pages) and triggers the OS print dialog ("Save as PDF"). Zero bundle cost. Requires popups allowed.
-- **PPTX** — `exportDeckToPptx(deck)`: `import("pptxgenjs")` on demand (MIT, own chunk ≈ 400 kB gz; never in the eager bundle). Text degrades to paragraphs/bullets with bold/italic runs; images embed; speaker notes carry over.
+- **PPTX** — `exportDeckToPptx(deck)`: `import("pptxgenjs")` on demand (MIT, own chunk — measured 372 kB raw / 126 kB gz; never in the eager bundle). Text degrades to paragraphs/bullets with bold/italic runs; images embed; speaker notes carry over.
+
+### Theming
+
+All editor/viewer chrome rides `--nx-*` tokens, so the block follows the app skin and the light/dark
+flip with no per-block config. Deck THEMES are content palettes: each sets `--pres-bg` / `--pres-fg` /
+`--pres-accent` / `--pres-muted`, which every slide region reads — `native` derives them from `--nx-*`
+(so the deck itself re-skins with the app), the others are fixed designer palettes.
+
+Present mode is deliberately theatre-dark in both app themes (the room is dark, the slide is the light
+source — as Slides/Pitch do). It is still re-skinnable: override any of
+`--nx-pres-stage-{bg,panel,fg,muted,line,btn-line,btn-fg,btn-hover}-override` on an ancestor to
+re-point the stage (e.g. onto `--nx-*` tokens for a light-stage kiosk).
 
 ### Keyboard
 

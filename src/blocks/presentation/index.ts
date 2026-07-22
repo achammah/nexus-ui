@@ -10,6 +10,8 @@ export {
   PRESENTATION_STORE_PREFIX,
   presentationStoreKey,
   isDeckSnapshot,
+  /* the block-named alias hosts wire against, matching isWorkbookSnapshot */
+  isDeckSnapshot as isPresentationSnapshot,
   seedDeck,
   createSlide,
   applyViewEvent,

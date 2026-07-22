@@ -300,12 +300,24 @@
 .nxPresSlide li::marker { color: var(--pres-accent, var(--nx-accent)); }
 .nxPresSlide b, .nxPresSlide strong { font-weight: 700; }
 
-/* ---- present mode ---- */
+/* ---- present mode ----
+   The stage is deliberately theatre-dark in BOTH app themes (as Slides/Pitch do):
+   the room is dark, the slide is the only light source. It is still re-skinnable —
+   every stage surface routes through this local layer, which a host may override
+   (e.g. map them onto --nx-* tokens for a light-stage kiosk). */
 .nxPresPresent {
+  --nx-pres-stage-bg: var(--nx-pres-stage-bg-override, #000);
+  --nx-pres-stage-panel: var(--nx-pres-stage-panel-override, #16181d);
+  --nx-pres-stage-fg: var(--nx-pres-stage-fg-override, #e6e8ee);
+  --nx-pres-stage-muted: var(--nx-pres-stage-muted-override, #9aa0ad);
+  --nx-pres-stage-line: var(--nx-pres-stage-line-override, #2a2d35);
+  --nx-pres-stage-btn-line: var(--nx-pres-stage-btn-line-override, #3a3d45);
+  --nx-pres-stage-btn-fg: var(--nx-pres-stage-btn-fg-override, #cfd3dc);
+  --nx-pres-stage-btn-hover: var(--nx-pres-stage-btn-hover-override, #23262d);
   position: fixed;
   inset: 0;
   z-index: 80;
-  background: #000;
+  background: var(--nx-pres-stage-bg);
   display: grid;
   grid-template-rows: 1fr auto;
   grid-template-columns: 1fr;
@@ -326,19 +338,19 @@
 .nxPresPresenter {
   grid-row: 1 / -1;
   grid-column: 2;
-  background: #16181d;
-  color: #e6e8ee;
-  border-left: 1px solid #2a2d35;
+  background: var(--nx-pres-stage-panel);
+  color: var(--nx-pres-stage-fg);
+  border-left: 1px solid var(--nx-pres-stage-line);
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
 }
-.nxPresPresenterClock { font: 500 13px var(--nx-font-mono); color: #9aa0ad; }
+.nxPresPresenterClock { font: 500 13px var(--nx-font-mono); color: var(--nx-pres-stage-muted); }
 .nxPresPresenterNotes { font: 400 16px/1.6 var(--nx-font-sans); white-space: pre-wrap; flex: 1; }
-.nxPresPresenterNext { border-top: 1px solid #2a2d35; padding-top: 12px; display: flex; flex-direction: column; gap: 4px; }
-.nxPresPresenterNextLabel { font: 600 11px var(--nx-font-sans); text-transform: uppercase; letter-spacing: 0.08em; color: #9aa0ad; }
+.nxPresPresenterNext { border-top: 1px solid var(--nx-pres-stage-line); padding-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.nxPresPresenterNextLabel { font: 600 11px var(--nx-font-sans); text-transform: uppercase; letter-spacing: 0.08em; color: var(--nx-pres-stage-muted); }
 .nxPresPresenterNextTitle { font: 500 15px var(--nx-font-sans); }
 
 .nxPresPresentBar {
@@ -348,20 +360,20 @@
   justify-content: center;
   gap: 12px;
   padding: 10px;
-  background: color-mix(in srgb, #000 70%, transparent);
+  background: color-mix(in srgb, var(--nx-pres-stage-bg) 70%, transparent);
 }
 .nxPresGhostBtn {
-  border: 1px solid #3a3d45;
+  border: 1px solid var(--nx-pres-stage-btn-line);
   background: transparent;
-  color: #cfd3dc;
+  color: var(--nx-pres-stage-btn-fg);
   font: 500 13px var(--nx-font-sans);
   padding: 4px 12px;
   border-radius: 999px;
   cursor: pointer;
 }
-.nxPresGhostBtn:hover:not(:disabled) { background: #23262d; }
+.nxPresGhostBtn:hover:not(:disabled) { background: var(--nx-pres-stage-btn-hover); }
 .nxPresGhostBtn:disabled { opacity: 0.4; cursor: default; }
-.nxPresPresentCount { font: 500 13px var(--nx-font-mono); color: #9aa0ad; }
+.nxPresPresentCount { font: 500 13px var(--nx-font-mono); color: var(--nx-pres-stage-muted); }
 
 /* ---- panels (share / analytics / rooms) ---- */
 .nxPresPanel { flex: 1; overflow-y: auto; padding: var(--nx-gap-4); display: flex; flex-direction: column; gap: var(--nx-gap-3); max-width: 880px; width: 100%; margin: 0 auto; }
