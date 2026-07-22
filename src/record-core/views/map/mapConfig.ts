@@ -61,6 +61,7 @@ export interface MapOptions {
   sizeField?: string;
   basemaps: BasemapId[]; // the offered set (switcher entries)
   defaultBasemap: BasemapId; // always a member of `basemaps`
+  projection: "flat" | "globe"; // flat mercator, or a 3D globe (Earth = globe + satellite + tilt)
   clustering: { enabled: boolean; radius: number; threshold: number };
   heatmap: { enabled: boolean; weightField?: string };
   camera: MapCamera;
@@ -97,6 +98,7 @@ export function resolveMapOptions(object: ObjectConfig, cfg: Record<string, unkn
     sizeField: str(cfg.sizeField),
     basemaps: offered,
     defaultBasemap,
+    projection: cfg.projection === "globe" ? "globe" : "flat",
     clustering: {
       enabled: bool(cfg.clustering, true),
       radius: num(cfg.clusterRadius, 50, 20, 100), // same range as the runtime slider
@@ -146,6 +148,10 @@ export const activeBasemap = (opts: MapOptions, viewState: Record<string, unknow
   const v = viewState.mapBasemap;
   return typeof v === "string" && opts.basemaps.includes(v as BasemapId) ? (v as BasemapId) : opts.defaultBasemap;
 };
+
+/* the active projection: the runtime override (viewState) else the config default */
+export const mapProjection = (opts: MapOptions, viewState: Record<string, unknown>): "flat" | "globe" =>
+  viewState.mapProjection === "globe" ? "globe" : viewState.mapProjection === "flat" ? "flat" : opts.projection;
 
 /* the points layer (records as pins/circles); default on */
 export const pointsOn = (viewState: Record<string, unknown>): boolean =>

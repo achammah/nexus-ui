@@ -31,6 +31,7 @@ const definition: ViewDefinition = {
     // basemaps (six types: streets/light/dark/satellite/hybrid/terrain)
     { key: "basemaps", label: "Basemaps offered", kind: "multiSelect", options: [...ALL_BASEMAPS] },
     { key: "defaultBasemap", label: "Default basemap", kind: "select", options: [...ALL_BASEMAPS] },
+    { key: "projection", label: "Projection", kind: "select", options: ["flat", "globe"] },
     // 3D / relief
     { key: "buildings3d", label: "3D buildings (vector basemaps)", kind: "boolean" },
     { key: "hillshade", label: "Terrain shading by default", kind: "boolean" },
@@ -90,6 +91,9 @@ const definition: ViewDefinition = {
     const rp = cfg.routeProfile;
     if (typeof rp === "string" && rp && !["driving", "walking", "cycling"].includes(rp))
       return `routeProfile “${rp}” is not one of driving, walking, cycling`;
+    const pj = cfg.projection;
+    if (typeof pj === "string" && pj && !["flat", "globe"].includes(pj))
+      return `projection “${pj}” is not one of flat, globe`;
     return null;
   },
 };

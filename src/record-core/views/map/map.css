@@ -392,6 +392,32 @@
 .nxMapChip { position: absolute; z-index: 5; pointer-events: none; }
 .nxMapChip--without { right: 10px; bottom: 26px; }
 .nxMapChip--tiles { right: 10px; top: 96px; }
+/* tile retry chip: top-centre (clear of the nav stack), interactive, prominent */
+.nxMapTileChip {
+  top: 12px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+  max-width: calc(100% - 20px);
+  z-index: 10;
+}
+.nxMapTileRetry {
+  pointer-events: auto;
+  font: var(--nx-text-micro);
+  padding: 3px 9px;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s);
+  background: var(--nx-bg-raised);
+  color: var(--nx-accent);
+  cursor: pointer;
+  box-shadow: var(--nx-shadow-1);
+}
+.nxMapTileRetry:hover { background: var(--nx-bg-sunken); }
+.nxMapTileRetry:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; }
 .nxMapEmpty { position: absolute; inset: 0; display: grid; place-items: center; z-index: 4; pointer-events: none; }
 .nxMapLoading {
   position: absolute;
@@ -463,6 +489,27 @@
 .nxMapTypeSwatch--terrain { background: linear-gradient(135deg, #eae1c9, #bdd9a1 60%, #8fb37a); }
 .nxMapTypeToggles { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--nx-border); display: flex; flex-direction: column; gap: 2px; }
 .nxMapTypeToggles .nxMapLayerRow svg { color: var(--nx-fg-muted); }
+
+/* projection segmented control (Flat / Globe / Earth) at the top of the panel */
+.nxMapProjRow { display: flex; gap: 2px; padding: 2px; margin-bottom: 8px; background: var(--nx-bg-sunken); border-radius: var(--nx-radius-m); }
+.nxMapProjBtn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--nx-fg-muted);
+  border-radius: var(--nx-radius-s);
+  cursor: pointer;
+  font: var(--nx-text-micro);
+  transition: color var(--nx-t-fast) var(--nx-ease), background var(--nx-t-fast) var(--nx-ease);
+}
+.nxMapProjBtn:hover { color: var(--nx-fg); }
+.nxMapProjBtn[data-active] { background: var(--nx-bg-raised); color: var(--nx-accent); box-shadow: var(--nx-shadow-1); }
+.nxMapProjBtn:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; }
 
 /* ── right-click context menu ── */
 .nxMapBackdrop { position: absolute; inset: 0; z-index: 11; background: transparent; border: 0; padding: 0; cursor: default; }

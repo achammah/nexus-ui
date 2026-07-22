@@ -36,7 +36,7 @@ import {
   toFeatureCollection,
   type LocatedRow,
 } from "./geo";
-import { basemapHasGlyphs, basemapIsVector, basemapStyle, fallbackStyle, isDarkBasemap } from "./basemaps";
+import { BASEMAP_LABELS, basemapHasGlyphs, basemapIsVector, basemapStyle, fallbackStyle, isDarkBasemap, type BasemapId } from "./basemaps";
 import {
   activeBasemap,
   buildings3dOn,
@@ -44,6 +44,7 @@ import {
   clustersOn,
   heatmapOn,
   hillshadeOn,
+  mapProjection,
   pointsOn,
   renderMode,
   resolveMapOptions,
@@ -167,22 +168,87 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   const surface = colors["nx-bg-raised"] || "rgba(255, 255, 255, 1)";
   const buildingColor = colors["nx-border-strong"] || "#c8c6c1";
 
-  /* ── basemap ── */
+  /* ── basemap + tile-load robustness ─────────────────────────────────────────
+     A basemap swap must never leave a blank canvas. The last-good basemap is
+     remembered; when a new style/tiles fail to load, we retry with backoff and then
+     REVERT to the last-good basemap with a visible retry chip. The token-only canvas
+     is reserved for a genuine offline FIRST load (no good basemap yet). Rapid/mid-load
+     switches are safe: the attempt re-arms per basemap, latest selection wins. ── */
   const basemap = activeBasemap(opts, viewState);
   const vectorActive = basemapIsVector(basemap);
-  const [styleFailed, setStyleFailed] = React.useState(false);
+  const [styleFailed, setStyleFailed] = React.useState(false); // genuine offline → token canvas
+  const [tileWarn, setTileWarn] = React.useState<{ failed: BasemapId; kept: BasemapId } | null>(null);
+  const [styleNonce, setStyleNonce] = React.useState(0); // bump forces a style re-fetch (retry)
+  const [switching, setSwitching] = React.useState(false); // crossfade dip during a swap
   const [ready, setReady] = React.useState(false);
   const loadedRef = React.useRef(false);
-  /* re-arm the offline-detect timer whenever the basemap changes */
+  const lastGoodRef = React.useRef<BasemapId | null>(null);
+  const retryRef = React.useRef(0);
+  const timersRef = React.useRef<{ watchdog?: ReturnType<typeof setTimeout>; fail?: ReturnType<typeof setTimeout> }>({});
+  const MAX_STYLE_RETRIES = 2;
+  // assigned once augments are known (below); lets succeed apply them without an
+  // ordering cycle (the basemap block sits above the augments block)
+  const applyAugmentsRef = React.useRef<(m: MaplibreMap) => void>(() => {});
+
+  const succeed = React.useCallback(
+    (map: MaplibreMap) => {
+      loadedRef.current = true;
+      retryRef.current = 0;
+      lastGoodRef.current = basemap;
+      clearTimeout(timersRef.current.watchdog);
+      clearTimeout(timersRef.current.fail);
+      setStyleFailed(false);
+      applyAugmentsRef.current(map);
+    },
+    [basemap],
+  );
+
+  /* retry-then-revert; never touches loadedRef so a load that lands mid-retry wins */
+  const evaluateFailure = React.useCallback(() => {
+    if (loadedRef.current) return;
+    if (retryRef.current < MAX_STYLE_RETRIES) {
+      retryRef.current += 1;
+      setStyleNonce((n) => n + 1); // re-fetch the style (re-requests its tiles)
+      return;
+    }
+    const good = lastGoodRef.current;
+    if (good && good !== basemap) {
+      setSwitching(false);
+      setTileWarn({ failed: basemap, kept: good });
+      onViewState({ mapBasemap: good, mapTypeOpen: false }); // keep the last working map, never blank
+    } else {
+      setStyleFailed(true); // first-load offline (no good basemap yet)
+    }
+  }, [basemap, onViewState]);
+  /* debounce a burst of tile errors into one failure verdict */
+  const scheduleFailure = React.useCallback(() => {
+    if (loadedRef.current) return;
+    clearTimeout(timersRef.current.fail);
+    timersRef.current.fail = setTimeout(evaluateFailure, 900);
+  }, [evaluateFailure]);
+
+  React.useEffect(() => {
+    retryRef.current = 0; // a NEW basemap gets a fresh retry budget (nonce retries keep theirs)
+  }, [basemap]);
   React.useEffect(() => {
     loadedRef.current = false;
     setStyleFailed(false);
-    const t = setTimeout(() => {
-      if (!loadedRef.current) setStyleFailed(true);
-    }, 6000);
-    return () => clearTimeout(t);
-  }, [basemap]);
-  const mapStyle = styleFailed ? fallbackStyle(colors["nx-bg-sunken"]) : basemapStyle(basemap);
+    clearTimeout(timersRef.current.watchdog);
+    clearTimeout(timersRef.current.fail);
+    timersRef.current.watchdog = setTimeout(evaluateFailure, 6000); // silent stall (no error event)
+    return () => {
+      clearTimeout(timersRef.current.watchdog);
+      clearTimeout(timersRef.current.fail);
+    };
+  }, [basemap, styleNonce, evaluateFailure]);
+
+  const rawStyle = styleFailed ? fallbackStyle(colors["nx-bg-sunken"]) : basemapStyle(basemap);
+  const mapStyle = React.useMemo(() => {
+    if (styleFailed || styleNonce === 0) return rawStyle;
+    // cache-bust so react-map-gl actually re-sets the style on a retry
+    if (typeof rawStyle === "string") return `${rawStyle}${rawStyle.includes("?") ? "&" : "?"}_r=${styleNonce}`;
+    return { ...rawStyle, metadata: { ...(rawStyle as { metadata?: Record<string, unknown> }).metadata, _r: styleNonce } };
+  }, [rawStyle, styleNonce, styleFailed]);
   const glyphs = !styleFailed && basemapHasGlyphs(basemap);
   const darkBasemap = !styleFailed && isDarkBasemap(basemap);
 
@@ -216,6 +282,17 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     }),
     [buildings3d, vectorActive, styleFailed, buildingColor, hillshade, darkBasemap, opts.terrain.demUrl, opts.terrain.exaggeration],
   );
+  /* projection (flat mercator · 3D globe). setStyle can reset it, so it is re-applied
+     on every style load (via the ref below), plus a live-toggle effect. */
+  const projection = mapProjection(opts, viewState);
+  applyAugmentsRef.current = (m: MaplibreMap) => {
+    applyAugments(m, augments);
+    try {
+      m.setProjection({ type: projection === "globe" ? "globe" : "mercator" });
+    } catch {
+      /* projection unsupported on this build — stays mercator */
+    }
+  };
   const applyAll = React.useCallback(() => {
     const map = mapRef.current?.getMap();
     if (map && map.isStyleLoaded()) applyAugments(map, augments);
@@ -223,12 +300,43 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   React.useEffect(() => {
     if (ready) applyAll();
   }, [ready, applyAll]);
+  /* live projection toggle (no style reload) */
+  React.useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (map && ready && map.isStyleLoaded()) {
+      try {
+        map.setProjection({ type: projection === "globe" ? "globe" : "mercator" });
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [projection, ready]);
+
+  /* projection presets: flat mercator · globe · earth (globe + satellite imagery + tilt) */
+  const earthBase: BasemapId = opts.basemaps.includes("satellite") ? "satellite" : opts.basemaps.includes("hybrid") ? "hybrid" : basemap;
+  const projectionMode: "flat" | "globe" | "earth" =
+    projection === "flat" ? "flat" : basemap === "satellite" || basemap === "hybrid" ? "earth" : "globe";
+  const setProjectionMode = React.useCallback(
+    (mode: "flat" | "globe" | "earth") => {
+      if (mode === "flat") {
+        onViewState({ mapProjection: "flat" });
+      } else if (mode === "globe") {
+        onViewState({ mapProjection: "globe" });
+      } else {
+        setTileWarn(null);
+        if (!reduceMotion && basemap !== earthBase) setSwitching(true);
+        onViewState({ mapProjection: "globe", mapBasemap: earthBase });
+        mapRef.current?.getMap().easeTo({ pitch: 55, duration: reduceMotion ? 0 : 800, essential: true });
+      }
+    },
+    [onViewState, reduceMotion, basemap, earthBase],
+  );
 
   /* ── basemap crossfade — a soft blur + opacity dip on the canvas while the new
-     style loads, cleared on the next idle, so a switch morphs instead of hard-flips ── */
-  const [switching, setSwitching] = React.useState(false);
+     style loads (switching state declared above), so a switch morphs, not flips ── */
   const pickBasemap = React.useCallback(
     (id: string) => {
+      setTileWarn(null); // a fresh user choice clears any prior "kept X" warning
       if (!reduceMotion && id !== basemap) setSwitching(true);
       onViewState({ mapBasemap: id, mapTypeOpen: false }); // picking a base closes the menu (overlay toggles keep it open)
     },
@@ -732,6 +840,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       data-map-buildings={augments.buildings3d ? "1" : "0"}
       data-map-hillshade={augments.hillshade ? "1" : "0"}
       data-map-switching={switching ? "1" : "0"}
+      data-map-projection={projection}
       data-map-points={mode.points ? "1" : "0"}
       data-map-heatmap={mode.heatmap ? "1" : "0"}
       data-map-clusterradius={clusRadius}
@@ -779,26 +888,18 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
         onMouseEnter={() => !drawing && setCursor("pointer")}
         onMouseLeave={() => setCursor(undefined)}
         onLoad={(e) => {
-          loadedRef.current = true;
           setReady(true);
-          applyAugments(e.target, augments);
+          succeed(e.target);
           syncGlState(e.target);
         }}
         onStyleData={(e) => {
           const map = e.target;
-          if (!map.isStyleLoaded()) return;
-          // a REAL basemap style finished loading — maplibre's `load` fires only
-          // once for the map, so mark loaded here too (a switch re-arms the offline
-          // timer by resetting loadedRef; without this a slow switch falsely falls
-          // back to the offline canvas). The fallback style itself never clears it.
-          if (map.getStyle()?.name !== "offline-fallback") {
-            loadedRef.current = true;
-            setStyleFailed(false);
-            applyAugments(map, augments);
-          }
+          // a REAL basemap style finished (maplibre fires `load` only once, so a
+          // switch is confirmed here); the fallback style never counts as good.
+          if (map.isStyleLoaded() && map.getStyle()?.name !== "offline-fallback") succeed(map);
         }}
         onError={() => {
-          if (!loadedRef.current) setStyleFailed(true);
+          if (!loadedRef.current) scheduleFailure(); // retry-then-revert, never blank
         }}
         onIdle={(e) => {
           syncGlState(e.target);
@@ -1057,6 +1158,8 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
             buildings3d={buildings3d}
             hillshade={hillshade}
             vectorActive={vectorActive}
+            projectionMode={projectionMode}
+            onProjection={setProjectionMode}
             onToggleBuildings={(on) => onViewState({ mapBuildings3d: on })}
             onToggleHillshade={(on) => onViewState({ mapHillshade: on })}
           />
@@ -1134,9 +1237,40 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
           <Badge>{withoutLocation} without location</Badge>
         </span>
       )}
+      {tileWarn && (
+        <span className="nxMapChip nxMapChip--tiles nxMapTileChip" role="status" data-testid="map-tile-warn">
+          <Badge tone="warn">{BASEMAP_LABELS[tileWarn.failed]} tiles unavailable · kept {BASEMAP_LABELS[tileWarn.kept]}</Badge>
+          <button
+            type="button"
+            className="nxMapTileRetry"
+            data-testid="map-tile-retry"
+            onClick={() => {
+              const failed = tileWarn.failed;
+              setTileWarn(null);
+              retryRef.current = 0;
+              if (!reduceMotion) setSwitching(true);
+              onViewState({ mapBasemap: failed });
+            }}
+          >
+            Retry
+          </button>
+        </span>
+      )}
       {styleFailed && (
-        <span className="nxMapChip nxMapChip--tiles" role="status" data-testid="map-tiles-fallback">
+        <span className="nxMapChip nxMapChip--tiles nxMapTileChip" role="status" data-testid="map-tiles-fallback">
           <Badge tone="warn">Map tiles unavailable</Badge>
+          <button
+            type="button"
+            className="nxMapTileRetry"
+            data-testid="map-tiles-retry"
+            onClick={() => {
+              setStyleFailed(false);
+              retryRef.current = 0;
+              setStyleNonce((n) => n + 1);
+            }}
+          >
+            Retry
+          </button>
         </span>
       )}
       {located.length === 0 && (

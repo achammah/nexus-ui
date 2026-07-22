@@ -27,6 +27,11 @@ Every capability is config-composable, each with a sensible default (it works ou
 |---|---|---|
 | `basemaps` | all six | the offered set: `streets`, `light`, `dark`, `satellite`, `hybrid`, `terrain` |
 | `defaultBasemap` | first offered | the base shown on open |
+| `projection` | `"flat"` | `"flat"` (mercator) or `"globe"` (a 3D sphere); the map-type menu also offers an Earth preset = globe + satellite + tilt |
+
+**Projection (flat / globe / Earth).** The map-type menu carries a projection switch. `Flat` is a normal mercator map. `Globe` renders the world as a rotatable 3D sphere (drag to spin, zoom to fly in) with records projected on its surface. `Earth` is a preset that combines the globe with the satellite basemap and a tilt for a Google-Earth feel (and real elevation when a `terrainDemUrl` seam is wired). A dark data-viz globe is just `Globe` + the `dark` basemap. Requires maplibre-gl v5+.
+
+**Tile-load reliability.** A basemap swap never leaves a blank canvas. If a new style or its tiles fail to load, the view retries with backoff and then reverts to the last-good basemap with a `Tiles unavailable · Retry` chip over the working map. The token-only offline canvas is reserved for a genuine offline first load. Rapid or mid-load switches are safe (latest selection wins).
 
 **3D and relief.**
 
