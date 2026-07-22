@@ -291,6 +291,71 @@
 .nxWbOverlayBody .excalidraw .default-sidebar-trigger,
 .nxWbOverlayBody .excalidraw .HintViewer,
 .nxWbOverlayBody .excalidraw .help-icon { display: none !important; }
+
+/* ---------- Whiteboard depth: ops rail (rendered inside excalidraw's top-right) ----
+   The surfaced controls excalidraw has no toolbar for (palette, templates, boolean/
+   arrange, presence). Styled from --nx-* so it reads as one native panel with the
+   excalidraw island and re-derives on any theme/skin flip, like the chrome above. */
+.nxWbCanvasInner { height: 100%; position: relative; }
+.nxWbOverlayBody .nxWbCanvasInner { height: 100%; }
+/* the ops rail floats over the canvas top-right, a sibling of excalidraw's UI (so it
+   is never clipped by excalidraw's narrow renderTopRightUI slot) */
+.nxWbOps { position: absolute; top: 10px; right: 10px; z-index: 4; display: flex; align-items: center; gap: 4px; }
+.nxWbOps--compact { gap: 2px; }
+.nxWbOps--compact .nxWbOpsBtn { width: 28px; height: 28px; }
+.nxWbOpsCluster { position: relative; display: flex; }
+.nxWbOpsBtn {
+  display: inline-flex; align-items: center; justify-content: center; position: relative;
+  width: 32px; height: 32px; border-radius: var(--nx-radius-s);
+  background: var(--nx-bg-raised); color: var(--nx-fg-muted);
+  border: 1px solid var(--nx-border); cursor: pointer;
+  transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease), border-color var(--nx-t-fast) var(--nx-ease);
+}
+.nxWbOpsBtn:hover:not(:disabled) { background: var(--nx-bg-sunken); color: var(--nx-fg); border-color: var(--nx-border-strong); }
+.nxWbOpsBtn[data-open] { background: var(--nx-accent-soft); color: var(--nx-accent); border-color: var(--nx-accent); }
+.nxWbOpsBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.nxWbOpsDot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--nx-ok); box-shadow: 0 0 0 2px var(--nx-bg-raised); }
+.nxWbOpsPanel {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; min-width: 184px;
+  display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  background: var(--nx-bg-raised); border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m); box-shadow: var(--nx-shadow-2);
+  animation: nxWbPop var(--nx-t-fast) var(--nx-ease-settle) both;
+}
+@keyframes nxWbPop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.nxWbOpsItem {
+  display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 9px;
+  background: transparent; border: 0; border-radius: var(--nx-radius-s);
+  color: var(--nx-fg); font: var(--nx-text-body); text-align: left; cursor: pointer;
+}
+.nxWbOpsItem:hover:not(:disabled) { background: var(--nx-accent-soft); color: var(--nx-accent); }
+.nxWbOpsItem:disabled { opacity: 0.4; cursor: not-allowed; }
+.nxWbOpsItemIcon { display: inline-flex; color: var(--nx-fg-faint); }
+.nxWbOpsItem:hover:not(:disabled) .nxWbOpsItemIcon { color: var(--nx-accent); }
+.nxWbOpsSep { height: 1px; background: var(--nx-border); margin: 4px 2px; }
+.nxWbOpsHint { padding: 3px 9px 6px; font: var(--nx-text-meta); color: var(--nx-fg-faint); }
+.nxWbOpsChannels { display: flex; gap: 3px; padding: 2px; margin-bottom: 4px; background: var(--nx-bg-sunken); border-radius: var(--nx-radius-s); }
+.nxWbOpsChan { flex: 1; padding: 5px; border: 0; background: transparent; color: var(--nx-fg-muted); font: var(--nx-text-meta); font-weight: 600; border-radius: calc(var(--nx-radius-s) - 1px); cursor: pointer; }
+.nxWbOpsChan[data-active] { background: var(--nx-bg-raised); color: var(--nx-accent); box-shadow: var(--nx-shadow-1); }
+.nxWbOpsSwatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 2px; }
+.nxWbOpsSwatch { width: 26px; height: 26px; border-radius: var(--nx-radius-s); border: 1px solid var(--nx-border); cursor: pointer; padding: 0; transition: transform var(--nx-t-fast) var(--nx-ease); }
+.nxWbOpsSwatch:hover { transform: scale(1.08); border-color: var(--nx-border-strong); }
+.nxWbOpsSwatch--none { background:
+  linear-gradient(45deg, transparent 45%, var(--nx-danger) 45%, var(--nx-danger) 55%, transparent 55%),
+  var(--nx-bg); }
+.nxWbPresenceList { display: flex; flex-wrap: wrap; gap: 5px; padding: 2px 4px; }
+.nxWbAvatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 26px; padding: 0 6px; border-radius: 999px;
+  color: #fff; font: var(--nx-text-meta); font-weight: 700; letter-spacing: 0.02em;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25);
+}
+.nxWbOpsToast {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 6; max-width: 260px;
+  padding: 8px 11px; background: var(--nx-fg); color: var(--nx-bg);
+  border-radius: var(--nx-radius-s); font: var(--nx-text-meta); box-shadow: var(--nx-shadow-2);
+  animation: nxWbPop var(--nx-t-fast) var(--nx-ease-settle) both;
+}
 /* RecordCard — shared compact record card (map popups, gallery tiles); title/meta
    typography rides the kanban family (nxKTitle/nxKMeta), chrome stays the host's */
 .nxRecordCard { display: grid; gap: 2px; min-width: 0; }

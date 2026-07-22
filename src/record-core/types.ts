@@ -14,6 +14,10 @@ export type FieldType =
    One-way re-export (NotionEditor imports nothing from here → no cycle). */
 export type { Block } from "./NotionEditor";
 
+/* whiteboard field config — the client-composable canvas option set (pure module,
+   no cycle: config imports nothing from here). */
+import type { WhiteboardConfig } from "./fields/whiteboard/config";
+
 /* Shaped (composite) field values — CRM-grade structured values. Lists
    (emails/phones/links) are plain string[]. `currency` (a bare number) stays
    untouched; `money` is the shaped alternative carrying its ISO 4217 code. */
@@ -107,6 +111,11 @@ export interface FieldDef {
      changes for this field. Present → the record page mounts the review surface
      (editor + rail); absent → the field renders as a plain editor. */
   suggestTaskId?: string;
+  /* whiteboard field: the config-composable canvas option set — which tools are
+     surfaced, default palette, insertable templates, boolean/arrange ops, record-drag,
+     presence, canvas modes. Omitted → full depth (everything on). See
+     fields/whiteboard/config.ts + RECIPES "Add a whiteboard (canvas) field". */
+  whiteboard?: WhiteboardConfig;
 }
 
 export interface ObjectConfig {
