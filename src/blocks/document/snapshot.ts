@@ -1,4 +1,5 @@
 import { bid, type Block } from "../../record-core/NotionEditor";
+import type { Suggestion } from "../../record-core/useSuggestions";
 
 /* A free-surface DOCUMENT persists as ONE snapshot: the block array plus page chrome
    (title, optional icon/cover, page width). Mirrors the workbook block's snapshot shape so
@@ -13,6 +14,9 @@ export interface DocumentSnapshot {
   coverY?: number;            // vertical focal point (0–100%) for an uploaded image cover
   pageWidth?: "narrow" | "wide";
   version?: number;
+  /* tracked changes (Word×Notion "suggesting" mode) — persisted alongside the document so a
+     review survives a reload; the accepted text lives in `blocks`, the review state here. */
+  suggestions?: Suggestion[];
 }
 
 export const DOCUMENT_STORE_PREFIX = "document:";

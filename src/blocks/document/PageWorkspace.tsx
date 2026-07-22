@@ -7,7 +7,7 @@ import type { DocumentSnapshot } from "./snapshot";
 import { PageIcon } from "../../record-core/PageIcon";
 import {
   seedPageStore, createPage, duplicatePage, deletePage, movePage, renamePage, setPageIcon, setPageCover,
-  setPageBlocks, toggleFavorite, setActive, setExpanded, breadcrumb, backlinksOf, searchPages, rootPages, childrenOf,
+  setPageBlocks, setPageSuggestions, toggleFavorite, setActive, setExpanded, breadcrumb, backlinksOf, searchPages, rootPages, childrenOf,
   type PageStore, type PageNode,
 } from "./page-store";
 import "./page-workspace.css";
@@ -150,9 +150,10 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
     return <div className={`nxWs${className ? " " + className : ""}`} {...rest}><div className="nxWs-blank"><FileText size={22} /><p>No pages yet.</p><button onClick={() => create(null)}>Create the first page</button></div></div>;
   }
 
-  const activeSnap: DocumentSnapshot = { id: active.id, title: active.title, icon: active.icon, cover: active.cover, coverY: active.coverY, blocks: active.blocks, pageWidth: "narrow" };
+  const activeSnap: DocumentSnapshot = { id: active.id, title: active.title, icon: active.icon, cover: active.cover, coverY: active.coverY, blocks: active.blocks, suggestions: active.suggestions, pageWidth: "narrow" };
   const onDocChange = (snap: DocumentSnapshot) => mutate((s) => {
     let n = setPageBlocks(s, active.id, snap.blocks);
+    if (snap.suggestions !== active.suggestions) n = setPageSuggestions(n, active.id, snap.suggestions ?? []);
     if (snap.title !== active.title) n = renamePage(n, active.id, snap.title);
     if (snap.icon !== active.icon) n = setPageIcon(n, active.id, snap.icon);
     if (snap.cover !== active.cover || snap.coverY !== active.coverY) n = setPageCover(n, active.id, snap.cover, snap.coverY);

@@ -1,12 +1,14 @@
 import * as React from "react";
 import { NotionEditor, type Block, type EditorConfig, type PageContext } from "../../record-core/NotionEditor";
+import { useSuggestions, type Suggestion } from "../../record-core/useSuggestions";
+import { SuggestionPanel } from "../../record-core/SuggestionPanel";
 import { DocumentOutline } from "../../record-core/DocumentOutline";
 import { exportMarkdown, exportHtml, exportPdf, exportDocx, importFile, IMPORT_ACCEPT } from "../../record-core/editor-io";
 import { seedDocument, coverBackground, isPresetCover, type DocumentSnapshot } from "./snapshot";
 import { PageIcon } from "../../record-core/PageIcon";
 import { IconPicker } from "./IconPicker";
 import { CoverPicker } from "./CoverPicker";
-import { PanelRight, Search, Download, Upload, FileText, FileCode, FileType, Image as ImageIcon, ChevronDown, X, Maximize2, Minimize2, Replace, ListTree, Check } from "lucide-react";
+import { PanelRight, Search, Download, Upload, FileText, FileCode, FileType, Image as ImageIcon, ChevronDown, X, Maximize2, Minimize2, Replace, ListTree, Check, PenLine, MessageSquareText } from "lucide-react";
 import "./document.css";
 
 /* DocumentSurface — a Notion×Google-Docs document as a standalone surface. Free-surface:
@@ -25,6 +27,7 @@ export interface DocumentConfig {
   wordCount?: boolean;          // the word/char readout (default true)
   findReplace?: boolean;        // the find & replace bar (default true)
   pageWidthToggle?: boolean;    // narrow/wide toggle (default true)
+  suggestions?: boolean;        // the Editing↔Suggesting mode toggle + review panel (default true)
 }
 
 export interface DocumentSurfaceProps {
@@ -35,6 +38,8 @@ export interface DocumentSurfaceProps {
   actions?: React.ReactNode;
   config?: DocumentConfig;
   readOnly?: boolean;
+  /* the reviewer whose edits are attributed when Suggesting mode is on (Word × Google-Docs) */
+  author?: { name: string; color?: string };
   /* the page-workspace seam — forwarded to the editor so sub-page blocks + [[page:]] links
      resolve/open/create (PageWorkspace passes this; a standalone document omits it) */
   pageContext?: PageContext;
@@ -65,7 +70,45 @@ const stripMarks = (t: string) =>
   t.replace(/\[\[[ch]:[a-z]+\|([^\]]*)\]\]/g, "$1").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/(\*\*|__|~~|\+\+|==|`|\*|_|^#{1,3}\s)/gm, "");
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export function DocumentSurface({ value, onChange, reloadNonce = 0, className, actions, config, readOnly, pageContext, footer, topBar, ...rest }: DocumentSurfaceProps) {
+/* minimal single-region diff between two versions of a block's text: strip the common
+   prefix + suffix, leaving the changed middle on each side (original → replacement). An
+   insertion has empty original, a deletion has empty replacement. One region per call —
+   enough for the contiguous edit a keystroke makes; multi-region edits collapse into the
+   spanning region, which is honest (the whole touched span becomes one tracked change). */
+function diffRegion(oldText: string, newText: string): { original: string; replacement: string; at: number } | null {
+  if (oldText === newText) return null;
+  let p = 0;
+  const max = Math.min(oldText.length, newText.length);
+  while (p < max && oldText[p] === newText[p]) p++;
+  let s = 0;
+  while (s < max - p && oldText[oldText.length - 1 - s] === newText[newText.length - 1 - s]) s++;
+  return { original: oldText.slice(p, oldText.length - s), replacement: newText.slice(p, newText.length - s), at: p };
+}
+
+/* Render pending tracked changes into the block text as visible marks, so an EXPORT is honest
+   about what is still suggested rather than silently shipping the accepted-only text: an
+   insertion becomes [+…+], a deletion [-…-], a substitution [-old-][+new+]. Used by every
+   export format when suggestions are pending. */
+function blocksWithTrackedMarks(blocks: Block[], pending: Suggestion[]): Block[] {
+  if (!pending.length) return blocks;
+  return blocks.map((b) => {
+    if (!("text" in b)) return b;
+    let text = (b as { text: string }).text;
+    const anchored = pending.filter((c) => c.blockId === b.id).sort((a, c) => (c.offset ?? 0) - (a.offset ?? 0));
+    for (const c of anchored) {
+      const at = Math.min(c.offset ?? text.length, text.length);
+      const mark = (c.original ? `[-${c.original}-]` : "") + (c.replacement ? `[+${c.replacement}+]` : "");
+      text = text.slice(0, at) + mark + text.slice(at + (c.original?.length || 0));
+    }
+    for (const c of pending) {
+      if (c.blockId || !c.original) continue;
+      if (text.includes(c.original)) text = text.replace(c.original, `[-${c.original}-][+${c.replacement}+]`);
+    }
+    return { ...b, text } as Block;
+  });
+}
+
+export function DocumentSurface({ value, onChange, reloadNonce = 0, className, actions, config, readOnly, author, pageContext, footer, topBar, ...rest }: DocumentSurfaceProps) {
   const cfg = config || {};
   const showOutline = cfg.outline !== false;
   const showIO = cfg.importExport !== false && !readOnly;
@@ -89,7 +132,60 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
   }, []);
   const setBlocks = React.useCallback((blocks: Block[]) => patch({ blocks }), [patch]);
 
+  // --- Suggesting mode: Word × Notion tracked changes ---
+  const showSuggest = cfg.suggestions !== false && !readOnly;
+  const [mode, setMode] = React.useState<"edit" | "suggest">("edit");
+  const suggestions = React.useMemo(() => snap.suggestions ?? [], [snap.suggestions]);
+  const setSuggestions = React.useCallback((next: Suggestion[]) => patch({ suggestions: next }), [patch]);
+  const pendingSug = React.useMemo(() => suggestions.filter((c) => c.status === "pending"), [suggestions]);
+  const sug = useSuggestions(snap.blocks, setBlocks, suggestions, setSuggestions);
+  const [hoveredChange, setHoveredChange] = React.useState<string | null>(null);
+  const [sugOpen, setSugOpen] = React.useState(false);
+  const whoName = author?.name || "You";
+  const whoColor = author?.color;
+
+  // capture an edit as a tracked change instead of committing it (suggest mode). Each changed
+  // block is diffed against its committed (original) text; one pending change per block, keyed
+  // to the block, so repeated keystrokes REPLACE rather than stack. Structural edits (add/
+  // remove/retype a block) commit straight through — v1 tracks TEXT edits within a block.
+  const captureSuggestion = React.useCallback((nextBlocks: Block[]) => {
+    const committed = snapRef.current.blocks;
+    const sameShape = nextBlocks.length === committed.length && nextBlocks.every((b, i) => committed[i]?.id === b.id && committed[i]?.type === b.type);
+    if (!sameShape) { patch({ blocks: nextBlocks }); return; }
+    const byId = new Map(committed.map((b) => [b.id, b] as const));
+    let nextSug = snapRef.current.suggestions ?? [];
+    let touched = false;
+    for (const nb of nextBlocks) {
+      const ob = byId.get(nb.id); if (!ob) continue;
+      const oldText = "text" in ob ? ob.text : ""; const newText = "text" in nb ? nb.text : "";
+      if (oldText === newText) continue;
+      touched = true;
+      const sid = `sug-${nb.id}`;
+      const region = diffRegion(oldText, newText);
+      const rest = nextSug.filter((c) => c.id !== sid);
+      nextSug = region && (region.original || region.replacement)
+        ? [...rest, { id: sid, blockId: nb.id, offset: region.at, original: region.original, replacement: region.replacement, status: "pending", author: whoName, authorColor: whoColor, createdAt: Date.now() } as Suggestion]
+        : rest;
+    }
+    if (touched) patch({ suggestions: nextSug });
+  }, [patch, whoName, whoColor]);
+
+  const onEditorChange = React.useCallback((next: Block[]) => {
+    if (mode === "suggest") captureSuggestion(next); else setBlocks(next);
+  }, [mode, captureSuggestion, setBlocks]);
+
+  // when a change resolves the panel may empty; open it whenever there is something to review
+  React.useEffect(() => { if (mode === "suggest" || suggestions.length) setSugOpen(true); }, [mode, suggestions.length]);
+
   const mainRef = React.useRef<HTMLDivElement | null>(null);
+  // jump-to: scroll the doc to the block carrying a change and flash its inline widget
+  const scrollToChange = React.useCallback((id: string) => {
+    const ch = (snapRef.current.suggestions ?? []).find((c) => c.id === id); if (!ch) return;
+    const needle = ch.original || ch.replacement;
+    const blk = snapRef.current.blocks.find((b) => "text" in b && (b as { text: string }).text.includes(needle));
+    if (blk) mainRef.current?.querySelector(`[data-testid="block-${blk.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHoveredChange(id);
+  }, []);
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const [ioOpen, setIoOpen] = React.useState(false);
   const [findOpen, setFindOpen] = React.useState(false);
@@ -135,6 +231,8 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
 
   // export / import
   const withBusy = async (label: string, fn: () => unknown) => { setBusy(label); setIoOpen(false); try { await fn(); } finally { setBusy(null); } };
+  // exports render pending tracked changes as visible marks so nothing is silently dropped
+  const exportBlocks = pendingSug.length > 0 ? blocksWithTrackedMarks(snap.blocks, pendingSug) : snap.blocks;
   const onImport = async (file: File | undefined) => {
     if (!file) return;
     setImporting(true); setIoOpen(false);
@@ -189,6 +287,17 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
           {showWordCount && <span className="nxDoc-count" data-testid="doc-wordcount">{counts.words} {counts.words === 1 ? "word" : "words"} · {counts.chars} chars</span>}
           {busy && <span className="nxDoc-busy">{busy}…</span>}
           {importing && <span className="nxDoc-busy">Importing…</span>}
+          {showSuggest && (
+            <div className="nxDoc-modeswitch" data-testid="doc-mode-switch" role="radiogroup" aria-label="Editing mode">
+              <button className={`nxDoc-mode${mode === "edit" ? " is-on" : ""}`} data-testid="doc-mode-edit" role="radio" aria-checked={mode === "edit"} title="Editing — changes apply directly" onClick={() => setMode("edit")}><PenLine size={13} /> Editing</button>
+              <button className={`nxDoc-mode${mode === "suggest" ? " is-on" : ""}`} data-testid="doc-mode-suggest" role="radio" aria-checked={mode === "suggest"} title="Suggesting — your edits become tracked changes" onClick={() => setMode("suggest")}><MessageSquareText size={13} /> Suggesting</button>
+            </div>
+          )}
+          {showSuggest && (suggestions.length > 0) && (
+            <button className={`nxDoc-btn${sugOpen ? " is-on" : ""}`} title="Review suggestions" data-testid="doc-suggest-toggle" onClick={() => setSugOpen((v) => !v)}>
+              <MessageSquareText size={15} />{sug.pending > 0 && <span className="nxDoc-badge">{sug.pending}</span>}
+            </button>
+          )}
           {showFind && (
             <button className={`nxDoc-btn${findOpen ? " is-on" : ""}`} title="Find & replace" data-testid="doc-find-toggle" onClick={() => setFindOpen((v) => !v)}><Search size={15} /></button>
           )}
@@ -203,11 +312,11 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
               <button className="nxDoc-btn nxDoc-btn-primary" data-testid="doc-io-menu" onClick={() => setIoOpen((v) => !v)}><Download size={14} /> Export <ChevronDown size={13} /></button>
               {ioOpen && (
                 <div className="nxDoc-io-pop nx-pop-in" data-testid="doc-io-pop">
-                  <div className="nxDoc-io-h">Export</div>
-                  <button data-testid="export-md" onClick={() => withBusy("Markdown", () => exportMarkdown(snap.blocks, snap.title))}><FileText size={15} /> Markdown (.md)</button>
-                  <button data-testid="export-html" onClick={() => withBusy("HTML", () => exportHtml(snap.blocks, snap.title))}><FileCode size={15} /> HTML (.html)</button>
-                  <button data-testid="export-pdf" onClick={() => withBusy("PDF", () => exportPdf(snap.blocks, snap.title))}><FileType size={15} /> PDF (print)</button>
-                  <button data-testid="export-docx" onClick={() => withBusy("Word", () => exportDocx(snap.blocks, snap.title))}><FileText size={15} /> Word (.docx)</button>
+                  <div className="nxDoc-io-h">Export{pendingSug.length > 0 ? ` · ${pendingSug.length} tracked change${pendingSug.length === 1 ? "" : "s"} marked` : ""}</div>
+                  <button data-testid="export-md" onClick={() => withBusy("Markdown", () => exportMarkdown(exportBlocks, snap.title))}><FileText size={15} /> Markdown (.md)</button>
+                  <button data-testid="export-html" onClick={() => withBusy("HTML", () => exportHtml(exportBlocks, snap.title))}><FileCode size={15} /> HTML (.html)</button>
+                  <button data-testid="export-pdf" onClick={() => withBusy("PDF", () => exportPdf(exportBlocks, snap.title))}><FileType size={15} /> PDF (print)</button>
+                  <button data-testid="export-docx" onClick={() => withBusy("Word", () => exportDocx(exportBlocks, snap.title))}><FileText size={15} /> Word (.docx)</button>
                   <div className="nxDoc-io-h">Import</div>
                   <button data-testid="import-file" onClick={() => { setIoOpen(false); fileRef.current?.click(); }}><Upload size={15} /> From file (.docx, .md, .html)</button>
                 </div>
@@ -293,7 +402,9 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
                   placeholder="Untitled" onChange={(e) => patch({ title: e.target.value })} />
               </div>
             )}
-            <NotionEditor blocks={snap.blocks} onChange={setBlocks} readOnly={readOnly} config={cfg.editor} pageContext={pageContext} />
+            <NotionEditor blocks={snap.blocks} onChange={onEditorChange} readOnly={readOnly} config={cfg.editor} pageContext={pageContext}
+              changes={mode === "suggest" || suggestions.length ? pendingSug : undefined}
+              hoveredChange={hoveredChange} onHoverChange={setHoveredChange} />
             {footer}
           </div>
         </div>
@@ -305,7 +416,33 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
             <DocumentOutline blocks={snap.blocks} containerRef={mainRef} />
           </aside>
         )}
+
+        {/* the review rail — inline tracked changes' accept/reject/jump-to, alongside the doc */}
+        {showSuggest && sugOpen && suggestions.length > 0 && !touch && (
+          <aside className="nxDoc-rail nxDoc-rail-sug" data-testid="doc-suggest-rail">
+            <SuggestionPanel changes={suggestions} hovered={hoveredChange} onHover={setHoveredChange}
+              onFocus={scrollToChange} onAccept={sug.accept} onReject={sug.reject} onUndo={sug.undo}
+              onAcceptAll={sug.acceptAll} onRejectAll={sug.rejectAll} onComment={(id, note) => setSuggestions((snapRef.current.suggestions ?? []).map((c) => c.id === id ? { ...c, reason: note } as Suggestion : c))} />
+          </aside>
+        )}
       </div>
+
+      {showSuggest && sugOpen && suggestions.length > 0 && touch && (
+        <>
+          <div className="nxDoc-scrim" data-testid="suggest-scrim" onClick={() => setSugOpen(false)} />
+          <aside className="nxDoc-outline-sheet" data-testid="doc-suggest-sheet">
+            <div className="nxDoc-sheet-grip" />
+            <div className="nxDoc-sheet-head"><MessageSquareText size={14} /> Suggestions
+              <button onClick={() => setSugOpen(false)} data-testid="suggest-sheet-close" aria-label="Close suggestions"><X size={16} /></button>
+            </div>
+            <div className="nxDoc-sheet-body">
+              <SuggestionPanel changes={suggestions} hovered={hoveredChange} onHover={setHoveredChange}
+                onFocus={(id) => { scrollToChange(id); setSugOpen(false); }} onAccept={sug.accept} onReject={sug.reject} onUndo={sug.undo}
+                onAcceptAll={sug.acceptAll} onRejectAll={sug.rejectAll} onComment={(id, note) => setSuggestions((snapRef.current.suggestions ?? []).map((c) => c.id === id ? { ...c, reason: note } as Suggestion : c))} />
+            </div>
+          </aside>
+        </>
+      )}
 
       {showOutline && outlineOn && touch && (
         <>

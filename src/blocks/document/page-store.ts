@@ -1,4 +1,5 @@
 import { bid, type Block } from "../../record-core/NotionEditor";
+import type { Suggestion } from "../../record-core/useSuggestions";
 
 /* page-store — the SPINE of the page workspace. In Notion "everything is a page; pages
    nest and reference each other." This is that model.
@@ -25,6 +26,7 @@ export interface PageNode {
   parentId: string | null;     // null = a top-level page
   order: number;               // fractional sort key among siblings
   blocks: Block[];             // the page body
+  suggestions?: Suggestion[];  // tracked changes (suggesting mode), persisted with the page
   favorite?: boolean;
   createdAt: number;
   updatedAt: number;
@@ -142,6 +144,7 @@ export const renamePage = (s: PageStore, id: string, title: string): PageStore =
 export const setPageIcon = (s: PageStore, id: string, icon?: string): PageStore => patch(s, id, { icon });
 export const setPageCover = (s: PageStore, id: string, cover?: string, coverY?: number): PageStore => patch(s, id, { cover, coverY });
 export const setPageBlocks = (s: PageStore, id: string, blocks: Block[]): PageStore => patch(s, id, { blocks });
+export const setPageSuggestions = (s: PageStore, id: string, suggestions: Suggestion[]): PageStore => patch(s, id, { suggestions });
 export const toggleFavorite = (s: PageStore, id: string): PageStore => patch(s, id, { favorite: !s.pages[id]?.favorite });
 export const setActive = (s: PageStore, id: string): PageStore => ({ ...s, activeId: id });
 export const setExpanded = (s: PageStore, id: string, open: boolean): PageStore => ({ ...s, expanded: { ...s.expanded, [id]: open } });

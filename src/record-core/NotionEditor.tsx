@@ -316,7 +316,7 @@ async function fileToDataUri(f: File): Promise<string | null> {
 /* an inline edit suggestion, rendered as a tracked change (Google-Docs style).
    The suggestions LAYER (a separate lane) produces + resolves these; this editor
    only RENDERS the ones it's handed. */
-export interface InlineChange { id: string; original: string; replacement: string; status: "pending" | "accepted" | "rejected"; kind?: string }
+export interface InlineChange { id: string; original: string; replacement: string; status: "pending" | "accepted" | "rejected"; kind?: string; author?: string; authorColor?: string; createdAt?: number; blockId?: string; offset?: number }
 
 export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -369,12 +369,16 @@ function inlineMd(escaped: string): string {
 
 function buildBlockHtml(text: string, chs: InlineChange[]): string {
   if (!chs.length) return inlineMd(esc(text));
-  const found = chs.map((c) => ({ c, i: text.indexOf(c.original) })).filter((x) => x.i >= 0).sort((a, b) => a.i - b.i);
+  // a change with real original text anchors at that substring; an empty-original insertion
+  // (live-capture path) anchors at its captured offset (clamped into the current text).
+  const found = chs.map((c) => ({ c, i: c.original !== "" ? text.indexOf(c.original) : Math.min(c.offset ?? text.length, text.length) })).filter((x) => x.i >= 0).sort((a, b) => a.i - b.i);
   let pos = 0, html = "";
   for (const { c, i } of found) {
     if (i < pos) continue; // overlapping match — skip
     html += inlineMd(esc(text.slice(pos, i)));
-    html += `<span class="ne-chg" data-cid="${c.id}" contenteditable="false"><del>${esc(c.original)}</del><ins>${esc(c.replacement)}</ins></span>`;
+    const who = c.author ? esc(c.author) : "";
+    const authorAttr = who ? ` data-author="${who}" title="${who}${c.original && c.replacement ? " · edit" : c.replacement ? " · insertion" : " · deletion"}"` : "";
+    html += `<span class="ne-chg" data-cid="${c.id}"${authorAttr} contenteditable="false"><del>${esc(c.original)}</del><ins>${esc(c.replacement)}</ins></span>`;
     pos = i + c.original.length;
   }
   html += inlineMd(esc(text.slice(pos)));
@@ -931,7 +935,11 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
   function changesFor(b: Block): InlineChange[] {
     if (b.type === "divider" || b.type === "image" || b.type === "table" || b.type === "page") return [];
     const t = (b as Extract<Block, { text: string }>).text;
-    return pendingChanges.filter((c) => t.includes(c.original));
+    // a change ANCHORED to a block (blockId set — the live-capture path) belongs only to that
+    // block; an un-anchored change (server-proposed substitution) is matched by its original
+    // substring as before. This keeps insertions/deletions (empty original) from matching
+    // every block via includes("").
+    return pendingChanges.filter((c) => (c.blockId ? c.blockId === b.id : c.original !== "" && t.includes(c.original)));
   }
 
   /* drag-to-reorder — grabbed by the handle grip; a drop line marks the target slot */
@@ -995,6 +1003,12 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
         if (el.innerHTML !== html) el.innerHTML = html;
       },
       onInput: (e: React.FormEvent<HTMLElement>) => onTextInput(b, e.currentTarget),
+      // on blur, reconcile the DOM back to the model. In suggesting mode the block's committed
+      // text stays the ORIGINAL while a tracked change holds the edit, so the widget only
+      // materializes once focus leaves (the focus guard keeps typing caret-safe) — this is what
+      // renders the del/ins after a suggested edit. In normal editing it is a no-op (the built
+      // html already equals the typed text).
+      onBlur: (e: React.FocusEvent<HTMLElement>) => { const el = e.currentTarget; const html = buildBlockHtml(bText, mine); if (el.innerHTML !== html) el.innerHTML = html; },
       onKeyDown: (e: React.KeyboardEvent) => onTextKeyDown(e, b),
       onPaste: (e: React.ClipboardEvent) => onPasteBlock(e, b),
       onMouseOver: mine.length ? (e: React.MouseEvent) => { const s = (e.target as HTMLElement).closest?.("[data-cid]"); onHoverChange?.(s ? s.getAttribute("data-cid") : null); } : undefined,
