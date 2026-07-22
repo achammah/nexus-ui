@@ -71,9 +71,11 @@ export function SuggestionPanel({
             {ch.kind && <span className="nxSug-kind">{ch.kind}</span>}
           </div>
           <div className="nxSug-diff">
-            <span className="nxSug-del">{ch.original}</span>
+            {/* preview* wins when set (a consumer whose strings are markup supplies a readable
+                projection); the engine still folds the real original/replacement */}
+            <span className="nxSug-del">{ch.previewOriginal ?? ch.original}</span>
             <span className="nxSug-arrow">→</span>
-            <span className="nxSug-ins">{ch.replacement}</span>
+            <span className="nxSug-ins">{ch.previewReplacement ?? ch.replacement}</span>
           </div>
           {ch.reason && (
             <div className={`nxSug-why${expanded.has(ch.id) ? " is-open" : ""}`}>{ch.reason}</div>

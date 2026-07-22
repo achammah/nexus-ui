@@ -17,6 +17,14 @@ import type { Block, InlineChange } from "./NotionEditor";
 
 export interface Suggestion extends InlineChange {
   reason?: string;
+  /* What the REVIEW RAIL should show for this change, when the raw strings are not readable.
+     `original`/`replacement` are what the engine folds — for a consumer whose targets are HTML
+     (a slide region, an element's markup) those are markup blobs, and the panel renders them as
+     TEXT, so a card would show a wall of tags. Set these to plain-text projections and the panel
+     displays them instead; the fold still uses the real strings. Review metadata only — the
+     editor's inline widgets are unaffected (that is `InlineChange`). */
+  previewOriginal?: string;
+  previewReplacement?: string;
 }
 
 const isTextBlock = (b: Block): b is Extract<Block, { text: string }> =>
