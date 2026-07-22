@@ -378,7 +378,9 @@ function buildBlockHtml(text: string, chs: InlineChange[]): string {
     html += inlineMd(esc(text.slice(pos, i)));
     const who = c.author ? esc(c.author) : "";
     const authorAttr = who ? ` data-author="${who}" title="${who}${c.original && c.replacement ? " · edit" : c.replacement ? " · insertion" : " · deletion"}"` : "";
-    html += `<span class="ne-chg" data-cid="${c.id}"${authorAttr} contenteditable="false"><del>${esc(c.original)}</del><ins>${esc(c.replacement)}</ins></span>`;
+    // render inline tokens (color/highlight/link/page-link/marks) INSIDE the widget too, so a
+    // suggested edit that carries formatting never leaks a raw [[…]] token in the del/ins.
+    html += `<span class="ne-chg" data-cid="${c.id}"${authorAttr} contenteditable="false"><del>${inlineMd(esc(c.original))}</del><ins>${inlineMd(esc(c.replacement))}</ins></span>`;
     pos = i + c.original.length;
   }
   html += inlineMd(esc(text.slice(pos)));
@@ -1345,7 +1347,9 @@ const NE_CSS = `
 /* wrap at word boundaries, breaking only a word too long to fit — never mid-word per
    character (word-break:break-word crushed to one letter per line in a narrow column) */
 .ne-block{flex:1;min-width:0;outline:none;line-height:1.72;white-space:pre-wrap;word-break:normal;overflow-wrap:break-word;min-height:1.2em;caret-color:var(--nx-accent)}
-.ne-block:empty::before{content:attr(data-ph);color:var(--nx-fg-faint);pointer-events:none}
+/* the placeholder ("Type '/' for commands…", "Heading") shows ONLY on the FOCUSED empty
+   block — like Notion. Otherwise every empty block stacks the hint and reads as broken. */
+.ne-block:empty:focus::before{content:attr(data-ph);color:var(--nx-fg-faint);pointer-events:none}
 .ne-root.is-ro .ne-block:empty::before,.ne-root.is-ro .ne-cap:empty::before{content:""}
 .ne-p{font-size:18px;color:var(--nx-fg);margin:0}
 .ne-h1{font-size:31px;font-weight:800;letter-spacing:-.03em;line-height:1.15;margin:16px 0 2px}

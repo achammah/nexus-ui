@@ -218,11 +218,57 @@ export function seedPageStore(): PageStore {
   const pages: Record<string, PageNode> = {};
   const add = (p: Omit<PageNode, "createdAt" | "updatedAt">) => { pages[p.id] = { ...p, createdAt: now(), updatedAt: now() }; };
   add({ id: home, title: "Aurora Handbook", icon: "📘", cover: "preset:dusk", parentId: null, order: 0, blocks: [
-    B({ type: "callout", text: "Everything here is a **page**. Pages nest and link — try the tree on the left, `Cmd-K`, or type `[[` to link a page.", emoji: "💡", tone: "info" }),
+    B({ type: "callout", text: "Everything here is a **page**. Pages nest and link — try the tree on the left, `Cmd-K`, or type `[[` to link a page. Welcome, [[c:gray|You]].", emoji: "💡", tone: "info" }),
+    B({ type: "p", text: "This handbook is the single source of truth for how the Aurora team designs, builds, and ships. It is a living document — edit any block, drag to reorder, or switch to **Suggesting** mode to propose a change without overwriting." }),
+
+    B({ type: "h2", text: "How this handbook works" }),
+    B({ type: "p", text: "Every heading you see appears in the outline on the right — click one to jump to it. The document scrolls independently of the app, so long pages stay navigable." }),
+    B({ type: "ul", text: "**Pages** nest infinitely — a page can hold sub-pages, which hold their own." }),
+    B({ type: "ul", text: "**Links** with `[[` connect any two pages; backlinks are tracked automatically." }),
+    B({ type: "ul", text: "**Suggesting** mode turns your edits into tracked changes an editor can accept or reject." }),
+
     B({ type: "h2", text: "Spaces" }),
+    B({ type: "p", text: "The handbook is organised into spaces. Each is a page you can open, nest under, and link to." }),
     B({ type: "page", pageId: eng }),
     B({ type: "page", pageId: roadmap }),
     B({ type: "p", text: "See the [[page:seed-eng|Engineering]] space for architecture + onboarding." }),
+
+    B({ type: "h2", text: "Working agreements" }),
+    B({ type: "h3", text: "Communication" }),
+    B({ type: "p", text: "Default to writing. A decision that lives only in a call is a decision that will be re-litigated. Capture it here, link it from the relevant page, and move on." }),
+    B({ type: "h3", text: "Reviews" }),
+    B({ type: "p", text: "Every change gets a second pair of eyes. In this handbook that means Suggesting mode; in code it means a pull request. Nothing ships unreviewed." }),
+    B({ type: "quote", text: "Make it work, make it right, make it fast — in that order, and never skip the middle step." }),
+
+    B({ type: "h2", text: "The build loop" }),
+    B({ type: "p", text: "We ship in small, reversible steps. The loop is deliberately boring so the interesting work stays in the product, not the process." }),
+    B({ type: "ol", text: "Frame the problem in one sentence with a verifiable outcome." }),
+    B({ type: "ol", text: "Build the smallest thing that proves the outcome." }),
+    B({ type: "ol", text: "Review, measure, and either keep going or roll back." }),
+    B({ type: "h3", text: "Definition of done" }),
+    B({ type: "todo", text: "The outcome is verifiable and verified", checked: true }),
+    B({ type: "todo", text: "A reviewer has accepted the change", checked: false }),
+    B({ type: "todo", text: "Docs and this handbook reflect reality", checked: false }),
+
+    B({ type: "h2", text: "Architecture at a glance" }),
+    B({ type: "p", text: "The workspace is a flat store of pages; structure is expressed by `parentId` and fractional ordering, never by nesting the data itself. That keeps moves O(1) and links stable." }),
+    B({ type: "code", text: "interface PageNode { id; title; parentId; order; blocks; suggestions? }", lang: "ts" }),
+    B({ type: "p", text: "The deep dive lives in [[page:seed-arch|Architecture]]." }),
+
+    B({ type: "divider" }),
+
+    B({ type: "h2", text: "Onboarding" }),
+    B({ type: "p", text: "New to the team? Start with the [[page:seed-onboarding|Onboarding]] checklist under Engineering, then read the two spaces above top to bottom." }),
+    B({ type: "h3", text: "Your first week" }),
+    B({ type: "todo", text: "Read this handbook end to end", checked: false }),
+    B({ type: "todo", text: "Pair with someone on a real change", checked: false }),
+    B({ type: "todo", text: "Ship one small thing to production", checked: false }),
+
+    B({ type: "h2", text: "FAQ" }),
+    B({ type: "toggle", text: "How do I propose a change without overwriting?", collapsed: true }),
+    B({ type: "p", text: "Switch to Suggesting mode (top-right). Your edits become tracked changes with your name on them; an editor accepts or rejects each one.", indent: 1 }),
+    B({ type: "toggle", text: "How do I link another page?", collapsed: true }),
+    B({ type: "p", text: "Type `[[` and start searching — pick a page or create a new one inline.", indent: 1 }),
   ] });
   add({ id: eng, title: "Engineering", icon: "🛠️", parentId: home, order: 0, blocks: [
     B({ type: "p", text: "Sub-pages:" }),
