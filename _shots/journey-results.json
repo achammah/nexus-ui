@@ -87,7 +87,7 @@
   {
     "name": "flattened pdf downloads",
     "pass": true,
-    "detail": "31032 bytes"
+    "detail": "31033 bytes"
   },
   {
     "name": "flattened pdf has cert page (3 pages)",
@@ -221,6 +221,21 @@
   },
   {
     "name": "valid input clears the error",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "cc recipient can be added",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "review lists the copied-in recipient",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "delivery policy is recorded in the audit trail",
     "pass": true,
     "detail": ""
   },

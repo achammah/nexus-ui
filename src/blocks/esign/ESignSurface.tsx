@@ -7,7 +7,8 @@
 import * as React from "react";
 import {
   Baseline, Calendar, CheckSquare, ChevronDownSquare, Signature, Type,
-  Check, ChevronLeft, ChevronRight, Copy, CopyPlus, GripVertical, LayoutTemplate, Minus, Plus, Trash2, X,
+  ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Copy, CopyPlus, GripVertical,
+  LayoutTemplate, Mail, Minus, Plus, Trash2, X,
   type LucideIcon,
 } from "lucide-react";
 import "./esign.css";
@@ -15,9 +16,9 @@ import {
   activeSignerIds, appendEvent, computeCertificateId, envelopeStatusAfterSign,
   esignId, fieldDefaultSize, FIELD_TYPE_LABEL, FIELD_FORMAT_LABEL, fieldFormatError,
   isEsignSnapshot, isFieldFilled,
-  seedEnvelope, SIGNER_COLOR_COUNT, ESIGN_SEED_STATES,
+  seedEnvelope, SIGNER_COLOR_COUNT, ESIGN_SEED_STATES, DEFAULT_REMINDER_POLICY,
   type ESignConfig, type EsignEnvelope, type EsignField, type EsignFieldType,
-  type EsignFieldFormat, type EsignFieldValue, type EsignSeedState, type EsignSendRequest, type EsignSignatureValue, type EsignSigner,
+  type EsignCcRecipient, type EsignFieldFormat, type EsignFieldValue, type EsignSeedState, type EsignSendRequest, type EsignSignatureValue, type EsignSigner,
 } from "./snapshot";
 import { downloadBytes, fileToEsignDocument, flattenEnvelope, openDocument, type PdfDocHandle, type PdfPageHandle } from "./pdf";
 import { initialsOf, SignatureDialog, signatureFontCss } from "./SignatureDialog";
@@ -259,6 +260,20 @@ export default function ESignSurface({
     setNotice(`Added to ${added.length} more page${added.length === 1 ? "" : "s"}.`);
   };
 
+  /* ---- copied-in recipients */
+  const addCc = () => commit((cur) => ({
+    ...cur,
+    cc: [...(cur.cc ?? []), { id: esignId(), name: "", email: "" }],
+  }));
+  const patchCc = (id: string, patch: Partial<EsignCcRecipient>) => commit((cur) => ({
+    ...cur,
+    cc: (cur.cc ?? []).map((c) => (c.id === id ? { ...c, ...patch } : c)),
+  }));
+  const removeCc = (id: string) => commit((cur) => ({
+    ...cur,
+    cc: (cur.cc ?? []).filter((c) => c.id !== id),
+  }));
+
   const removeField = (id: string) => {
     const f = env.fields.find((x) => x.id === id);
     commit((cur) => appendEvent(
@@ -331,9 +346,23 @@ export default function ESignSurface({
       requiredFieldCount: env.fields.filter((f) => f.signerId === s.id && f.required).length,
       signingUrl: (config?.signingUrlTemplate ?? "demo://sign/{envelopeId}/{signerId}")
         .replace("{envelopeId}", env.id).replace("{signerId}", s.id),
+      message: s.message?.trim() || undefined,
     })),
+    cc: env.cc ?? [],
+    reminders: env.reminders ?? DEFAULT_REMINDER_POLICY,
     sentAt: new Date().toISOString(),
   });
+
+  /** human-readable delivery policy, appended to the sent audit entry so the
+   *  choice is recorded rather than silently dropped */
+  const policySummary = (req: EsignSendRequest) => {
+    const bits: string[] = [];
+    bits.push(req.reminders.everyDays > 0 ? `reminders every ${req.reminders.everyDays}d` : "no reminders");
+    bits.push(req.reminders.expiresInDays > 0 ? `expires in ${req.reminders.expiresInDays}d` : "no expiry");
+    const cc = req.cc.filter((c) => c.email.trim());
+    if (cc.length) bits.push(`cc ${cc.map((c) => c.email).join(", ")}`);
+    return bits.join(" · ");
+  };
 
   const confirmSend = async () => {
     const req = buildSendRequest();
@@ -349,7 +378,10 @@ export default function ESignSurface({
     } else {
       detail = `Sent to ${req.recipients.length} recipient${req.recipients.length === 1 ? "" : "s"} (${env.signingOrder}) — demo send, no email delivered`;
     }
-    commit((cur) => appendEvent({ ...cur, status: "sent", sentAt: req.sentAt }, "sent", "Owner", detail));
+    commit((cur) => appendEvent(
+      { ...cur, status: "sent", sentAt: req.sentAt },
+      "sent", "Owner", `${detail} · ${policySummary(req)}`,
+    ));
     setSendOpen(false);
     setTab("sign");
     setSigningAs(null);
@@ -676,9 +708,9 @@ export default function ESignSurface({
                       />
                       {editable && (
                         <span className="nxEsSignerBtns">
-                          <button type="button" className="nxEsIconBtn" aria-label="Move up" disabled={i === 0} onClick={() => moveSigner(s.id, -1)}>↑</button>
-                          <button type="button" className="nxEsIconBtn" aria-label="Move down" disabled={i === arr.length - 1} onClick={() => moveSigner(s.id, 1)}>↓</button>
-                          <button type="button" className="nxEsIconBtn" aria-label={`Remove ${s.name || s.role}`} onClick={() => removeSigner(s.id)}>×</button>
+                          <button type="button" className="nxEsIconBtn" aria-label="Move up" disabled={i === 0} onClick={() => moveSigner(s.id, -1)}><ArrowUp size={13} /></button>
+                          <button type="button" className="nxEsIconBtn" aria-label="Move down" disabled={i === arr.length - 1} onClick={() => moveSigner(s.id, 1)}><ArrowDown size={13} /></button>
+                          <button type="button" className="nxEsIconBtn" aria-label={`Remove ${s.name || s.role}`} onClick={() => removeSigner(s.id)}><X size={13} /></button>
                         </span>
                       )}
                     </div>
@@ -695,11 +727,54 @@ export default function ESignSurface({
                       />
                       <span className="nxEsSignerCount">{env.fields.filter((f) => f.signerId === s.id).length} fields</span>
                     </div>
+                    {editable && (
+                      <textarea
+                        className="nxEsInlineInput isNote" rows={2}
+                        placeholder="Note for this recipient (optional)"
+                        aria-label={`Message for ${s.name || s.role}`}
+                        data-testid={`esign-signer-message-${s.id}`}
+                        value={s.message ?? ""}
+                        onChange={(e) => patchSigner(s.id, { message: e.target.value })}
+                      />
+                    )}
                   </li>
                 ))}
               </ol>
               {editable && (
                 <button type="button" className="nxEsBtn isBlock" onClick={addSigner} data-testid="esign-add-signer"><Plus size={14} /> Add signer</button>
+              )}
+              <p className="nxEsHint">
+                {env.signingOrder === "sequential"
+                  ? `Signs in order: ${[...env.signers].sort((a, b) => a.order - b.order).map((s) => s.name || s.role || "?").join(" → ")}`
+                  : "Everyone can sign at the same time."}
+              </p>
+            </section>
+
+            <section className="nxEsRailSec">
+              <h3 className="nxEsRailTitle">Copied in</h3>
+              <p className="nxEsHint">Receive the completed document. Nothing to sign.</p>
+              {(env.cc ?? []).map((c) => (
+                <div key={c.id} className="nxEsCcRow">
+                  <Mail size={13} aria-hidden />
+                  <input
+                    className="nxEsInlineInput" placeholder="email@company.com" type="email"
+                    aria-label="Copied-in recipient email" readOnly={!editable}
+                    data-testid={`esign-cc-${c.id}`}
+                    value={c.email}
+                    onChange={(e) => patchCc(c.id, { email: e.target.value })}
+                  />
+                  {editable && (
+                    <button
+                      type="button" className="nxEsIconBtn" aria-label="Remove copied-in recipient"
+                      onClick={() => removeCc(c.id)}
+                    ><X size={13} /></button>
+                  )}
+                </div>
+              ))}
+              {editable && (
+                <button type="button" className="nxEsBtn isBlock" onClick={addCc} data-testid="esign-add-cc">
+                  <Plus size={14} /> Add CC
+                </button>
               )}
             </section>
 
@@ -1068,6 +1143,48 @@ export default function ESignSurface({
                   ))}
                 </tbody>
               </table>
+              {/* delivery policy — carried to the send seam so a backend can
+                  enforce it; the demo send records it in the audit trail */}
+              <div className="nxEsSendPolicy">
+                <label className="nxEsPolicyRow">
+                  <span>Remind unsigned recipients every</span>
+                  <select
+                    className="nxEsInput isTight" data-testid="esign-remind-every"
+                    value={(env.reminders ?? DEFAULT_REMINDER_POLICY).everyDays}
+                    onChange={(e) => commit((cur) => ({
+                      ...cur,
+                      reminders: { ...(cur.reminders ?? DEFAULT_REMINDER_POLICY), everyDays: Number(e.target.value) },
+                    }))}
+                  >
+                    <option value={0}>never</option>
+                    <option value={1}>day</option>
+                    <option value={3}>3 days</option>
+                    <option value={7}>week</option>
+                  </select>
+                </label>
+                <label className="nxEsPolicyRow">
+                  <span>Expires after</span>
+                  <select
+                    className="nxEsInput isTight" data-testid="esign-expires-in"
+                    value={(env.reminders ?? DEFAULT_REMINDER_POLICY).expiresInDays}
+                    onChange={(e) => commit((cur) => ({
+                      ...cur,
+                      reminders: { ...(cur.reminders ?? DEFAULT_REMINDER_POLICY), expiresInDays: Number(e.target.value) },
+                    }))}
+                  >
+                    <option value={0}>never</option>
+                    <option value={7}>7 days</option>
+                    <option value={14}>14 days</option>
+                    <option value={30}>30 days</option>
+                    <option value={90}>90 days</option>
+                  </select>
+                </label>
+              </div>
+              {(env.cc ?? []).some((c) => c.email.trim()) && (
+                <p className="nxEsHint">
+                  Copied in on completion: {(env.cc ?? []).filter((c) => c.email.trim()).map((c) => c.email).join(", ")}
+                </p>
+              )}
               <div className={config?.onSend ? "nxEsNotice isInfo" : "nxEsNotice"} role="note">
                 {config?.onSend
                   ? "Delivery is wired to your configured send handler."

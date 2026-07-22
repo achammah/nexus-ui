@@ -101,7 +101,26 @@ export interface EsignSigner {
   status: EsignSignerStatus;
   viewedAt?: string;
   signedAt?: string;
+  /** a note included in this recipient's invitation, shown to them when signing */
+  message?: string;
 }
+
+/** A copied-in recipient: receives the completed document, signs nothing. */
+export interface EsignCcRecipient {
+  id: string;
+  name: string;
+  email: string;
+}
+
+/** Delivery policy carried with the envelope and handed to the send seam. */
+export interface EsignReminderPolicy {
+  /** re-notify unsigned recipients every N days; 0 = no reminders */
+  everyDays: number;
+  /** envelope expires N days after sending; 0 = never */
+  expiresInDays: number;
+}
+
+export const DEFAULT_REMINDER_POLICY: EsignReminderPolicy = { everyDays: 3, expiresInDays: 30 };
 
 export interface EsignAuditEvent {
   id: string;
@@ -142,6 +161,10 @@ export interface EsignEnvelope {
   signingOrder: EsignSigningOrder;
   document: EsignDocument | null;
   signers: EsignSigner[];
+  /** copied-in recipients — receive the completed document, sign nothing */
+  cc?: EsignCcRecipient[];
+  /** reminder + expiry policy applied when the envelope is sent */
+  reminders?: EsignReminderPolicy;
   fields: EsignField[];
   events: EsignAuditEvent[];
   templates: EsignTemplate[];
@@ -165,7 +188,13 @@ export interface EsignSendRequest {
     fieldCount: number; requiredFieldCount: number;
     /** where the recipient signs; a real backend generates + mails this link */
     signingUrl: string;
+    /** per-recipient note included in their invitation */
+    message?: string;
   }>;
+  /** copied-in recipients — send them the completed document, no signing link */
+  cc: EsignCcRecipient[];
+  /** reminder cadence + expiry the backend should enforce */
+  reminders: EsignReminderPolicy;
   sentAt: string;
 }
 

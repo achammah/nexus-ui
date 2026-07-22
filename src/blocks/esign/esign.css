@@ -552,3 +552,15 @@
 .nxEsPropActions { display: flex; gap: var(--nx-gap-1); }
 .nxEsPropActions .nxEsBtn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; }
 .nxEsFillInput.isInvalid { outline: 2px solid var(--nx-danger); outline-offset: -1px; background: var(--nx-danger-soft); }
+
+/* copied-in recipients + delivery policy */
+.nxEsCcRow { display: flex; align-items: center; gap: 6px; color: var(--nx-fg-faint); }
+.nxEsCcRow .nxEsInlineInput { flex: 1; min-width: 0; }
+.nxEsInlineInput.isNote { resize: vertical; font-size: var(--nx-text-micro); margin-top: 4px; }
+.nxEsSendPolicy {
+  display: flex; flex-wrap: wrap; gap: var(--nx-gap-3);
+  padding: var(--nx-gap-2) 0;
+  border-top: 1px solid var(--nx-border);
+}
+.nxEsPolicyRow { display: flex; align-items: center; gap: var(--nx-gap-1); font-size: var(--nx-text-meta); color: var(--nx-fg-muted); }
+.nxEsInput.isTight { width: auto; padding: 3px 6px; }
