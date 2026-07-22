@@ -219,9 +219,10 @@
    per theme. Excalidraw stamps .theme--dark for dark but NO class for light, so the
    base .excalidraw (0,2,0, beats excalidraw's .excalidraw 0,1,0) covers light and the
    .theme--dark selector (0,3,0, beats excalidraw's .excalidraw.theme--dark 0,2,0)
-   covers dark. */
-.nxWbCanvas .excalidraw, .nxWbCanvas .excalidraw.theme--dark,
-.nxWbOverlayBody .excalidraw, .nxWbOverlayBody .excalidraw.theme--dark {
+   covers dark. Scoped to .nxWbCanvasInner — the wrapper WhiteboardCanvas itself
+   renders — so every host (record-field well, mobile overlay, a future standalone
+   page) inherits the same native chrome from one scope. */
+.nxWbCanvasInner .excalidraw, .nxWbCanvasInner .excalidraw.theme--dark {
   /* surfaces */
   --island-bg-color: var(--nx-bg-raised);
   --default-bg-color: var(--nx-bg-sunken);
@@ -274,23 +275,178 @@
   /* semantic */
   --color-danger: var(--nx-danger);
   --color-danger-background: var(--nx-danger-soft);
+  --color-danger-text: var(--nx-danger);
+  --color-danger-dark: var(--nx-danger);
+  --color-danger-darker: var(--nx-danger);
+  --color-danger-darkest: var(--nx-danger);
+  --color-danger-icon-background: var(--nx-danger-soft);
+  --color-danger-icon-color: var(--nx-danger);
   --color-warning-background: var(--nx-warn-soft);
+  --color-warning-dark: var(--nx-warn);
+  --color-warning-icon-background: var(--nx-warn-soft);
+  --color-warning-icon-color: var(--nx-warn);
+  --color-success: var(--nx-ok);
   --color-success-text: var(--nx-ok);
+  /* chrome text — the face excalidraw draws menus, panels and labels with */
+  --ui-font: var(--nx-font-sans);
+  --text-primary-color: var(--nx-fg);
+  --text-color: var(--nx-fg);
+  --popup-text-color: var(--nx-fg);
+  --input-label-color: var(--nx-fg-muted);
+  --icon-fill-color: var(--nx-fg-muted);
+  --keybinding-color: var(--nx-fg-faint);
+  --link-color: var(--nx-accent);
+  /* remaining border families (dividers, dialogs, inputs, outlines) */
+  --default-border-color: var(--nx-border);
+  --dialog-border-color: var(--nx-border);
+  --sidebar-border-color: var(--nx-border);
+  --input-border-color: var(--nx-border);
+  --color-border-outline: var(--nx-border-strong);
+  --color-border-outline-variant: var(--nx-border);
+  /* gray-button ramp (context-menu border, misc chrome fills) + selected states */
+  --button-gray-1: var(--nx-bg-sunken);
+  --button-gray-2: var(--nx-border);
+  --button-gray-3: var(--nx-border-strong);
+  --button-selected-bg: var(--nx-accent-soft);
+  --button-selected-hover-bg: var(--nx-accent-soft);
+  --button-selected-border: var(--nx-accent);
+  /* focus + selection highlights */
+  --focus-highlight-color: var(--nx-accent-soft);
+  --select-highlight-color: var(--nx-accent);
+  /* muted fg steps */
+  --color-muted-darker: var(--nx-fg-muted);
+  --color-muted-darkest: var(--nx-fg);
+  /* dialog controls (save-as-image and friends): text fields, radio groups,
+     switches, sliders, scrollbars — the app's own form-control grammar */
+  --ExcTextField--background: var(--nx-bg);
+  --ExcTextField--readonly--background: var(--nx-bg-sunken);
+  --ExcTextField--border: var(--nx-border);
+  --ExcTextField--readonly--border: var(--nx-border);
+  --ExcTextField--border-hover: var(--nx-border-strong);
+  --ExcTextField--border-active: var(--nx-accent);
+  --ExcTextField--color: var(--nx-fg);
+  --ExcTextField--readonly--color: var(--nx-fg-muted);
+  --ExcTextField--label-color: var(--nx-fg-muted);
+  --RadioGroup-background: var(--nx-bg-sunken);
+  --RadioGroup-border: var(--nx-border);
+  --RadioGroup-choice-color-on: var(--nx-accent);
+  --RadioGroup-choice-color-off: var(--nx-fg-muted);
+  --RadioGroup-choice-color-off-hover: var(--nx-fg);
+  --RadioGroup-choice-background-on: var(--nx-bg-raised);
+  --RadioGroup-choice-background-on-hover: var(--nx-bg-raised);
+  --RadioGroup-choice-background-on-active: var(--nx-bg-raised);
+  --RadioGroup-choice-background-off: transparent;
+  --RadioGroup-choice-background-off-active: var(--nx-bg-sunken);
+  --Switch-track-background: var(--nx-border);
+  --Switch-hover-background: var(--nx-border-strong);
+  --Switch-active-background: var(--nx-accent);
+  --Switch-thumb-background: var(--nx-bg-raised);
+  --color-slider-track: var(--nx-border);
+  --color-slider-thumb: var(--nx-accent);
+  --scrollbar-thumb: var(--nx-border-strong);
+  --scrollbar-thumb-hover: var(--nx-fg-faint);
+  --ImageExportModal-preview-border: var(--nx-border);
   /* the HTML chrome adopts our type; the canvas hand-drawn font is unaffected
      (drawn to the <canvas>, not via CSS font-family) */
   font-family: var(--nx-font-sans);
 }
 /* the toolbar island reads as a floating native panel, not a boxed sub-window */
-.nxWbCanvas .excalidraw .Island,
-.nxWbOverlayBody .excalidraw .Island { border: 1px solid var(--nx-border); }
+.nxWbCanvasInner .excalidraw .Island { border: 1px solid var(--nx-border); }
+/* native control tightness: tool buttons take the app's small-control radius
+   (the ops-rail button geometry), not excalidraw's larger rounding */
+.nxWbCanvasInner .excalidraw .ToolIcon__icon { border-radius: var(--nx-radius-s); }
+/* the numbered keycap digits under each tool are excalidraw's loudest signature —
+   no native Nexus control carries shortcut digits (the shortcuts themselves still
+   work; excalidraw's own zen mode sets the same precedent) */
+.nxWbCanvasInner .excalidraw .ToolIcon__keybinding { display: none !important; }
+/* zoom + undo/redo islands (bottom-left) take the same island grammar as the
+   toolbar — a real border + shadow instead of excalidraw's 1px surface ring — and
+   their buttons go quiet (transparent, hover-sunken) like every native icon button;
+   the vendor paints them var(--color-surface-low) with !important, hence ours */
+.nxWbCanvasInner .excalidraw .zoom-actions,
+.nxWbCanvasInner .excalidraw .undo-redo-buttons,
+.nxWbCanvasInner .excalidraw .eraser-buttons {
+  background-color: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  box-shadow: var(--nx-shadow-1);
+}
+.nxWbCanvasInner .excalidraw .undo-redo-buttons button,
+.nxWbCanvasInner .excalidraw .eraser-buttons button,
+.nxWbCanvasInner .excalidraw .zoom-actions button { background-color: transparent !important; }
+.nxWbCanvasInner .excalidraw .undo-redo-buttons button:hover,
+.nxWbCanvasInner .excalidraw .eraser-buttons button:hover,
+.nxWbCanvasInner .excalidraw .zoom-actions button:hover { background-color: var(--nx-bg-sunken) !important; }
+/* properties-panel section headings take the app's field-label grammar (the
+   .nxRecordBlock-label / .nxFieldLabel voice) instead of excalidraw's plain h3s */
+.nxWbCanvasInner .excalidraw .panelColumn h3,
+.nxWbCanvasInner .excalidraw .panelColumn legend,
+.nxWbCanvasInner .excalidraw .panelColumn .control-label {
+  font: var(--nx-text-meta); font-weight: 600; color: var(--nx-fg-muted);
+  letter-spacing: var(--nx-label-tracking); text-transform: var(--nx-label-transform);
+}
+/* menus + the right-click context menu read as the app's own popovers (the
+   .nxWbOpsPanel grammar): raised surface, real border, soft accent hover — not
+   excalidraw's filled-accent hover with inverted text */
+.nxWbCanvasInner .excalidraw .dropdown-menu-container { border: 1px solid var(--nx-border); }
+.nxWbCanvasInner .excalidraw .context-menu {
+  background-color: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-2);
+  padding: 6px;
+}
+.nxWbCanvasInner .excalidraw .context-menu-item { border-radius: var(--nx-radius-s); }
+.nxWbCanvasInner .excalidraw .context-menu-item:hover { color: var(--nx-accent); background-color: var(--nx-accent-soft); }
+.nxWbCanvasInner .excalidraw .context-menu-item:hover.dangerous { color: var(--nx-danger); background-color: var(--nx-danger-soft); }
+.nxWbCanvasInner .excalidraw .context-menu-item:hover.dangerous .context-menu-item__label { color: var(--nx-danger); }
+.nxWbCanvasInner .excalidraw .context-menu-item__shortcut { color: var(--nx-fg-faint); opacity: 1; }
+/* dark theme: excalidraw hardcodes a #363541 hover inside the left panel's local
+   scope — re-derive it from the tokens like everything else */
+.nxWbCanvasInner .excalidraw.theme--dark .App-menu__left {
+  --button-hover-bg: var(--nx-bg-sunken);
+  --button-bg: var(--nx-bg-raised);
+}
 /* trim foreign excalidraw UI we do not expose — the library, the keyboard-hint
-   banner, and the help-dialog trigger: a clean embedded canvas, not a standalone app */
-.nxWbCanvas .excalidraw .default-sidebar-trigger,
-.nxWbCanvas .excalidraw .HintViewer,
-.nxWbCanvas .excalidraw .help-icon,
-.nxWbOverlayBody .excalidraw .default-sidebar-trigger,
-.nxWbOverlayBody .excalidraw .HintViewer,
-.nxWbOverlayBody .excalidraw .help-icon { display: none !important; }
+   banner, and the help-dialog trigger: a clean embedded canvas, not a standalone app.
+   The standalone laser quick-toggle island (shown while collaborating) joins them:
+   it collides with the ops rail's corner and the laser tool stays one click away in
+   the toolbar's extra-tools menu. */
+.nxWbCanvasInner .excalidraw .default-sidebar-trigger,
+.nxWbCanvasInner .excalidraw .HintViewer,
+.nxWbCanvasInner .excalidraw .help-icon,
+.nxWbCanvasInner .excalidraw .Island:has(> .ToolIcon__LaserPointer) { display: none !important; }
+/* ---- control density: the app's rail grammar, not the vendor's touch-first 36px.
+   Excalidraw sizes every chrome control from these two vars (tool buttons, the
+   hamburger, panel button rows), so one override re-derives the whole surface at the
+   DataTable/ops-rail density. Scoped to the DESKTOP layout — the mobile layout
+   (fullscreen overlay, short wells) keeps vendor touch sizes. */
+.nxWbCanvasInner .excalidraw:not(.excalidraw--mobile) {
+  --default-button-size: 2rem;
+  --lg-button-size: 2rem;
+  --lg-icon-size: 1rem;
+}
+/* the toolbar island closes up to the ops-rail pill: same 3px padding, same 2px
+   button gap (the rail is the native reference sitting right beside it) */
+.nxWbCanvasInner .excalidraw:not(.excalidraw--mobile) .App-toolbar { --padding: 0.75; }
+.nxWbCanvasInner .excalidraw:not(.excalidraw--mobile) .App-toolbar > .Stack_horizontal { --gap: 0.5; }
+/* the ops rail owns the canvas's top-right corner (it is a canvas-level sibling, not
+   a child of excalidraw's top grid) — reserve its footprint so the vendor toolbar,
+   centered in the FULL canvas width, never slides under it */
+.nxWbCanvasInner:has(.nxWbOps) .excalidraw:not(.excalidraw--mobile) .App-menu_top { margin-right: 184px; }
+/* menus (main menu, extra tools) take the app popover item grammar — soft accent
+   hover, small radius — matching the context menu and the ops-rail panels */
+.nxWbCanvasInner .excalidraw .dropdown-menu .dropdown-menu-item { border-radius: var(--nx-radius-s); }
+.nxWbCanvasInner .excalidraw .dropdown-menu .dropdown-menu-item:hover {
+  background-color: var(--nx-accent-soft); color: var(--nx-accent);
+}
+.nxWbCanvasInner .excalidraw .dropdown-menu .dropdown-menu-item--selected { background-color: var(--nx-accent-soft); color: var(--nx-accent); }
+/* floating one-off buttons (scroll-back pill, exit-zen) read as native raised chips */
+.nxWbCanvasInner .excalidraw .scroll-back-to-content,
+.nxWbCanvasInner .excalidraw .layer-ui__wrapper .disable-zen-mode {
+  background-color: var(--nx-bg-raised);
+  box-shadow: var(--nx-shadow-1);
+  font: var(--nx-text-meta); font-weight: 600; color: var(--nx-fg-muted);
+}
 
 /* ---------- Whiteboard depth: ops rail (rendered inside excalidraw's top-right) ----
    The surfaced controls excalidraw has no toolbar for (palette, templates, boolean/

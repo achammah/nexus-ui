@@ -1,7 +1,7 @@
 import * as React from "react";
 import {
   Excalidraw, MainMenu, getSceneVersion,
-  convertToExcalidrawElements, viewportCoordsToSceneCoords, CaptureUpdateAction,
+  convertToExcalidrawElements, viewportCoordsToSceneCoords, CaptureUpdateAction, FONT_FAMILY,
 } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { useDebouncedSave } from "../../../hooks/useDebouncedSave";
@@ -218,7 +218,7 @@ export default function WhiteboardCanvas({ value, onSave, readOnly, config, boar
         isCollaborating={config.presence && !readOnly}
         UIOptions={UI_OPTIONS as never}
         excalidrawAPI={(api) => { apiRef.current = api as unknown as WbApi; setReady(true); }}
-        initialData={{ elements: seed.elements as never, files: seed.files as never, appState: { showWelcomeScreen: false, viewBackgroundColor: "transparent" } as never, scrollToContent: seed.elements.length <= 3 /* small/empty: corner default; populated: the fit-to-view effect owns it */ }}
+        initialData={{ elements: seed.elements as never, files: seed.files as never, appState: { showWelcomeScreen: false, viewBackgroundColor: "transparent", currentItemFontFamily: FONT_FAMILY.Nunito /* new text defaults to the normal sans (the picker's "Normal"), not the hand-drawn face — native-not-widget; existing elements keep their font, hand-drawn stays one click away */ } as never, scrollToContent: seed.elements.length <= 3 /* small/empty: corner default; populated: the fit-to-view effect owns it */ }}
         onChange={onChange as never}
         onPointerUpdate={onPointerUpdate as never}
       >
