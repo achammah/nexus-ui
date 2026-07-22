@@ -10,6 +10,7 @@ export interface DocumentSnapshot {
   blocks: Block[];
   icon?: string;              // a title emoji
   cover?: string;             // a preset key ("preset:dawn") or a data: URI image
+  coverY?: number;            // vertical focal point (0–100%) for an uploaded image cover
   pageWidth?: "narrow" | "wide";
   version?: number;
 }
@@ -25,16 +26,35 @@ export function isDocumentSnapshot(x: unknown): x is DocumentSnapshot {
   return typeof d.id === "string" && typeof d.title === "string" && Array.isArray(d.blocks);
 }
 
-/* the preset cover gradients (concrete so an exported/standalone page needs no tokens) */
+/* The bundled cover set — gradients and flat colours, all pure CSS. Concrete values (not
+   tokens) so an exported or standalone page renders identically, and NOTHING is fetched:
+   a cover is either one of these or an image the user uploaded as a data URI. There is no
+   stock-photo provider here on purpose (a keyed vendor and an external image host are both
+   ruled out by the strict CSP). */
 export const COVER_PRESETS: Record<string, string> = {
   "preset:dawn": "linear-gradient(120deg,#fda4af,#fdba74,#fcd34d)",
   "preset:dusk": "linear-gradient(120deg,#6366f1,#8b5cf6,#ec4899)",
   "preset:sea": "linear-gradient(120deg,#22d3ee,#3b82f6,#6366f1)",
   "preset:forest": "linear-gradient(120deg,#34d399,#10b981,#0d9488)",
   "preset:slate": "linear-gradient(120deg,#334155,#475569,#64748b)",
+  "preset:ember": "linear-gradient(120deg,#f97316,#ef4444,#b91c1c)",
+  "preset:mint": "linear-gradient(120deg,#a7f3d0,#6ee7b7,#5eead4)",
+  "preset:violet": "linear-gradient(120deg,#c4b5fd,#a78bfa,#7c3aed)",
+  "preset:sand": "linear-gradient(120deg,#fef3c7,#fde68a,#d6d3d1)",
+  "preset:night": "linear-gradient(120deg,#0f172a,#1e293b,#334155)",
+  "preset:aurora": "linear-gradient(120deg,#22d3ee,#a78bfa,#f472b6,#facc15)",
+  "preset:paper": "linear-gradient(120deg,#f8fafc,#e2e8f0,#cbd5e1)",
+  "flat:red": "#ef4444", "flat:orange": "#f97316", "flat:amber": "#f59e0b", "flat:green": "#22c55e",
+  "flat:teal": "#14b8a6", "flat:blue": "#3b82f6", "flat:indigo": "#6366f1", "flat:purple": "#a855f7",
+  "flat:pink": "#ec4899", "flat:stone": "#78716c",
 };
-export const coverBackground = (cover?: string): string | undefined =>
-  !cover ? undefined : cover.startsWith("preset:") ? COVER_PRESETS[cover] : `center/cover no-repeat url("${cover}")`;
+export const isPresetCover = (cover?: string): boolean =>
+  !!cover && (cover.startsWith("preset:") || cover.startsWith("flat:"));
+
+export const coverBackground = (cover?: string, coverY = 50): string | undefined =>
+  !cover ? undefined
+    : isPresetCover(cover) ? COVER_PRESETS[cover]
+    : `center ${coverY}%/cover no-repeat url("${cover}")`;
 
 // distribute Omit over the union so each member keeps its own props (a bare Omit<Block,"id">
 // would collapse to the keys common to ALL members)

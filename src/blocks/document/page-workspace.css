@@ -111,3 +111,19 @@
   .nxWs-kbar { padding: 4px 7px; }
   .nxWs-kbar-tx, .nxWs-kbar kbd { display: none; }
 }
+
+/* touch: the tree is a modal drawer, the trail becomes a back affordance */
+.nxWs-scrim { position: fixed; inset: 0; z-index: 55; background: color-mix(in oklab, #0b0b0b 42%, transparent); }
+.nxWs-back { display: inline-flex; align-items: center; gap: 2px; min-height: 36px; padding: 4px 10px 4px 4px; border: 0; background: none; color: var(--nx-fg); font: var(--nx-text-body); font-weight: 500; border-radius: var(--nx-radius-s); cursor: pointer; max-width: 52vw; }
+.nxWs-back span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nxWs-back:active { background: var(--nx-bg-sunken); }
+.nxWs-msearch { margin-inline-start: auto; width: 36px; height: 36px; }
+@media (pointer: coarse) and (max-width: 820px) {
+  .nxWs-iconbtn { width: 36px; height: 36px; }
+  .nxTree-row { height: 42px; }
+  .nxTree-hbtn { width: 34px; height: 34px; }
+  .nxTree-actions { opacity: 1; }
+  .nxTree-add, .nxTree-more { width: 32px; height: 32px; }
+  .nxWs-switcher { width: 96vw; }
+  .nxWs-switcher-i { padding: 13px 12px; }
+}

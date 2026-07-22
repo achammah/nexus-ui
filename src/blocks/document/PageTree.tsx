@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ChevronRight, Plus, MoreHorizontal, Star, Copy, Trash2, FileText, Search, PencilLine, PanelLeft } from "lucide-react";
 import { childrenOf, favorites, type PageStore, type PageNode } from "./page-store";
+import { PageIcon } from "../../record-core/PageIcon";
 
 /* PageTree — the workspace sidebar. Renders the page hierarchy (derived live from the flat
    store), with expand/collapse, drag-to-move (before / after / inside a target, via the
@@ -83,7 +84,7 @@ export function PageTree({ store, activeId, onOpen, onCreate, onDuplicate, onDel
             onClick={(e) => { e.stopPropagation(); if (kids.length) onToggleExpand(page.id, !open); }}>
             {kids.length ? <ChevronRight size={13} /> : <span className="nxTree-dot" />}
           </button>
-          <span className="nxTree-ic">{page.icon || <FileText size={14} />}</span>
+          <span className="nxTree-ic"><PageIcon icon={page.icon} size={15} fallback={<FileText size={14} />} /></span>
           {renaming === page.id && onRename ? (
             <input className="nxTree-rename" autoFocus defaultValue={page.title} data-testid={`tree-rename-${page.id}`}
               onClick={(e) => e.stopPropagation()}
@@ -130,7 +131,7 @@ export function PageTree({ store, activeId, onOpen, onCreate, onDuplicate, onDel
           {favs.map((p) => (
             <div key={"fav-" + p.id} className={`nxTree-row is-fav-row${activeId === p.id ? " is-active" : ""}`} style={{ paddingInlineStart: 8 }} data-testid={`fav-row-${p.id}`} onClick={() => onOpen(p.id)}>
               <span className="nxTree-caret is-leaf"><span className="nxTree-dot" /></span>
-              <span className="nxTree-ic">{p.icon || <Star size={13} />}</span>
+              <span className="nxTree-ic"><PageIcon icon={p.icon} size={15} fallback={<Star size={13} />} /></span>
               <span className="nxTree-title">{p.title || "Untitled"}</span>
             </div>
           ))}

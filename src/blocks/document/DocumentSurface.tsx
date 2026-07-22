@@ -2,8 +2,11 @@ import * as React from "react";
 import { NotionEditor, type Block, type EditorConfig, type PageContext } from "../../record-core/NotionEditor";
 import { DocumentOutline } from "../../record-core/DocumentOutline";
 import { exportMarkdown, exportHtml, exportPdf, exportDocx, importFile, IMPORT_ACCEPT } from "../../record-core/editor-io";
-import { seedDocument, coverBackground, COVER_PRESETS, type DocumentSnapshot } from "./snapshot";
-import { PanelRight, Search, Download, Upload, FileText, FileCode, FileType, Image as ImageIcon, ChevronDown, X, Maximize2, Minimize2, Replace } from "lucide-react";
+import { seedDocument, coverBackground, isPresetCover, type DocumentSnapshot } from "./snapshot";
+import { PageIcon } from "../../record-core/PageIcon";
+import { IconPicker } from "./IconPicker";
+import { CoverPicker } from "./CoverPicker";
+import { PanelRight, Search, Download, Upload, FileText, FileCode, FileType, Image as ImageIcon, ChevronDown, X, Maximize2, Minimize2, Replace, ListTree, Check } from "lucide-react";
 import "./document.css";
 
 /* DocumentSurface — a Notion×Google-Docs document as a standalone surface. Free-surface:
@@ -42,7 +45,21 @@ export interface DocumentSurfaceProps {
   "data-testid"?: string;
 }
 
-const TITLE_EMOJIS = ["📄", "📝", "📘", "🚀", "✨", "🎯", "🧭", "📊", "🔬", "🗂️", "💡", "🏗️"];
+/* Touch layout: a coarse pointer on a narrow screen. Both conditions matter — a narrow
+   desktop window is still a mouse (popovers are right there), and a large tablet has room
+   for the popover form. Drives sheet-vs-popover and the touch affordances. */
+export function useTouchLayout(): boolean {
+  const q = "(pointer: coarse) and (max-width: 820px)";
+  const [on, setOn] = React.useState(() => (typeof window === "undefined" ? false : window.matchMedia(q).matches));
+  React.useEffect(() => {
+    const m = window.matchMedia(q);
+    const h = () => setOn(m.matches);
+    m.addEventListener("change", h);
+    return () => m.removeEventListener("change", h);
+  }, []);
+  return on;
+}
+
 const stripMarks = (t: string) =>
   t.replace(/\[\[[ch]:[a-z]+\|([^\]]*)\]\]/g, "$1").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/(\*\*|__|~~|\+\+|==|`|\*|_|^#{1,3}\s)/gm, "");
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -73,13 +90,17 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
   const mainRef = React.useRef<HTMLDivElement | null>(null);
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const [ioOpen, setIoOpen] = React.useState(false);
-  const [outlineOn, setOutlineOn] = React.useState(showOutline);
   const [findOpen, setFindOpen] = React.useState(false);
   const [findQ, setFindQ] = React.useState("");
   const [replaceQ, setReplaceQ] = React.useState("");
   const [caseSens, setCaseSens] = React.useState(false);
   const [importing, setImporting] = React.useState(false);
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [iconOpen, setIconOpen] = React.useState(false);
+  const [coverOpen, setCoverOpen] = React.useState(false);
+  const touch = useTouchLayout();
+  // on touch the outline is a SHEET — it must not be open on arrival, it would cover the doc
+  const [outlineOn, setOutlineOn] = React.useState(() => showOutline && !(typeof window !== "undefined" && window.matchMedia("(pointer: coarse) and (max-width: 820px)").matches));
 
   const wide = snap.pageWidth === "wide";
 
@@ -130,10 +151,26 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
     return () => document.removeEventListener("mousedown", close);
   }, [ioOpen]);
 
-  const cover = coverBackground(snap.cover);
-  const cycleCover = () => { const keys = Object.keys(COVER_PRESETS); const i = keys.indexOf(snap.cover || ""); patch({ cover: keys[(i + 1) % keys.length] }); };
-  const uploadCover = (file?: File) => { if (!file) return; const r = new FileReader(); r.onload = () => patch({ cover: String(r.result) }); r.readAsDataURL(file); };
-  const coverFileRef = React.useRef<HTMLInputElement | null>(null);
+  const cover = coverBackground(snap.cover, snap.coverY);
+
+  /* drag-to-reposition an uploaded image cover: the drag maps vertical travel to the
+     background's focal point, so the user frames the image in place (Notion's gesture). */
+  const [reposition, setReposition] = React.useState(false);
+  const coverElRef = React.useRef<HTMLDivElement | null>(null);
+  const dragRef = React.useRef<{ y: number; start: number } | null>(null);
+  React.useEffect(() => {
+    if (!reposition) return;
+    const move = (e: PointerEvent) => {
+      const d = dragRef.current; const h = coverElRef.current?.offsetHeight || 190;
+      if (!d) return;
+      // a full drag across the cover's height sweeps the whole focal range
+      patch({ coverY: Math.max(0, Math.min(100, d.start - ((e.clientY - d.y) / h) * 100)) });
+    };
+    const up = () => { dragRef.current = null; };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+  }, [reposition, patch]);
 
   return (
     <div className={["nxDoc", wide ? "is-wide" : "is-narrow", className].filter(Boolean).join(" ")} {...rest}>
@@ -198,13 +235,25 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
       <div className="nxDoc-body">
         <div className="nxDoc-main" ref={mainRef} data-testid="doc-scroll">
           {allowCover && (snap.cover ? (
-            <div className="nxDoc-cover" data-testid="doc-cover" style={{ background: cover }}>
-              {!readOnly && (
-                <div className="nxDoc-cover-ctl">
-                  <button onClick={cycleCover} data-testid="cover-change">Change</button>
-                  <button onClick={() => coverFileRef.current?.click()}>Upload</button>
-                  <button onClick={() => patch({ cover: undefined })} data-testid="cover-remove">Remove</button>
+            <div className={`nxDoc-cover${reposition ? " is-repositioning" : ""}`} data-testid="doc-cover" ref={coverElRef} style={{ background: cover }}
+              onPointerDown={(e) => { if (reposition) { dragRef.current = { y: e.clientY, start: snap.coverY ?? 50 }; e.preventDefault(); } }}>
+              {!readOnly && (reposition ? (
+                <div className="nxDoc-cover-ctl is-open" data-testid="cover-reposition-bar">
+                  <span className="nxDoc-cover-hint"><ImageIcon size={13} /> Drag the image to reframe it</span>
+                  <button className="is-primary" data-testid="cover-reposition-done" onClick={() => setReposition(false)}><Check size={13} /> Done</button>
                 </div>
+              ) : (
+                <div className="nxDoc-cover-ctl">
+                  <button data-testid="cover-change" onClick={() => setCoverOpen((v) => !v)}>Change cover</button>
+                  {!isPresetCover(snap.cover) && <button data-testid="cover-reposition-open" onClick={() => setReposition(true)}>Reposition</button>}
+                </div>
+              ))}
+              {coverOpen && !readOnly && (
+                <CoverPicker value={snap.cover} sheet={touch}
+                  onPick={(c) => { patch({ cover: c, coverY: 50 }); setCoverOpen(false); }}
+                  onRemove={() => patch({ cover: undefined, coverY: undefined })}
+                  onReposition={() => setReposition(true)}
+                  onClose={() => setCoverOpen(false)} />
               )}
             </div>
           ) : null)}
@@ -213,11 +262,29 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
             {showChrome && (
               <div className="nxDoc-head">
                 <div className="nxDoc-head-ctl">
-                  <button className="nxDoc-icon" data-testid="doc-icon" disabled={readOnly}
-                    onClick={() => { if (readOnly) return; const i = TITLE_EMOJIS.indexOf(snap.icon || ""); patch({ icon: TITLE_EMOJIS[(i + 1) % TITLE_EMOJIS.length] }); }}
-                    title="Change icon">{snap.icon || "＋"}</button>
+                  <div className="nxDoc-iconwrap">
+                    <button className="nxDoc-icon" data-testid="doc-icon" disabled={readOnly}
+                      onClick={() => { if (!readOnly) setIconOpen((v) => !v); }}
+                      title={snap.icon ? "Change icon" : "Add an icon"}>
+                      {snap.icon ? <PageIcon icon={snap.icon} size={46} /> : "＋"}
+                    </button>
+                    {iconOpen && !readOnly && (
+                      <IconPicker value={snap.icon} sheet={touch}
+                        onPick={(icon) => { patch({ icon }); setIconOpen(false); }}
+                        onRemove={() => patch({ icon: undefined })}
+                        onClose={() => setIconOpen(false)} />
+                    )}
+                  </div>
                   {!readOnly && allowCover && !snap.cover && (
-                    <button className="nxDoc-addcover" data-testid="doc-add-cover" onClick={cycleCover}><ImageIcon size={13} /> Add cover</button>
+                    <div className="nxDoc-iconwrap">
+                      <button className="nxDoc-addcover" data-testid="doc-add-cover" onClick={() => setCoverOpen((v) => !v)}><ImageIcon size={13} /> Add cover</button>
+                      {coverOpen && (
+                        <CoverPicker sheet={touch}
+                          onPick={(c) => { patch({ cover: c, coverY: 50 }); setCoverOpen(false); }}
+                          onRemove={() => patch({ cover: undefined })}
+                          onClose={() => setCoverOpen(false)} />
+                      )}
+                    </div>
                   )}
                 </div>
                 <input className="nxDoc-title" data-testid="doc-title" value={snap.title} readOnly={readOnly}
@@ -229,15 +296,31 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
           </div>
         </div>
 
-        {showOutline && outlineOn && (
+        {/* the outline is a RAIL with room for a third column, and a bottom SHEET without
+            one — reachable either way, never a squeezed column stealing reading width */}
+        {showOutline && outlineOn && !touch && (
           <aside className="nxDoc-rail" data-testid="doc-rail">
             <DocumentOutline blocks={snap.blocks} containerRef={mainRef} />
           </aside>
         )}
       </div>
 
+      {showOutline && outlineOn && touch && (
+        <>
+          <div className="nxDoc-scrim" data-testid="outline-scrim" onClick={() => setOutlineOn(false)} />
+          <aside className="nxDoc-outline-sheet" data-testid="doc-outline-sheet">
+            <div className="nxDoc-sheet-grip" />
+            <div className="nxDoc-sheet-head"><ListTree size={14} /> Outline
+              <button onClick={() => setOutlineOn(false)} data-testid="outline-sheet-close" aria-label="Close outline"><X size={16} /></button>
+            </div>
+            <div className="nxDoc-sheet-body">
+              <DocumentOutline blocks={snap.blocks} containerRef={mainRef} onNavigate={() => setOutlineOn(false)} />
+            </div>
+          </aside>
+        </>
+      )}
+
       <input ref={fileRef} type="file" accept={IMPORT_ACCEPT} style={{ display: "none" }} onChange={(e) => void onImport(e.target.files?.[0])} />
-      <input ref={coverFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => uploadCover(e.target.files?.[0])} />
     </div>
   );
 }

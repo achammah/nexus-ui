@@ -1,9 +1,10 @@
 import * as React from "react";
-import { ChevronRight, PanelLeft, Search, CornerDownLeft, FileText } from "lucide-react";
-import { DocumentSurface, type DocumentConfig } from "./DocumentSurface";
+import { ChevronRight, ChevronLeft, PanelLeft, Search, CornerDownLeft, FileText } from "lucide-react";
+import { DocumentSurface, useTouchLayout, type DocumentConfig } from "./DocumentSurface";
 import { PageTree } from "./PageTree";
 import { type PageContext } from "../../record-core/NotionEditor";
 import type { DocumentSnapshot } from "./snapshot";
+import { PageIcon } from "../../record-core/PageIcon";
 import {
   seedPageStore, createPage, duplicatePage, deletePage, movePage, renamePage, setPageIcon, setPageCover,
   setPageBlocks, toggleFavorite, setActive, setExpanded, breadcrumb, backlinksOf, searchPages, rootPages,
@@ -44,13 +45,19 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
     const next = fn(storeRef.current); storeRef.current = next; setStore(next); onChangeRef.current?.(next);
   }, []);
 
+  const touch = useTouchLayout();
   // on narrow screens the tree is an overlay drawer — it starts closed, as a drawer should
   const [sidebar, setSidebar] = React.useState(() => (typeof window === "undefined" ? true : window.innerWidth > 820));
   const [switcher, setSwitcher] = React.useState(false);
 
   const active: PageNode | undefined = store.pages[store.activeId ?? ""] ?? rootPages(store)[0];
 
-  const open = React.useCallback((id: string) => { if (storeRef.current.pages[id]) mutate((s) => setActive(s, id)); setSwitcher(false); }, [mutate]);
+  const open = React.useCallback((id: string) => {
+    if (storeRef.current.pages[id]) mutate((s) => setActive(s, id));
+    setSwitcher(false);
+    // a modal drawer must get out of the way once it has done its job
+    if (window.matchMedia("(pointer: coarse) and (max-width: 820px)").matches) setSidebar(false);
+  }, [mutate]);
   const create = (parentId: string | null) => { const r = createPage(storeRef.current, { parentId, title: "" }); mutate(() => setActive(parentId ? setExpanded(r.store, parentId, true) : r.store, r.id)); };
 
   // the page-workspace seam handed to the editor
@@ -79,12 +86,12 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
     return <div className={`nxWs${className ? " " + className : ""}`} {...rest}><div className="nxWs-blank"><FileText size={22} /><p>No pages yet.</p><button onClick={() => create(null)}>Create the first page</button></div></div>;
   }
 
-  const activeSnap: DocumentSnapshot = { id: active.id, title: active.title, icon: active.icon, cover: active.cover, blocks: active.blocks, pageWidth: "narrow" };
+  const activeSnap: DocumentSnapshot = { id: active.id, title: active.title, icon: active.icon, cover: active.cover, coverY: active.coverY, blocks: active.blocks, pageWidth: "narrow" };
   const onDocChange = (snap: DocumentSnapshot) => mutate((s) => {
     let n = setPageBlocks(s, active.id, snap.blocks);
     if (snap.title !== active.title) n = renamePage(n, active.id, snap.title);
     if (snap.icon !== active.icon) n = setPageIcon(n, active.id, snap.icon);
-    if (snap.cover !== active.cover) n = setPageCover(n, active.id, snap.cover);
+    if (snap.cover !== active.cover || snap.coverY !== active.coverY) n = setPageCover(n, active.id, snap.cover, snap.coverY);
     return n;
   });
 
@@ -100,10 +107,22 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
 
   /* the workspace ALWAYS owns the header's left slot — a page in a tree already states its
      name in its own H1, so the surface must never fall back to repeating the title here */
+  const parent = crumbs.length > 1 ? crumbs[crumbs.length - 2] : null;
+
   const topBar = (
     <div className="nxWs-crumbbar" data-testid="ws-breadcrumbs">
-      {!sidebar && <button className="nxWs-iconbtn" title="Show sidebar" data-testid="ws-show-sidebar" onClick={() => setSidebar(true)}><PanelLeft size={15} /></button>}
-      {showCrumbs && <nav className="nxWs-crumbs">
+      {!sidebar && <button className="nxWs-iconbtn" title="Show pages" data-testid="ws-show-sidebar" onClick={() => setSidebar(true)}><PanelLeft size={15} /></button>}
+      {/* touch: the trail collapses to a BACK affordance to the parent page — a full trail
+          does not fit, and "up one level" is the gesture a sub-page actually needs */}
+      {touch && parent && (
+        <button className="nxWs-back" data-testid="ws-back" onClick={() => open(parent.id)}>
+          <ChevronLeft size={16} /><span>{parent.title || "Untitled"}</span>
+        </button>
+      )}
+      {touch && (
+        <button className="nxWs-iconbtn nxWs-msearch" title="Search pages" data-testid="ws-search-touch" onClick={() => setSwitcher(true)}><Search size={16} /></button>
+      )}
+      {showCrumbs && !touch && <nav className="nxWs-crumbs">
         {crumbs.map((c, i) => {
           const isCurrent = i === crumbs.length - 1;
           return (
@@ -113,7 +132,7 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
                 title={isCurrent ? "Double-click to rename" : "Open"}
                 onClick={() => (isCurrent ? focusTitle() : open(c.id))}
                 onDoubleClick={focusTitle}>
-                {c.icon && <span className="nxWs-crumb-ic">{c.icon}</span>}{c.title || "Untitled"}
+                {c.icon && <span className="nxWs-crumb-ic"><PageIcon icon={c.icon} size={14} /></span>}{c.title || "Untitled"}
               </button>
             </React.Fragment>
           );
@@ -121,7 +140,7 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
       </nav>}
       {/* only alongside the trail — without it the tree head's search is the single, closer
           entry point, and two search affordances in one row read as clutter */}
-      {showCrumbs && <button className="nxWs-kbar" data-testid="ws-search" onClick={() => setSwitcher(true)}><Search size={13} /><span className="nxWs-kbar-tx">Search</span><kbd>⌘K</kbd></button>}
+      {showCrumbs && !touch && <button className="nxWs-kbar" data-testid="ws-search" onClick={() => setSwitcher(true)}><Search size={13} /><span className="nxWs-kbar-tx">Search</span><kbd>⌘K</kbd></button>}
     </div>
   );
 
@@ -132,7 +151,7 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
         const from = store.pages[b.fromId]; if (!from) return null;
         return (
           <button key={b.fromId + i} className="nxWs-backlink" data-testid={`backlink-${b.fromId}`} onClick={() => open(b.fromId)}>
-            <span className="nxWs-backlink-ic">{from.icon || <FileText size={13} />}</span>
+            <span className="nxWs-backlink-ic"><PageIcon icon={from.icon} size={16} fallback={<FileText size={13} />} /></span>
             <span className="nxWs-backlink-title">{from.title || "Untitled"}</span>
             <span className="nxWs-backlink-kind">{b.kind === "child" ? "parent" : b.kind === "subpage" ? "sub-page" : "link"}</span>
           </button>
@@ -143,6 +162,8 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
 
   return (
     <div className={`nxWs${sidebar ? "" : " is-collapsed"}${className ? " " + className : ""}`} data-testid="page-workspace" {...rest}>
+      {/* the drawer is modal on touch: a scrim to tap away, and opening a page closes it */}
+      {sidebar && touch && <div className="nxWs-scrim" data-testid="ws-scrim" onClick={() => setSidebar(false)} />}
       {sidebar && (
         <aside className="nxWs-sidebar" data-testid="ws-sidebar">
           <PageTree
@@ -206,7 +227,7 @@ function QuickSwitcher({ store, onOpen, onClose }: { store: PageStore; onOpen: (
             <button key={r.page.id} className={`nxWs-switcher-i${i === sel ? " is-sel" : ""}`} data-testid={`switcher-opt-${r.page.id}`}
               ref={i === sel ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
               onMouseEnter={() => setSel(i)} onClick={() => onOpen(r.page.id)}>
-              <span className="nxWs-switcher-ic">{r.page.icon || <FileText size={15} />}</span>
+              <span className="nxWs-switcher-ic"><PageIcon icon={r.page.icon} size={17} fallback={<FileText size={15} />} /></span>
               <span className="nxWs-switcher-tx"><b>{r.page.title || "Untitled"}</b>{r.where === "body" && <i>{r.snippet}</i>}</span>
               {i === sel && <CornerDownLeft size={13} className="nxWs-switcher-enter" />}
             </button>

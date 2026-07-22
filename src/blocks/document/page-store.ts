@@ -20,7 +20,8 @@ export interface PageNode {
   id: string;
   title: string;
   icon?: string;               // emoji
-  cover?: string;              // "preset:<key>" | data: URI
+  cover?: string;              // "preset:<key>" | "flat:<key>" | data: URI
+  coverY?: number;             // vertical focal point (0-100%) for an uploaded image cover
   parentId: string | null;     // null = a top-level page
   order: number;               // fractional sort key among siblings
   blocks: Block[];             // the page body
@@ -139,7 +140,7 @@ export function reorderPage(s: PageStore, id: string, afterId?: string | null): 
 }
 export const renamePage = (s: PageStore, id: string, title: string): PageStore => patch(s, id, { title });
 export const setPageIcon = (s: PageStore, id: string, icon?: string): PageStore => patch(s, id, { icon });
-export const setPageCover = (s: PageStore, id: string, cover?: string): PageStore => patch(s, id, { cover });
+export const setPageCover = (s: PageStore, id: string, cover?: string, coverY?: number): PageStore => patch(s, id, { cover, coverY });
 export const setPageBlocks = (s: PageStore, id: string, blocks: Block[]): PageStore => patch(s, id, { blocks });
 export const toggleFavorite = (s: PageStore, id: string): PageStore => patch(s, id, { favorite: !s.pages[id]?.favorite });
 export const setActive = (s: PageStore, id: string): PageStore => ({ ...s, activeId: id });

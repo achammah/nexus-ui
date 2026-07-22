@@ -1,5 +1,6 @@
 import * as React from "react";
-import { GripVertical, Plus, Trash2, ImagePlus, Table as TableIcon, Type, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Minus, X, CheckSquare, Check, ChevronRight, Code2, Lightbulb, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code as CodeInline, Link2, Highlighter, Baseline, Copy, FileText, ChevronRight as PageArrow } from "lucide-react";
+import { PageIcon } from "./PageIcon";
+import { GripVertical, Plus, Trash2, ArrowUp, ArrowDown, ImagePlus, Table as TableIcon, Type, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Minus, X, CheckSquare, Check, ChevronRight, Code2, Lightbulb, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code as CodeInline, Link2, Highlighter, Baseline, Copy, FileText, ChevronRight as PageArrow } from "lucide-react";
 
 /* record-core — a Notion-grade block editor, the `richText` field type's editor.
    Blocks are contenteditable; "/" opens a command menu (text, headings, lists,
@@ -431,6 +432,8 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
 
   const [drag, setDrag] = React.useState<{ id: string; overId: string | null; pos: "before" | "after" } | null>(null);
   const [grabId, setGrabId] = React.useState<string | null>(null);
+  // the touch block-actions menu (there is no hover on touch to reveal the handle rail)
+  const [blockMenu, setBlockMenu] = React.useState<string | null>(null);
   const pendingChanges = React.useMemo(() => (changes || []).filter((c) => c.status === "pending"), [changes]);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const dragRef = React.useRef(drag); dragRef.current = drag; // latest drag for window pointer listeners (touch)
@@ -843,6 +846,17 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
   }
   function removeBlock(blockId: string) { update(blocks.filter((b) => b.id !== blockId)); }
 
+  /* move a block one slot up/down — the keyboard/touch equivalent of dragging it, and the
+     only way to reorder without a hover handle or a precise drag */
+  function nudgeBlock(blockId: string, dir: -1 | 1) {
+    const i = blocks.findIndex((b) => b.id === blockId);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= blocks.length) return;
+    const next = [...blocks];
+    [next[i], next[j]] = [next[j], next[i]];
+    update(next);
+  }
+
   // per-type mutations
   const toggleCheck = (id: string, checked: boolean) => patchBlock(id, { checked } as Partial<Block>);
   const setCollapse = (id: string, collapsed: boolean) => patchBlock(id, { collapsed } as Partial<Block>);
@@ -884,6 +898,14 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   }
+
+  // dismiss the block-actions menu on any outside interaction
+  React.useEffect(() => {
+    if (!blockMenu) return;
+    const close = (e: Event) => { if (!(e.target as HTMLElement).closest(".ne-blockmenu, .ne-h-grip")) setBlockMenu(null); };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [blockMenu]);
 
   // paste normalization: Word / Google-Docs / web HTML (or multi-line markdown) → clean
   // blocks; replaces the current empty block, else splices after. A simple inline paste
@@ -1032,7 +1054,11 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
           onDrop: (e: React.DragEvent) => { if (drag) { e.preventDefault(); e.stopPropagation(); onRowDrop(); } },
         };
         const onGripPointerDown = (e: React.PointerEvent) => { if (e.pointerType === "touch") startTouchDrag(e, b.id); else setGrabId(b.id); };
-        const handle = !readOnly && <BlockHandle onAdd={() => addBlockAndMenu(b.id)} onDel={() => removeBlock(b.id)} onGripPointerDown={onGripPointerDown} />;
+        const handle = !readOnly && (
+          <BlockHandle onAdd={() => addBlockAndMenu(b.id)} onDel={() => removeBlock(b.id)} onGripPointerDown={onGripPointerDown}
+            menuOpen={blockMenu === b.id} onMenu={() => setBlockMenu((m) => (m === b.id ? null : b.id))}
+            onCloseMenu={() => setBlockMenu(null)} onUp={() => nudgeBlock(b.id, -1)} onDown={() => nudgeBlock(b.id, 1)} />
+        );
 
         if (b.type === "divider") return (
           <div key={b.id} className={rowCls(" ne-divider-row")} {...rowProps}>
@@ -1141,7 +1167,7 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
               {handle}
               <button className="ne-page-block" data-testid={`pageblock-${b.pageId}`} disabled={!pageContext}
                 onClick={() => pageContext?.onOpenPage(b.pageId)} title={`Open ${title}`}>
-                <span className="ne-page-ic">{icon}</span>
+                <span className="ne-page-ic"><PageIcon icon={icon} size={17} /></span>
                 <span className="ne-page-title">{title}</span>
                 <PageArrow size={15} className="ne-page-arrow" />
               </button>
@@ -1232,12 +1258,27 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
   );
 }
 
-function BlockHandle({ onAdd, onDel, onGripPointerDown }: { onAdd: () => void; onDel: () => void; onGripPointerDown: (e: React.PointerEvent) => void }) {
+function BlockHandle({ onAdd, onDel, onGripPointerDown, onMenu, menuOpen, onUp, onDown, onCloseMenu }: {
+  onAdd: () => void; onDel: () => void; onGripPointerDown: (e: React.PointerEvent) => void;
+  onMenu: () => void; menuOpen: boolean; onUp: () => void; onDown: () => void; onCloseMenu: () => void;
+}) {
   return (
     <div className="ne-handle">
       <button className="ne-h-add" title="Insert block below" onMouseDown={(e) => { e.preventDefault(); onAdd(); }}><Plus size={14} /></button>
-      <button className="ne-h-grip" title="Drag to reorder" onPointerDown={onGripPointerDown}><GripVertical size={14} /></button>
+      {/* one control on touch: TAP opens the actions menu (there is no hover to reveal a
+          rail, and a 3-button rail in the flow eats the reading column), DRAG reorders */}
+      <button className="ne-h-grip" title="Drag to reorder, tap for actions"
+        onPointerDown={onGripPointerDown}
+        onClick={(e) => { e.preventDefault(); onMenu(); }}><GripVertical size={14} /></button>
       <button className="ne-h-del" title="Delete block" onMouseDown={(e) => { e.preventDefault(); onDel(); }}><Trash2 size={12.5} /></button>
+      {menuOpen && (
+        <div className="ne-blockmenu" data-testid="block-actions" onClick={(e) => e.stopPropagation()}>
+          <button data-testid="block-insert" onClick={() => { onAdd(); onCloseMenu(); }}><Plus size={15} /> Insert below</button>
+          <button data-testid="block-up" onClick={() => { onUp(); onCloseMenu(); }}><ArrowUp size={15} /> Move up</button>
+          <button data-testid="block-down" onClick={() => { onDown(); onCloseMenu(); }}><ArrowDown size={15} /> Move down</button>
+          <button className="is-danger" data-testid="block-delete" onClick={() => { onDel(); onCloseMenu(); }}><Trash2 size={15} /> Delete</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1267,8 +1308,8 @@ const NE_CSS = `
 .ne-row:hover{background:color-mix(in oklab,var(--nx-bg-sunken) 55%,transparent)}
 .ne-handle{position:absolute;left:-74px;top:1px;display:flex;gap:1px;opacity:0;transition:opacity var(--nx-t-fast)}
 .ne-row:hover>.ne-handle{opacity:1}
-.ne-handle button{width:23px;height:24px;display:grid;place-items:center;border:0;background:none;color:var(--nx-fg-faint);cursor:pointer;border-radius:5px;transition:background var(--nx-t-fast),color var(--nx-t-fast)}
-.ne-handle button:hover{background:var(--nx-bg-sunken);color:var(--nx-fg)}
+.ne-handle > button{width:23px;height:24px;display:grid;place-items:center;border:0;background:none;color:var(--nx-fg-faint);cursor:pointer;border-radius:5px;transition:background var(--nx-t-fast),color var(--nx-t-fast)}
+.ne-handle > button:hover{background:var(--nx-bg-sunken);color:var(--nx-fg)}
 .ne-h-grip{cursor:grab}
 .ne-h-grip:active{cursor:grabbing}
 .ne-h-del:hover{background:var(--nx-danger-soft)!important;color:var(--nx-danger)!important}
@@ -1384,12 +1425,34 @@ const NE_CSS = `
 .ne-sw{width:22px;height:22px;border:1px solid var(--nx-border);border-radius:5px;cursor:pointer;font:800 12px var(--nx-font-sans);display:grid;place-items:center;background:var(--nx-bg);color:var(--nx-fg)}
 .ne-sw:hover{border-color:var(--nx-accent)}
 .ne-sw-def{background:color-mix(in oklab,var(--nx-accent) 24%,transparent)}
-/* ==== mobile — larger tap targets, always-visible handles, wrapping toolbar ==== */
-@media (max-width:640px){
+/* block actions menu (the touch equivalent of the hover rail) */
+.ne-blockmenu{position:absolute;left:0;top:30px;z-index:70;min-width:186px;padding:5px;background:var(--nx-bg-raised);border:1px solid var(--nx-border);border-radius:var(--nx-radius-m);box-shadow:var(--nx-shadow-2);animation:nxPopIn var(--nx-t-fast) var(--nx-ease-settle)}
+.ne-blockmenu button{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;color:var(--nx-fg);font:var(--nx-text-body);text-align:left;white-space:nowrap;padding:10px 10px;border-radius:var(--nx-radius-s);cursor:pointer}
+.ne-blockmenu button:hover{background:var(--nx-bg-sunken)}
+.ne-blockmenu button svg{flex:none;width:15px;height:15px;color:var(--nx-fg-muted)}
+.ne-blockmenu button.is-danger,.ne-blockmenu button.is-danger svg{color:var(--nx-danger)}
+/* ==== touch — one in-flow control, bigger tap targets, wrapping toolbar ==== */
+@media (pointer:coarse) and (max-width:820px){
   .ne-root{max-width:100%}
-  .ne-handle{position:static;opacity:1;margin-right:2px}
+  /* the rail collapses to the grip: TAP for the actions menu, DRAG to reorder. Insert and
+     delete live in that menu, so the flow keeps its reading width. */
+  .ne-handle{position:static;opacity:1;margin-right:4px}
+  .ne-handle .ne-h-add,.ne-handle .ne-h-del{display:none}
   .ne-row{align-items:center}
-  .ne-handle button{width:30px;height:30px}
+  .ne-handle > button{width:34px;height:34px}
+  .ne-blockmenu button{padding:12px 12px}
+  /* comfortable touch typing: no iOS zoom-on-focus (needs >=16px), roomier lines */
+  .ne-block,.ne-cell,.ne-cap{font-size:16.5px;line-height:1.65}
+  .ne-row{padding-block:2px}
+  .ne-toolbar{max-width:96vw;flex-wrap:wrap;justify-content:center;padding:6px}
+  .ne-toolbar button{min-width:38px;height:38px}
+  .ne-sw{width:30px;height:30px}
+  .ne-swatches{flex-wrap:wrap;max-width:100%}
+  /* the slash menu becomes a bottom sheet so it can never be clipped by the caret position */
+  .ne-menu{position:fixed !important;left:8px !important;right:8px !important;top:auto !important;bottom:8px !important;max-height:52vh;width:auto !important;max-width:none}
+  .ne-menu-i,.ne-menu button{padding:12px 12px}
+}
+@media (max-width:640px){
   .ne-toolbar{max-width:94vw;flex-wrap:wrap;justify-content:center}
   .ne-swatches{flex-wrap:wrap;max-width:100%}
 }
