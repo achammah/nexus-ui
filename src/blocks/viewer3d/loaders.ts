@@ -32,23 +32,94 @@ const ext = (name: string): string => {
   return i < 0 ? "" : name.slice(i).toLowerCase();
 };
 
-/* normalize: center on origin, rest on the floor, ~targetSize max dimension */
-export function normalizeModel(obj: THREE.Object3D, scaleMul = 1, up: "y" | "z" = "y"): void {
+/* ---- content-aware normalize ----
+   Real-world exports (esp. Blender studio scenes) ship the SUBJECT surrounded
+   by scenery: backdrop drapes, area-light planes, reflectors — a 2-triangle
+   45 m plane next to a 1M-triangle car. Fitting the union renders the subject
+   microscopic. So: find the CONTENT box (the meshes carrying ~96% of the
+   triangles), CULL meshes whose own bounds dwarf it (they are scenery, not
+   subject — no name matching, pure geometry), and frame the content. */
+
+export interface ContentAnalysis {
+  contentBox: THREE.Box3;
+  culled: number;   // scenery meshes hidden
+  kept: number;
+}
+
+/* bounding box over VISIBLE meshes only (Box3.setFromObject includes hidden ones) */
+export function visibleBox(root: THREE.Object3D): THREE.Box3 {
+  const box = new THREE.Box3();
+  const mb = new THREE.Box3();
+  root.updateMatrixWorld(true);
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !m.visible) return;
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    if (!m.geometry.boundingBox) return;
+    mb.copy(m.geometry.boundingBox).applyMatrix4(m.matrixWorld);
+    box.union(mb);
+  });
+  return box;
+}
+
+export function analyzeContent(root: THREE.Object3D): ContentAnalysis {
+  root.updateMatrixWorld(true);
+  const meshes: { mesh: THREE.Mesh; box: THREE.Box3; tris: number; diag: number }[] = [];
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    const box = (m.geometry.boundingBox as THREE.Box3).clone().applyMatrix4(m.matrixWorld);
+    const tris = (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position?.count ?? 0) / 3;
+    meshes.push({ mesh: m, box, tris, diag: box.getSize(new THREE.Vector3()).length() });
+  });
+  if (meshes.length === 0) return { contentBox: new THREE.Box3(), culled: 0, kept: 0 };
+
+  /* content = densest 96% of triangles */
+  const total = meshes.reduce((s, x) => s + x.tris, 0);
+  const byTris = [...meshes].sort((a, b) => b.tris - a.tris);
+  const contentBox = new THREE.Box3();
+  let acc = 0;
+  for (const x of byTris) {
+    contentBox.union(x.box);
+    acc += x.tris;
+    if (acc >= total * 0.96) break;
+  }
+  const contentDiag = Math.max(contentBox.getSize(new THREE.Vector3()).length(), 0.001);
+
+  /* scenery: (a) a mesh whose own bounds dwarf the content (backdrops, light
+     rigs); (b) a low-poly flat parked OUTSIDE the content box (reflector cards) */
+  let culled = 0;
+  const center = new THREE.Vector3();
+  for (const x of meshes) {
+    const outside = !contentBox.containsPoint(x.box.getCenter(center));
+    if (x.diag > contentDiag * 1.5 || (outside && x.tris < 500)) {
+      x.mesh.visible = false; x.mesh.userData.nxScenery = true; culled++;
+    }
+  }
+  return { contentBox, culled, kept: meshes.length - culled };
+}
+
+/* normalize: cull scenery, center the CONTENT on origin, rest on the floor,
+   ~4.5 m max dimension. Returns the analysis for status surfaces. */
+export function normalizeModel(obj: THREE.Object3D, scaleMul = 1, up: "y" | "z" = "y"): ContentAnalysis {
   if (up === "z") obj.rotation.x = -Math.PI / 2;
-  obj.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(obj);
+  const analysis = analyzeContent(obj);
+  const box = visibleBox(obj);
   const size = box.getSize(new THREE.Vector3());
   const scale = (4.5 / Math.max(size.x, size.y, size.z, 0.001)) * scaleMul;
   obj.scale.multiplyScalar(scale);
-  box.setFromObject(obj);
-  const c = box.getCenter(new THREE.Vector3());
+  obj.updateMatrixWorld(true);
+  const sBox = visibleBox(obj);
+  const c = sBox.getCenter(new THREE.Vector3());
   obj.position.x -= c.x;
   obj.position.z -= c.z;
-  obj.position.y -= box.min.y;
+  obj.position.y -= sBox.min.y;
   obj.traverse((o) => {
     const m = o as THREE.Mesh;
     if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
   });
+  return analysis;
 }
 
 function gltfLoader(manager?: THREE.LoadingManager): GLTFLoader {

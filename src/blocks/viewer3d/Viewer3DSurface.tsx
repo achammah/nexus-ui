@@ -16,7 +16,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { useThemeNonce } from "../workbook/workbook-theme";
 import { buildLevel, buildSedan, setLevelGhost, type BuiltLevel } from "./builders";
-import { loadFromFiles, loadFromSource, normalizeModel, ModelError, type LoadedModel } from "./loaders";
+import { loadFromFiles, loadFromSource, normalizeModel, visibleBox, ModelError, type LoadedModel } from "./loaders";
 import {
   AXON_DIR, derivePalette, derivePlanPalette, ELEV_DIRS, envIntensity, EASE, fitDistance, fitFor,
   groundShadowOpacity, LOOK, ORTHO, PRESET_DIRS, SUN, sunFor, type ElevationDir, type Preset,
@@ -255,7 +255,8 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       }
       // fit sphere + ground under the content
       scene.getObjectByName("nx-ground")?.removeFromParent();
-      const box = new THREE.Box3().setFromObject(model);
+      // visible content only: culled scenery meshes must not inflate the frame
+      const box = visibleBox(model);
       engine.box.copy(box);
       box.getBoundingSphere(engine.sphere);
       const r = Math.max(engine.sphere.radius, 1);
@@ -315,10 +316,10 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       loadFromSource(s.object.source, (pct) => { if (!cancelled) setImportPct(pct); })
         .then((loaded: LoadedModel) => {
           if (cancelled) { loaded.release(); disposeObject(loaded.object); return; }
-          normalizeModel(loaded.object, s.object?.scale ?? 1, s.object?.up ?? "y");
+          const analysis = normalizeModel(loaded.object, s.object?.scale ?? 1, s.object?.up ?? "y");
           model.add(loaded.object);
           engine.userRelease = loaded.release;
-          setImportedName(loaded.name);
+          setImportedName(analysis.culled ? `${loaded.name} · ${analysis.culled} backdrop object${analysis.culled > 1 ? "s" : ""} hidden` : loaded.name);
           setImportPct(false);
           engine.refit();
         })
@@ -491,10 +492,10 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       if (!eng) { loaded.release(); disposeObject(loaded.object); return; }
       [...eng.model.children].forEach((c) => { disposeObject(c); c.removeFromParent(); });
       eng.userRelease?.();
-      normalizeModel(loaded.object, snapRef.current.object?.scale ?? 1);
+      const analysis = normalizeModel(loaded.object, snapRef.current.object?.scale ?? 1);
       eng.model.add(loaded.object);
       eng.userRelease = loaded.release;
-      setImportedName(loaded.name);
+      setImportedName(analysis.culled ? `${loaded.name} · ${analysis.culled} backdrop object${analysis.culled > 1 ? "s" : ""} hidden` : loaded.name);
       setImportPct(false);
       setPhase("ready");
       eng.refit();
