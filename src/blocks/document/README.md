@@ -139,6 +139,17 @@ Suggestions persist on `doc.suggestions` (a `Suggestion[]`), each carrying `auth
 
 **Read GAP 3 before designing the flow**: "export the contract with the counterparty's redlines" does not work as you'd expect today.
 
+### Reusing the suggestion engine from another block
+
+`useSuggestions` + `SuggestionPanel` + the `Suggestion` shape are **format-agnostic** — the fold is a pure string splice, so another block can project its own targets as pseudo-blocks (`[{ id, type: "p", text }]`) and reuse the engine whole. The presentation lane does exactly this for slide regions. Rules if you do:
+
+- **Shape is frozen, additive-only.** `id/original/replacement/status/kind/author/authorColor/createdAt/blockId/offset/reason` will not be renamed or removed — three consumers now persist them (record `richText`, this surface, presentation). A breaking change goes through the lead with a migration note.
+- **Whole-target changes work**: `blockId` set, `offset: 0`, `original` = the full old string. Apply yields the new string; revert round-trips.
+- **‼ One pending change per target, ever.** With whole-target semantics a *second* change on the same pseudo-block cannot match (`from` is gone), falls through to the clamped offset, and splices at the wrong length — **silent corruption**, and `acceptAll` folds sequentially so it corrupts there too. Key changes per target (`sug-<blockId>`) so a re-edit REPLACES rather than stacks.
+- **‼ `SuggestionPanel` renders `original`/`replacement` as TEXT.** If your strings are HTML, every review card shows raw markup. Put a human-readable summary in `reason`, or ask this lane for optional preview fields — don't fork the panel.
+- Give pseudo-blocks a real `type` (`"p"`). `isTextBlock` is a deny-list today (`!== divider/image/table/page`), so a type-less object passes — but that would break silently if it ever becomes an allow-list.
+- Exports: this surface deliberately marks pending changes into exports, because an exported *contract* that silently drops redlines is a correctness hazard. A block whose export is a presentation artifact may legitimately render committed text only — state the divergence in your own folder doc.
+
 Also relevant to contracts: see the round-trip table below — **`todo` / `callout` / `code` degrade to plain paragraphs through DOCX**. Headings, lists, tables and all text survive.
 
 ---
