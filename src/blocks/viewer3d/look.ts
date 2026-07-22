@@ -71,6 +71,9 @@ export interface Viewer3DLook {
     /* where the plan camera aims, as a fraction of the model's height above its
        floor — 0 sits on the slab, 1 at the top of the tallest (ghosted) level */
     planTargetFrac: number;
+    /* fitMul/planFitMul are calibrated at THIS viewport aspect; narrower stages
+       (a phone in portrait) pull the camera back so the model still fits across */
+    refAspect: number;
     minDistanceMul: number;
     maxDistanceMul: number;
     /* just under PI/2 — keeps the camera above the ground plane */
@@ -131,6 +134,7 @@ export const LOOK: Viewer3DLook = {
     planDir: [1, 1.5, 1],
     planFitMul: 2.95,
     planTargetFrac: 0.22,
+    refAspect: 1.82,
     minDistanceMul: 0.7,
     maxDistanceMul: 6,
     maxPolarAngle: Math.PI * 0.495,
@@ -205,3 +209,14 @@ export const fitFor = (mode: "object" | "floorplan"): { dir: [number, number, nu
   mode === "floorplan"
     ? { dir: LOOK.camera.planDir, mul: LOOK.camera.planFitMul }
     : { dir: PRESET_DIRS.iso, mul: LOOK.camera.fitMul };
+
+/* Framing distance for a bounding radius, corrected for the stage's aspect.
+   A vertical fov alone frames the model's HEIGHT; on a portrait stage the model
+   is then far too wide and gets cropped left/right. At or above refAspect this
+   returns exactly r * mul, so desktop framing is unchanged. */
+export function fitDistance(r: number, aspect: number, mul: number): number {
+  const v = (LOOK.camera.fov * Math.PI) / 180;
+  const half = (a: number) => Math.min(v, 2 * Math.atan(Math.tan(v / 2) * a)) / 2;
+  const ratio = Math.sin(half(LOOK.camera.refAspect)) / Math.sin(half(Math.max(aspect, 0.2)));
+  return r * mul * Math.max(1, ratio);
+}

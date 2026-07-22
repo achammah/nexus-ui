@@ -12,7 +12,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { useThemeNonce } from "../workbook/workbook-theme";
 import { buildLevel, buildSedan, setLevelGhost, type BuiltLevel } from "./builders";
-import { derivePalette, envIntensity, fitFor, groundShadowOpacity, EASE, LOOK, PRESET_DIRS, type Preset } from "./look";
+import { derivePalette, envIntensity, fitDistance, fitFor, groundShadowOpacity, EASE, LOOK, PRESET_DIRS, type Preset } from "./look";
 import { seedScene, type Viewer3DHotspot, type Viewer3DSnapshot } from "./scene";
 import "./viewer3d.css";
 
@@ -159,11 +159,19 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
 
     const finishSetup = () => {
       if (cancelled) return;
+      // size the camera from the host FIRST — framing is aspect-dependent and the
+      // ResizeObserver has not fired yet, so camera.aspect is still its 1:1 default
+      const hw = host.clientWidth, hh = host.clientHeight;
+      if (hw && hh) {
+        renderer.setSize(hw, hh, false);
+        camera.aspect = hw / hh;
+        camera.updateProjectionMatrix();
+      }
       // fit sphere + ground under the content
       const box = new THREE.Box3().setFromObject(model);
       box.getBoundingSphere(engine.sphere);
       const r = Math.max(engine.sphere.radius, 1);
-      const G = LOOK.ground, C = LOOK.camera;
+      const G = LOOK.ground, C = LOOK.camera, fit0 = fitFor(s.mode);
       const groundY = Math.min(box.min.y, 0) - 0.001;
       const ground = new THREE.Mesh(
         new THREE.CircleGeometry(r * G.radiusMul, 48),
@@ -183,7 +191,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       key.shadow.camera.far = r * G.farMul;
       key.shadow.camera.updateProjectionMatrix();
       controls.minDistance = r * C.minDistanceMul;
-      controls.maxDistance = r * C.maxDistanceMul;
+      controls.maxDistance = Math.max(r * C.maxDistanceMul, fitDistance(r, camera.aspect, fit0.mul) * 1.6);
       controls.target.copy(engine.sphere.center);
       if (s.mode === "floorplan") {
         // aim low: the ghosted upper level pulls the fit sphere up and would sit
@@ -193,7 +201,8 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       }
       const fit = fitFor(s.mode);
       const dir = new THREE.Vector3(...fit.dir).normalize();
-      camera.position.copy(engine.sphere.center).addScaledVector(dir, r * fit.mul);
+      camera.position.copy(engine.sphere.center)
+        .addScaledVector(dir, fitDistance(r, camera.aspect, fit.mul));
       camera.lookAt(engine.sphere.center);
       controls.update();
       setPhase("ready");
@@ -340,7 +349,8 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     if (!e) return;
     const r = e.sphere.radius;
     const toT = e.sphere.center.clone();
-    const toP = toT.clone().addScaledVector(new THREE.Vector3(...dir).normalize(), r * distMul);
+    const toP = toT.clone().addScaledVector(
+      new THREE.Vector3(...dir).normalize(), fitDistance(r, e.camera.aspect, distMul));
     if (prefersReducedMotion()) {
       e.camera.position.copy(toP); e.controls.target.copy(toT); e.controls.update();
       return;
