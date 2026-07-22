@@ -973,22 +973,16 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       return {
         at: shape.center,
         area: formatArea(a),
-        // the raw m2 reading only informs at parcel scale; above 1 km2 it is noise
-        raw: a < 1_000_000 ? formatAreaRaw(a) : null,
+        raw: formatAreaRaw(a),
         perimeter: formatDistance(2 * Math.PI * shape.radiusM),
         perimeterLabel: "circumference",
       };
     }
     if (ring.length < 3) return null;
     const at = centroid(ring);
+    if (!at) return null;
     const a = polygonArea(ring);
-    return {
-      at,
-      area: formatArea(a),
-      raw: a < 1_000_000 ? formatAreaRaw(a) : null,
-      perimeter: formatDistance(ringPerimeter(ring)),
-      perimeterLabel: "perimeter",
-    };
+    return { at, area: formatArea(a), raw: formatAreaRaw(a), perimeter: formatDistance(ringPerimeter(ring)), perimeterLabel: "perimeter" };
   }, [shape, drawMode, draft, hover]);
   const drawHint = drawing
     ? drawMode === "circle"
@@ -1329,7 +1323,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
           <Marker longitude={shapeLabel.at[0]} latitude={shapeLabel.at[1]} anchor="center">
             <span className="nxMapAreaLabel" data-testid="map-area-label" role="status">
               <b className="nxMapAreaLabelMain">{shapeLabel.area}</b>
-              {shapeLabel.raw && shapeLabel.raw !== shapeLabel.area && <span className="nxMapAreaLabelRaw">{shapeLabel.raw}</span>}
+              {shapeLabel.area !== shapeLabel.raw && <span className="nxMapAreaLabelRaw">{shapeLabel.raw}</span>}
               <span className="nxMapAreaLabelRow">
                 {shapeLabel.perimeterLabel} {shapeLabel.perimeter}
               </span>

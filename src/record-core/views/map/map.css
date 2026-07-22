@@ -704,3 +704,28 @@
     box-shadow: 0 -6px 22px rgb(0 0 0 / 0.28);
   }
 }
+
+/* ── on-shape measurement label ──────────────────────────────────────────────
+   Rides at the drawn shape's centroid so the measurement is where the user drew,
+   not only in the bottom chip. Backed + bordered so it stays readable over any
+   basemap (satellite included) in both themes. */
+.nxMapAreaLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: var(--nx-radius-m);
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border-strong);
+  box-shadow: var(--nx-shadow-2);
+  color: var(--nx-fg);
+  font: var(--nx-text-micro);
+  white-space: nowrap;
+  pointer-events: none;
+  text-align: center;
+}
+.nxMapAreaLabelMain { font: var(--nx-text-meta); font-weight: 700; color: var(--nx-fg); }
+.nxMapAreaLabelRaw { color: var(--nx-fg-muted); }
+.nxMapAreaLabelRow { color: var(--nx-fg-muted); }
+.nxMapAreaLabelCount { color: var(--nx-accent); font-weight: 600; }
