@@ -64,7 +64,9 @@ export function blocksToHtml(blocks: Block[], opts: { full?: boolean; title?: st
       case "divider": return "<hr>";
       case "image": return `<figure><img src="${b.src}" alt="${esc(b.caption || "")}">${b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : ""}</figure>`;
       case "table": return `<table><tbody>${b.rows.map((r, ri) => `<tr>${r.map((c) => (ri === 0 ? `<th>${inlineToHtml(c)}</th>` : `<td>${inlineToHtml(c)}</td>`)).join("")}</tr>`).join("")}</tbody></table>`;
-      case "code": return `<pre${ind}><code>${highlightCode(b.text, b.lang)}</code></pre>`;
+      // the language rides on the standard `language-*` class every highlighter expects, so the
+      // round-trip keeps it (and a third-party reader can still colour the block)
+      case "code": return `<pre${ind}><code class="language-${(b.lang || "plain").replace(/[^a-z0-9+#-]/gi, "")}">${highlightCode(b.text, b.lang)}</code></pre>`;
       case "h1": return `<h1${ind}>${inlineToHtml(b.text)}</h1>`;
       case "h2": return `<h2${ind}>${inlineToHtml(b.text)}</h2>`;
       case "h3": return `<h3${ind}>${inlineToHtml(b.text)}</h3>`;

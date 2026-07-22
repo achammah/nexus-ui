@@ -261,7 +261,13 @@ export function htmlToBlocks(html: string): Block[] {
       else if (tag === "P") { const tx = htmlInlineToText(e).trim(); if (tx) out.push({ id: bid(), type: "p", text: tx, indent: ind } as Block); }
       else if (tag === "UL" || tag === "OL") walkList(e, tag === "OL", ind);
       else if (tag === "BLOCKQUOTE") out.push({ id: bid(), type: "quote", text: htmlInlineToText(e).trim(), indent: ind } as Block);
-      else if (tag === "PRE") out.push({ id: bid(), type: "code", text: (e.textContent || "").replace(/\n$/, ""), lang: "plain" });
+      // read the language back off the standard `language-*` class (our own export, and what
+      // every other highlighter emits) instead of flattening every imported block to plain
+      else if (tag === "PRE") {
+        const langCls = e.querySelector("code")?.getAttribute("class") || e.getAttribute("class") || "";
+        const m = langCls.match(/(?:^|\s)(?:language|lang)-([a-z0-9+#-]+)/i);
+        out.push({ id: bid(), type: "code", text: (e.textContent || "").replace(/\n$/, ""), lang: m ? m[1].toLowerCase() : "plain" });
+      }
       else if (tag === "HR") out.push({ id: bid(), type: "divider" });
       else if (tag === "DETAILS") { const sm = e.querySelector(":scope > summary"); out.push({ id: bid(), type: "toggle", text: sm ? htmlInlineToText(sm).trim() : "", collapsed: !e.hasAttribute("open"), indent: ind } as Block); }
       else if (tag === "IMG") { const src = e.getAttribute("src") || ""; if (src) out.push({ id: bid(), type: "image", src, caption: e.getAttribute("alt") || undefined }); }
@@ -1739,6 +1745,14 @@ const NE_CSS = `
 .ne-page-arrow{flex:none;color:var(--nx-fg-faint);opacity:0;transition:opacity var(--nx-t-fast)}
 .ne-page-block:hover .ne-page-arrow{opacity:1}
 .ne-pagelink{color:var(--nx-accent);font-weight:500;cursor:pointer;border-radius:3px;padding:0 3px 0 1px;text-decoration:underline;text-decoration-color:color-mix(in oklab,var(--nx-accent) 40%,transparent);text-underline-offset:2px;white-space:nowrap}
-.ne-pagelink::before{content:"📄";font-size:.82em;margin-right:2px}
+/* the inline page-link glyph is an icon from the app's set (masked SVG, inherits currentColor so
+   it tracks the link colour in both themes) — not a raw emoji, whose shape and colour are the
+   platform's rather than the product's. It is a GENERIC document mark, not the page's own icon:
+   resolving that per link would need a page resolver threaded through inlineMd/buildBlockHtml AND
+   serializeBlock taught to skip the injected icon node, which is the one path that defines
+   committed block text. Noted as a known inconsistency rather than risked. */
+.ne-pagelink::before{content:"";display:inline-block;width:.82em;height:.82em;margin-right:3px;vertical-align:-.1em;background-color:currentColor;
+  -webkit-mask:var(--ne-pagelink-icon) center/contain no-repeat;mask:var(--ne-pagelink-icon) center/contain no-repeat}
+.ne-root{--ne-pagelink-icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z'/%3E%3Cpath d='M14 2v4a2 2 0 0 0 2 2h4'/%3E%3Cpath d='M16 13H8'/%3E%3Cpath d='M16 17H8'/%3E%3C/svg%3E")}
 .ne-pagelink:hover{background:var(--nx-accent-soft)}
 ` + NE_COLOR_CSS;

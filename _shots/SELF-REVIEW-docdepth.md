@@ -190,7 +190,7 @@ Tree → drawer with scrim, touch editor/toolbar/slash, outline as a bottom shee
 
 Explicit `outline:false` / `backlinks:false` overrides confirmed to win over the preset.
 
-**Not in this pass:** items 2-3 (Notion controls, embedded chrome) were completed + committed in the prior session (commit 39a8c2d, sections above). `suggestions`/`comments` toggles are deferred to Phase 2 when those features exist (no dead knobs shipped).
+**Not in this pass:** items 2-3 (Notion controls, embedded chrome) were completed + committed in the prior session (commit 39a8c2d, sections above). ~~`suggestions`/`comments` toggles are deferred~~ — **SUPERSEDED at HEAD:** `suggestions` shipped as an orthogonal `WorkspaceConfig` toggle available at every preset level.
 
 **tsc:** my lane (`blocks/document`, `record-core`) is clean. Pre-existing `blocks/workbook` errors are missing `@univerjs/*` deps — a different lane's concern, untouched by me.
 
@@ -205,7 +205,7 @@ Built by composing the app's EXISTING suggestions infra (`useSuggestions` + trac
 | 1 | Editing ↔ Suggesting mode toggle | ✅ | toolbar segmented switch; `config.suggestions` gate |
 | 2 | Edit captured as a tracked change (not committed) | ✅ | typed " and mid-market" in Suggesting → change `sug-b3` created, committed text unchanged |
 | 3 | Inline insertion / deletion / substitution + author | ✅ | insertion (empty del, "You · insertion"), substitution (seed "third quarter → fourth quarter", "Ava Chen · edit"); del/ins widget both themes |
-| 4 | Materialise-on-blur (caret-safe while typing) | ✅ | widget appears in the RIGHT block on blur — needed a new `onBlur` reconcile in NotionEditor |
+| 4 | ~~Materialise-on-blur (caret-safe while typing)~~ **SUPERSEDED at HEAD** | ✅ then, obsolete now | shipped as blur-deferred here; **replaced by mid-keystroke live rendering** — see "Real-time tracked changes" below. The `onBlur` reconcile remains as the live→settled handoff |
 | 5 | Block+offset anchoring (empty-original bug) | ✅ FIXED | before: insertion matched every block via `includes("")` and rendered in b1/b2; after: `changesFor`/`buildBlockHtml`/`foldChange` anchor by `blockId`+`offset` |
 | 6 | accept / reject per change | ✅ | accept folds "fourth quarter" into b2, insertion into b3; widget clears |
 | 7 | accept-all / reject-all | ✅ | accept-all resolved both; committed text correct after blur |
@@ -216,7 +216,7 @@ Built by composing the app's EXISTING suggestions infra (`useSuggestions` + trac
 
 Shots: `suggest-01-light.png`, `suggest-02-dark.png`.
 
-**Scope note (honest):** v1 tracks TEXT edits within a block, one active change per block per pass; structural edits (add/remove/retype a block) commit directly. The focus-guard means a change materialises on blur, not mid-keystroke (Google-Docs-like) — the committed model is always correct; only the un-blurred DOM is briefly raw. `suggestions`/`comments` are now real (superseding the Phase-1 "deferred" note for suggestions; standalone threaded comments beyond change-notes remain future work).
+**Scope note (corrected to HEAD):** tracks TEXT edits within a block, one active change per block per pass; structural edits (add/remove/retype a block) commit directly. ~~The focus-guard means a change materialises on blur, not mid-keystroke.~~ **NO LONGER TRUE** — changes now render mid-keystroke (see "Real-time tracked changes" below); this line described the superseded v1. `suggestions` is a real `WorkspaceConfig` toggle (superseding the Phase-1 "deferred" note); standalone threaded comments beyond per-change notes remain future work.
 
 tsc clean on my lane throughout; pre-existing `blocks/workbook` @univerjs errors untouched.
 
@@ -268,3 +268,41 @@ Styling verified identical between live and settled widgets (ins `rgb(79,70,229)
 **Honest limitation:** IME/composition input is not intercepted (composed text would need the browser's default). It falls through to the previous diff-based capture — the change is still tracked and materialises on blur, so it degrades rather than corrupting. Latin typing (the intercepted path) is fully live.
 
 Shot: `suggest-03-live-mid-edit.png` — taken MID-EDIT with focus still in the block.
+
+---
+
+## Native-chrome pass: code-block language picker (+ emoji-as-UI sweep)
+
+The code block's language control was a raw `<select>` — the last OS-chrome control in the surface. Audit confirms **0 `<select>` elements remain**.
+
+**Deviation, approved:** the brief said route it through the Radix/shadcn menu used elsewhere. I used the EDITOR's own `--nx-*` popover grammar instead, because shadcn here is Tailwind-v4-dependent via `shadcn.css` while `NotionEditor` is deliberately self-contained (React + lucide only, ships its own CSS) and mounts inside other surfaces as the record `richText` field. Importing shadcn would add a Tailwind styling dependency to that component and render unstyled in the harness (making light/dark verification impossible). The editor's ~8 other pickers are all `--nx-*` popovers. Flagged as a deviation; lead confirmed: keep the popover.
+
+| Check | Verdict | Evidence |
+|---|---|---|
+| Native `<select>` replaced | ✅ | trigger pill + listbox, accent check on the active language; `document.querySelectorAll('select').length === 0` |
+| Matches in-editor grammar | ✅ | same tokens/header/selected-item treatment as the slash menu; light + dark shots |
+| Keyboard accessible | ✅ | opens focused on the selected item; ArrowDown moved focus `ts → js`; Escape closes + returns focus; Enter activates |
+| Syntax highlighting intact | ✅ | switched to `python`, re-highlighted, `.ne-t-*` tokens present |
+| Copy affordance + palette | ✅ | untouched; tokens already use `--nx-opt-*` |
+
+**‼ Trap worth remembering (will bite the next picker added inside a clipped block):** `.ne-code` sets `overflow:hidden` to clip its rounded body, which **clipped an absolutely-positioned menu to three items**. Fix: position the menu `fixed` from the trigger's `getBoundingClientRect()` (the pattern the slash menu already uses), and flip above when there is no room below. Any popover rendered inside `.ne-code`, `.ne-image`, or a table cell needs the same treatment.
+
+### Emoji-as-UI sweep (content emoji deliberately untouched)
+Page icons and callout glyphs in CONTENT are correct Notion behaviour and were left alone. Fixed three UI-control uses:
+- the add-icon control rendered a fullwidth `＋` text glyph → a lucide icon (a text character as a UI control renders per-platform)
+- page BLOCK and page-LINK MENU fell back to a raw `📄` for icon-less pages → the `PageIcon` + lucide pairing the tree/switcher/backlinks already used
+- inline page links injected `📄` via CSS → a masked SVG from the app's icon set, inheriting `currentColor` (tracks the link colour in both themes)
+
+**Known inconsistency (deliberate, with reason):** the inline page-link glyph is a GENERIC document mark, not the page's own icon — unlike the block/menu/tree, which show the real icon. Resolving it per link needs a page resolver threaded through `inlineMd`/`buildBlockHtml` **and** `serializeBlock` taught to skip the injected icon node — and `serializeBlock` is the single path that defines committed block text (suggesting mode depends on it). Not worth that correctness risk for a decorative glyph; the raw-emoji problem is solved either way.
+
+### HTML export dropped the code language — FIXED
+Was: `<pre><code>` with no language, so an HTML round-trip returned `lang:"plain"` while Markdown kept it — an asymmetry in a surface whose selling point is Word/Notion-grade import/export. Now exports `<code class="language-python">` (the convention highlighters expect) and the importer reads it back.
+
+| Round-trip | Before | At HEAD |
+|---|---|---|
+| Markdown | `python` ✅ | `python` ✅ |
+| HTML (ours) | `plain` ❌ | `python` ✅ |
+| HTML from another highlighter (`language-rust`) | `plain` ❌ | `rust` ✅ |
+| HTML with no language | `plain` ✅ | `plain` ✅ |
+
+Shots: `codeblock-01-lang-light.png`, `codeblock-02-lang-dark.png`. tsc clean on my lane.
