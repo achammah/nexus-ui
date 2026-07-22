@@ -770,7 +770,7 @@
       "name": "WorkbookSurface · LazyWorkbookSurface",
       "kind": "wrapper",
       "import": "src/blocks/workbook/WorkbookSurface.tsx",
-      "when": "full spreadsheet workbook (Univer) rendered as a NATIVE page surface: formula bar + 400+ functions, insert/delete rows & columns, cell formatting, multiple sheets, freeze + merge, in a single-row toolbar (ribbonType simple, overflow-managed) with no card frame; host controls ride the toolbar row via the actions prop. Every piece of vendor chrome (toolbar, formula bar, sheet tabs, menus, portaled popups) resolves --nx-* tokens in light AND dark and re-derives live on theme/skin changes; free-surface (host owns the snapshot via value/onChange). The engine loads ONLY behind LazyWorkbookSurface (a ~1.5MB-gz lazy chunk), so importing the block adds nothing to the eager bundle",
+      "when": "full spreadsheet workbook (Univer) rendered as a NATIVE page surface: formula bar + 400+ functions, insert/delete rows & columns, cell formatting, multiple sheets, freeze + merge, in a single-row toolbar (ribbonType simple, overflow-managed) with no card frame; host controls ride the toolbar row via the actions prop. Every piece of vendor chrome (toolbar, formula bar, sheet tabs, menus, portaled popups) resolves --nx-* tokens in light AND dark, re-derives live on theme/skin changes, and renders the app's OWN icon language (lucide + generated stroke glyphs re-registered over Univer's registry names — workbook-icons.tsx); free-surface (host owns the snapshot via value/onChange). The engine loads ONLY behind LazyWorkbookSurface (a ~1.5MB-gz lazy chunk), so importing the block adds nothing to the eager bundle",
       "source": "ours"
     },
     {

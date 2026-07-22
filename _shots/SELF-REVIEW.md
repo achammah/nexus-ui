@@ -1,58 +1,84 @@
-# Reskin: Excalidraw (whiteboard) — self-review
+# Self-review — reskin-univer (Univer workbook chrome → native icon language)
 
-**Reference (the bar):** the app's own native chrome — the ops rail (`.nxWbOps*`, the native pill sitting beside the vendor toolbar), the DataTable/record-page control density, the `--nx-*` token surfaces (raised islands, 6px/9px radii, quiet icon buttons, accent-soft active states, uppercase meta field labels).
+**Reference (the bar):** the app's own chrome — the DataTable/flow-view toolbar vocabulary
+(28px ghost hit-areas, `--nx-radius-s`, sunken hovers, muted-then-fg icons), the
+SettingsTabs underline-tab family, and the lucide icon language every native surface uses
+(`lucide-react`, stroke-2 round, ~16px).
 
-**Scope note:** all excalidraw chrome flows from one scope (`.nxWbCanvasInner`, the wrapper WhiteboardCanvas itself renders), so the record FIELD, the mobile overlay PAGE, and any future standalone host inherit the same skin. Every color is `var(--nx-*)` — a live theme or skin flip re-derives the whole surface (the shots flip `data-theme` on a mounted canvas).
+## What changed (on top of the merged sheet-native pass)
 
-## Surfaces (before / after)
+The sheet-native wave themed values (`--univer-*` → `--nx-*`, canvas palette). The one
+signature it left: **Univer's stock icon set + button chrome read icon-for-icon like
+Google Sheets** — filled roller/paint-bucket-with-bar/A-with-bar/3×3 border grid glyphs.
 
-| Surface | Before | After |
+1. **Icon-language swap at the registry** (`workbook-icons.tsx`, new): Univer resolves
+   every menu/toolbar icon by NAME through its `ComponentManager`; `register()`
+   overwrites. 94 registry names re-registered with app-language components right after
+   `createUniver` (re-asserted once the render unit exists — two sheet controllers
+   re-register late): lucide glyphs where the metaphor exists (undo/redo, B/I/U/S,
+   aligns, merge, wrap, clipboard, rows/cols, eye, lock, Σ, %, $ …) and four GENERATED
+   stroke families in lucide grammar for what lucide doesn't carry — 15 border variants
+   (ghost frame + solid painted edges), 6 text rotations (arrow over baseline), 4 freeze
+   states, decimal add/reduce. Two-tone keepers (font color, fill) keep Univer's live
+   color strip, redrawn as glyph + rounded bar.
+2. **Hardwired stragglers as currentColor stencils** (workbook.css): 12 direct-import
+   glyphs the registry can't reach — the ×32 dropdown carets, ±, ×, ✓, ⋯/⋮, name-box
+   caret, sheet-list, lock — repainted via CSS mask (original paths hidden, element
+   becomes the stencil). Theme-proof by construction (paint = currentColor).
+3. **Chrome CSS**: toolbar buttons on the app's hit-area vocabulary (radius-s, raised
+   hover per the sidebar pattern); formula bar's cell-ref box in mono/muted with ghost
+   confirm/cancel; sheet tabs restyled from stock pill to the SettingsTabs underline
+   (meta type, accent underline on active); footer controls (add sheet, sheet list,
+   zoom, gridlines) as ghost buttons.
+
+## Before / after
+
+| | Before | After |
 |---|---|---|
-| Field, light | `before-field-light.png` | `after-field-light.png` |
-| Field, dark | `before-field-dark.png` | `after-field-dark.png` |
-| Field + props panel, light | `before-field-props-light.png` | `after-field-props-light.png` |
-| Field + props panel, dark | `before-field-props-dark.png` | `after-field-props-dark.png` |
-| Field + text probe, light | `before-field-text-light.png` | `after-field-text-light.png` |
-| Field + context menu | `before-field-ctxmenu-light.png` | `after-field-ctxmenu-light.png` |
-| Field + main menu | `before-field-mainmenu-light.png` | `after-field-mainmenu-light.png` |
-| Field, short well (vendor mobile layout inside desktop, real on 900px laptops) | `before-field-shortwell-{light,dark}.png` | `after-field-shortwell-{light,dark}.png` |
-| Overlay page (390x844) | `before-page-{light,dark}.png` | `after-page-{light,dark}.png` |
+| Light full | `_shots/before-sheet-light.png` | `_shots/after-sheet-light.png` |
+| Light toolbar close-up | `_shots/before-sheet-light-toolbar.png` | `_shots/after-sheet-light-toolbar.png` |
+| Dark full | `_shots/before-sheet-dark.png` | `_shots/after-sheet-dark.png` |
+| Dark toolbar close-up | `_shots/before-sheet-dark-toolbar.png` | `_shots/after-sheet-dark-toolbar.png` |
+| Sheet tabs (light/dark) | `_shots/before-sheet-*-tabs.png` | `_shots/after-sheet-*-tabs.png` |
+| Border picker / context menu / overflow | — | `_shots/after-sheet-light-border-popup.png`, `_shots/after-sheet-light-context-menu.png`, `_shots/after-sheet-light-overflow.png` |
 
-## What changed (on top of the earlier token pass)
+## Brutal test: would a cold user still recognize Google Sheets?
 
-- **Toolbar**: numbered keycap digits removed (the loudest signature; shortcuts still work), control density brought from the vendor's 36px touch grid to the app's 32px rail grammar (`--default-button-size`/`--lg-button-size`/`--lg-icon-size`), island padding/gap matched to the ops-rail pill, and the toolbar no longer slides under the ops rail (its footprint is reserved). Desktop only — the vendor mobile layout keeps its touch sizes.
-- **Panels**: property-section headings now use the app's uppercase meta field-label voice; dialog controls (text fields, radio groups, switches, sliders, scrollbars) mapped to form-control tokens.
-- **Menus**: main menu, extra-tools dropdown and the right-click context menu take the app popover grammar (raised, bordered, `--nx-radius-m`, soft-accent hover, faint shortcuts) instead of the vendor's filled-accent hover.
-- **Islands**: zoom, undo/redo and eraser pills get real borders + `--nx-shadow-1` with quiet transparent buttons; scroll-back and exit-zen chips read as native raised chips.
-- **Fonts**: chrome text is `--nx-font-sans` everywhere (`--ui-font` + scope font-family); NEW canvas text defaults to the normal sans (`FONT_FAMILY.Nunito`) instead of the hand-drawn face — existing elements keep their font, hand-drawn stays one click away in the picker.
-- **Trimmed foreign UI**: library trigger, keyboard-hint banner, help icon, and the collab-time laser quick-toggle island (collided with the ops rail; laser stays in the extra-tools menu).
+The icon-for-icon signature is gone: every toolbar/menu glyph, the border picker's 15
+variants, the context menus, the number-format cluster and the carets now speak the
+app's stroke language, and the tabs/formula bar sit on app vocabulary. A cold user reads
+"this app has a spreadsheet surface", not "Google Sheets in an iframe". What remains is
+spreadsheet-DOMAIN vocabulary (a grid, a formula bar with *fx*, bottom sheet tabs,
+canonical toolbar order) — shared by Excel/Numbers/LibreOffice, kept deliberately for
+muscle memory.
 
-## Functionality check (store-verified, not visual)
+## Honest residuals (what is NOT restyled, and why)
 
-Draw rect via toolbar button, standalone text via text tool, undo — element count round-tripped through the record store API: 52 → 53 → 54 → 52. Save chip renders. Menus open/close. tsc `--noEmit` clean; `vite build` clean.
-
-## Brutal test: would a cold user still recognize Excalidraw?
-
-- **Chrome: no.** The digits, indigo defaults, Virgil UI text, library/help affordances and the loose-widget island look are gone; toolbar, panels, menus and pills read as the app's own control language in both themes.
-- **Canvas: partly, by design.** The drawing FEEL (hand-drawn stroke style on existing elements, selection handles, tool set/order) is excalidraw's engine and stays. A user who knows excalidraw well could clock the canvas behavior; a cold user sees native app chrome around a whiteboard.
-
-## Residual vendor structure (honest)
-
-- Canvas-level rendering (selection handle shapes, dark-mode content inversion via the vendor `--theme-filter`, hand-drawn stroke rendering) is engine behavior, not CSS-reachable — left as is.
-- The tiny color-swatch buttons keep vendor micro-outlines (`--color-gray-30` + theme-filter); neutral and low-key, not re-mapped.
-- The vendor mobile layout (short wells, overlay page) keeps vendor touch sizing on purpose; its islands/colors are tokenized.
-
-## Pre-existing issues discovered while verifying (NOT introduced, not fixed here)
-
-1. **Pointer offset after scrolling** — excalidraw caches container offsets at mount and misses the record page's custom scroll container: after scrolling, pointer→scene mapping is off by the scroll delta (drawn elements land far from the cursor). Repros on clean main (CSS/font can't affect pointer math; my before-run probes hit it identically). Fix direction: call `api.refresh()` on the scroll container's scroll (or observe it) in WhiteboardCanvas.
-2. **Mobile overlay (390px): the ops rail overlaps the toolbar's right end** — tools under it are unreachable there. Present on main before this PR (see `before-page-light.png`). Needs an OpsRail placement pass for narrow canvases, not a color fix — left out of this reskin deliberately.
+- **The `fx` mark** — kept by choice (universal formula vocabulary), restyled to
+  muted-faint instead of reshaped.
+- **Canvas-rendered text** (formula-editor line, in-cell editor) — painted by Univer's
+  docs engine, not CSS-reachable; cell content font is workbook DATA (the seed uses
+  Arial, so the font dropdown truthfully shows Arial).
+- **Zoom slider geometry** — left neutral (already token-colored; its exact track/knob
+  metrics are deep in hashed Tailwind).
+- **Freeze-boundary shadow inverts light in dark** — pre-existing stock-Univer behavior
+  documented by the sheet-native wave; not reachable through the theming API.
+- **Version pinning** — the mask stencils + registry names bind to `univerjs-icon-*`
+  ids / icon names at the pinned 0.25.1; an engine upgrade that renames them degrades
+  gracefully (stock glyph shows again, nothing breaks).
+- One dev-only warning pre-exists on the page (app `Button` ref warning) — present on
+  main before this lane, untouched.
 
 ## DoD
 
-- [x] Native-not-widget: excalidraw chrome signature killed (digits, fonts, density, menus, islands)
-- [x] All styling via `--nx-*` tokens; re-derives live on theme flip (shot both themes on a mounted canvas); no hardcoded colors added
-- [x] Functionality intact: draw / shape / text / undo store-verified; menus + buttons exercised
-- [x] Light + dark coherent (all surfaces shot in both)
-- [x] BEFORE/AFTER shots: field AND page, light + dark (plus props/menus/short-well states)
-- [x] tsc + vite build clean (in the consuming starter)
-- [ ] "Native" verdict — the lead's + blind reviewer's call, not self-certified
+- [x] Native-not-widget: registry swap (94 names) + 12 stencils + chrome CSS; blind
+      review decides finally.
+- [x] All styling via `--nx-*` tokens / currentColor — no hardcoded colors; masks are
+      alpha-only stencils; re-derives on live theme/skin flips (journey-asserted).
+- [x] Functionality intact: 12/12 journeys green on the built dist — renders, =SUM
+      computes + persists, insert column via header context menu, Bold via toolbar,
+      live theme flip, empty state, mobile type-in-cell, 10k first-paint budget, plus
+      the 4 sheet-native chrome regression journeys.
+- [x] Light + dark coherent (shots + theme-flip journey).
+- [x] Before/after shots incl. toolbar close-ups; popup/context/overflow extras.
+- [x] tsc -b + vite build clean.
