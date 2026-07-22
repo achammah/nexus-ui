@@ -56,6 +56,15 @@ export {
 } from "./record-core/timeTracking";
 export type { TimeEntry, TimeFieldKeys, TimeBudget, DayLoad } from "./record-core/timeTracking";
 
+/* issue-provider sync SEAM — payload shapes + mappings + a pure diff. Performs
+   no network I/O: the consumer supplies the authenticated fetch. */
+export {
+  syncIssues, linkIssues, GITHUB_MAPPING, JIRA_MAPPING, mockIssues, MOCK_NOTICE, MOCK_ISSUE_LABELS,
+} from "./record-core/taskSync";
+export type {
+  ProviderIssue, IssueMapping, GitHubIssuePayload, JiraIssuePayload, SyncOptions, SyncPatchset,
+} from "./record-core/taskSync";
+
 /* view registry — self-registering view types (views/<type>/definition.tsx) */
 export { viewDefinitions, getViewDefinition } from "./record-core/views/registry";
 export type { ViewDefinition, ViewProps, ViewToolbarProps, ViewConfigField, ViewInstanceConfig } from "./record-core/views/types";
