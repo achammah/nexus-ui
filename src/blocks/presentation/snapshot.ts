@@ -1,4 +1,4 @@
-import type { DeckSnapshot, Slide, ViewEvent } from "./types";
+import type { DeckSnapshot, Slide, SlideElement, ViewEvent } from "./types";
 import { uid } from "./types";
 
 /* A free-surface presentation persists as ONE snapshot blob under an app-state
@@ -68,12 +68,17 @@ const B = (s: string) => s; // readability marker for HTML block content below
    transitions, plus a seeded share link and two view sessions so the analytics
    panel is alive on first open. */
 export function seedDeck(): DeckSnapshot {
+  /* free-placement element helper for the seeded diagram slide */
+  let elN = 0;
+  const el = (e: Omit<SlideElement, "id">): SlideElement => ({ id: `el-seed-${++elN}`, ...e });
+
   const s = (
     layout: Slide["layout"],
     blocks: Slide["blocks"],
     notes: string,
     transition: Slide["transition"] = "fade",
-  ): Slide => ({ id: `sl-${uid()}`, layout, blocks, notes, transition });
+    elements?: SlideElement[],
+  ): Slide => ({ id: `sl-${uid()}`, layout, blocks, notes, transition, elements });
 
   const slides: Slide[] = [
     s(
@@ -152,6 +157,20 @@ export function seedDeck(): DeckSnapshot {
         ),
       },
       "If pressed on roadmap items outside these three: the answer is 'H1 next year'.",
+    ),
+    s(
+      "title-body",
+      { title: "How the three land", body: "<b>Sequenced, not parallel</b> — each gate unlocks the next" },
+      "Walk the arrows left to right. The callout is the dependency people always ask about.",
+      "fade",
+      [
+        el({ kind: "shape", shape: "roundRect", x: 96, y: 300, w: 300, h: 150, rot: 0, html: "EU residency<br><b>September</b>", style: { fill: "var(--pres-accent)", stroke: "none", strokeWidth: 0, opacity: 1, radius: 20, color: "#ffffff", fontSize: 26, align: "center", valign: "middle" } }),
+        el({ kind: "shape", shape: "arrow", x: 412, y: 366, w: 90, h: 20, rot: 0, style: { fill: "var(--pres-muted)", stroke: "none", strokeWidth: 0, opacity: 1 } }),
+        el({ kind: "shape", shape: "roundRect", x: 518, y: 300, w: 300, h: 150, rot: 0, html: "Self-serve tier<br><b>October</b>", style: { fill: "var(--pres-accent)", stroke: "none", strokeWidth: 0, opacity: 0.82, radius: 20, color: "#ffffff", fontSize: 26, align: "center", valign: "middle" } }),
+        el({ kind: "shape", shape: "arrow", x: 834, y: 366, w: 90, h: 20, rot: 0, style: { fill: "var(--pres-muted)", stroke: "none", strokeWidth: 0, opacity: 1 } }),
+        el({ kind: "shape", shape: "roundRect", x: 940, y: 300, w: 244, h: 150, rot: 0, html: "Mobile 99.7%<br><b>November</b>", style: { fill: "none", stroke: "var(--pres-accent)", strokeWidth: 3, opacity: 1, radius: 20, color: "var(--pres-fg)", fontSize: 26, align: "center", valign: "middle" } }),
+        el({ kind: "shape", shape: "callout", x: 96, y: 486, w: 420, h: 150, rot: 0, html: "Self-serve can't ship before Frankfurt is GA.", style: { fill: "var(--pres-muted)", stroke: "none", strokeWidth: 0, opacity: 1, fillOpacity: 0.16, radius: 18, color: "var(--pres-fg)", fontSize: 22, align: "center", valign: "middle" } }),
+      ],
     ),
     s(
       "two-column",

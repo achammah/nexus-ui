@@ -27,6 +27,68 @@ export interface SlideBlocks {
   attribution?: string;
 }
 
+/* ---- free-placement elements ----
+   Layout REGIONS (blocks above) are the template path: the layout decides where
+   text sits. ELEMENTS are the PowerPoint path: anything, anywhere, on top. Both
+   coexist on a slide — a layout gives you a fast start, elements give you full
+   freedom. Coordinates are in the 1280x720 design box (see FitSlide), so a slide
+   renders identically at thumbnail, canvas, present and export sizes. */
+
+export type ShapeKind =
+  | "rect"
+  | "roundRect"
+  | "ellipse"
+  | "triangle"
+  | "arrow"
+  | "line"
+  | "star"
+  | "callout";
+
+export type ElementKind = "text" | "shape" | "image";
+
+export interface ElementStyle {
+  /* any CSS color, or "none" for no fill/stroke */
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  /* 0..1 — whole-element opacity (images, text boxes) */
+  opacity?: number;
+  /* 0..1 — shape FILL transparency only, leaving the label readable. This is what
+     PowerPoint's shape "Transparency" actually does, so the slider maps here for
+     shapes and to `opacity` for everything else. */
+  fillOpacity?: number;
+  /* corner radius in design px (roundRect) */
+  radius?: number;
+  color?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  align?: "left" | "center" | "right";
+  valign?: "top" | "middle" | "bottom";
+}
+
+export interface SlideElement {
+  id: string;
+  kind: ElementKind;
+  /* top-left + size in design px */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /* clockwise degrees about the element centre */
+  rot?: number;
+  locked?: boolean;
+  /* members of one group share a groupId and select/move together */
+  groupId?: string;
+  style?: ElementStyle;
+  /* kind:"shape" */
+  shape?: ShapeKind;
+  /* kind:"text" (sanitized rich HTML) — also the label drawn inside a shape */
+  html?: string;
+  /* kind:"image" — data URL or href */
+  src?: string;
+  alt?: string;
+}
+
 export interface Slide {
   id: string;
   layout: SlideLayout;
@@ -34,6 +96,8 @@ export interface Slide {
   /* speaker notes — plain text, shown in presenter view + notes drawer */
   notes: string;
   transition?: SlideTransition;
+  /* free-placement layer, painted over the layout regions in array order (= z-order) */
+  elements?: SlideElement[];
 }
 
 export type DeckThemeId = "native" | "paper" | "midnight" | "accent" | "gradient";

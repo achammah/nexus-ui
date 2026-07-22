@@ -1,5 +1,6 @@
 import * as React from "react";
 import type { Slide, SlideBlocks, SlideLayout } from "./types";
+import { ElementLayer } from "./ElementLayer";
 
 /* Very small allowlist sanitizer for stored rich-text HTML: strips script/style
    tags, event handlers and javascript: URLs. Content is author-owned (same org),
@@ -84,12 +85,15 @@ export interface SlideViewProps {
   onImagePick?: () => void;
   /* which region currently holds focus (editor styles the active outline) */
   onRegionFocus?: (key: keyof SlideBlocks) => void;
+  /* free-placement layer (ElementLayer in the editor; a static render elsewhere).
+     Kept as a slot so SlideView stays presentational and the editor owns gestures. */
+  elementLayer?: React.ReactNode;
 }
 
 /* Renders ONE slide at its natural 16:9 box (the host scales via transform or
    width). Used by the editor canvas (editable), the filmstrip (scaled down),
    present mode and the read-only viewer. */
-export function SlideView({ slide, editable, onBlockChange, onImagePick, onRegionFocus }: SlideViewProps) {
+export function SlideView({ slide, editable, onBlockChange, onImagePick, onRegionFocus, elementLayer }: SlideViewProps) {
   const { spec } = LAYOUTS[slide.layout] ?? LAYOUTS.blank;
   return (
     <div className={`nxPresSlide nxPresLayout-${slide.layout}`} data-slide-id={slide.id}>
@@ -125,6 +129,7 @@ export function SlideView({ slide, editable, onBlockChange, onImagePick, onRegio
           onFocus={() => onRegionFocus?.(r.key)}
         />
       ))}
+      {elementLayer ?? (slide.elements?.length ? <StaticElements slide={slide} /> : null)}
     </div>
   );
 }
@@ -184,4 +189,11 @@ function EditableRegion({ className, html, placeholder, editable, onChange, onFo
       spellCheck={editable}
     />
   );
+}
+
+/* Non-interactive render of the free-placement layer — filmstrip, present mode,
+   viewer and export all paint elements through the same component the editor
+   uses, so what you place is exactly what you present. */
+function StaticElements({ slide }: { slide: Slide }) {
+  return <ElementLayer slide={slide} />;
 }

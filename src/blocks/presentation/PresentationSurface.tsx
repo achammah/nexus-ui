@@ -3,6 +3,17 @@ import type { DeckSnapshot, DeckThemeId, PresentationConfig, Slide, SlideBlocks,
 import { uid } from "./types";
 import { applyViewEvent, createSlide, isDeckSnapshot, seedDeck } from "./snapshot";
 import { LAYOUTS, SlideView, textOf } from "./SlideView";
+import { ElementLayer } from "./ElementLayer";
+import { ElementBar, InsertBar } from "./ElementControls";
+import {
+  addElement,
+  createImageElement,
+  createShape,
+  createTextBox,
+  duplicateElements,
+  els,
+  removeElements,
+} from "./elements";
 import { FitSlide, PresentMode } from "./PresentMode";
 import { AnalyticsPanel, RoomsPanel, SharePanel } from "./SharePanels";
 import { PresentationViewer } from "./PresentationViewer";
@@ -147,6 +158,9 @@ export function PresentationSurface({
   const [presenting, setPresenting] = React.useState(false);
   const [previewSlug, setPreviewSlug] = React.useState<string | null>(null);
   const [busyExport, setBusyExport] = React.useState<null | "pptx">(null);
+  const [selEls, setSelEls] = React.useState<string[]>([]);
+  /* what an image pick should do: replace the layout's image region, or insert an element */
+  const imageIntent = React.useRef<"region" | "element">("region");
   const [dragIdx, setDragIdx] = React.useState<number | null>(null);
   const [dropIdx, setDropIdx] = React.useState<number | null>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
@@ -160,6 +174,40 @@ export function PresentationSurface({
     commit({ ...deck, slides: deck.slides.map((s) => (s.id === id ? { ...s, ...p } : s)) }, tag);
   const setBlock = (key: keyof SlideBlocks, html: string) =>
     patchSlide(slide.id, { blocks: { ...slide.blocks, [key]: html } }, `text:${slide.id}:${key}`);
+
+  /* ---- free-placement elements ----
+     A gesture streams DRAFTS (no history) and lands ONE commit on pointer-up. */
+  const putSlide = (next: Slide, mode: "draft" | "commit") => {
+    const deckNext = { ...deck, slides: deck.slides.map((x) => (x.id === next.id ? next : x)) };
+    if (mode === "draft") update(deckNext);
+    else commit(deckNext);
+  };
+  const insertElement = (make: () => Slide) => {
+    const next = make();
+    putSlide(next, "commit");
+    const added = els(next)[els(next).length - 1];
+    if (added) setSelEls([added.id]);
+  };
+  const deleteSelectedEls = () => {
+    if (!selEls.length) return;
+    putSlide(removeElements(slide, selEls), "commit");
+    setSelEls([]);
+  };
+  const duplicateSelectedEls = () => {
+    if (!selEls.length) return;
+    const { slide: next, newIds } = duplicateElements(slide, selEls);
+    putSlide(next, "commit");
+    setSelEls(newIds);
+  };
+  const nudge = (dx: number, dy: number) => {
+    if (!selEls.length) return;
+    let next = slide;
+    for (const id of selEls) {
+      const e = els(next).find((x) => x.id === id);
+      if (e) next = { ...next, elements: els(next).map((x) => (x.id === id ? { ...x, x: x.x + dx, y: x.y + dy } : x)) };
+    }
+    putSlide(next, "commit");
+  };
 
   const addSlide = (layout: SlideLayout) => {
     const s = createSlide(layout);
@@ -201,11 +249,18 @@ export function PresentationSurface({
     active?.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
-  const pickImage = () => fileRef.current?.click();
+  const pickImage = (intent: "region" | "element" = "region") => {
+    imageIntent.current = intent;
+    fileRef.current?.click();
+  };
   const onImageFile = (f: File | undefined) => {
     if (!f) return;
     const fr = new FileReader();
-    fr.onload = () => setBlock("imageUrl", String(fr.result));
+    fr.onload = () => {
+      const src = String(fr.result);
+      if (imageIntent.current === "element") insertElement(() => addElement(slide, createImageElement(src)));
+      else setBlock("imageUrl", src);
+    };
     fr.readAsDataURL(f);
   };
 
@@ -250,7 +305,12 @@ export function PresentationSurface({
       redo();
       return;
     }
-    if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+    if (selEls.length && ["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+      /* an element selection turns the arrows into a nudge (1px, 10px with shift) */
+      e.preventDefault();
+      const step = e.shiftKey ? 10 : 1;
+      nudge(e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0, e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0);
+    } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
       setSel((i) => Math.min(deck.slides.length - 1, i + 1));
       e.preventDefault();
     } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
@@ -258,10 +318,15 @@ export function PresentationSurface({
       e.preventDefault();
     } else if ((e.metaKey || e.ctrlKey) && e.key === "d") {
       e.preventDefault();
-      duplicateSlide(selIdx);
+      if (selEls.length) duplicateSelectedEls();
+      else duplicateSlide(selIdx);
     } else if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
-      deleteSlide(selIdx);
+      if (selEls.length) deleteSelectedEls();
+      else deleteSlide(selIdx);
+    } else if (e.key === "Escape" && selEls.length) {
+      e.preventDefault();
+      setSelEls([]);
     } else if (e.key === "F5" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
       e.preventDefault();
       if (feat.present) setPresenting(true);
@@ -372,7 +437,10 @@ export function PresentationSurface({
                   setDragIdx(null);
                   setDropIdx(null);
                 }}
-                onClick={() => setSel(i)}
+                onClick={() => {
+                  setSel(i);
+                  setSelEls([]);
+                }}
                 tabIndex={0}
                 role="option"
                 aria-selected={i === selIdx}
@@ -443,6 +511,11 @@ export function PresentationSurface({
                   </select>
                 </label>
               </div>
+              <InsertBar
+                onInsertText={() => insertElement(() => addElement(slide, createTextBox()))}
+                onInsertShape={(k) => insertElement(() => addElement(slide, createShape(k)))}
+                onInsertImage={() => pickImage("element")}
+              />
               <div className="nxPresToolGroup">
                 <button type="button" className={`nxPresToolBtn${notesOpen ? " isOn" : ""}`} onClick={() => setNotesOpen((v) => !v)} aria-pressed={notesOpen}>
                   Notes
@@ -450,9 +523,26 @@ export function PresentationSurface({
               </div>
             </div>
 
+            <ElementBar slide={slide} selected={selEls} onSlide={(nx) => putSlide(nx, "commit")} onSelect={setSelEls} />
+
             <div className="nxPresCanvasWell">
               <FitSlide className="nxPresCanvas">
-                <SlideView slide={slide} editable onBlockChange={setBlock} onImagePick={pickImage} />
+                <SlideView
+                  slide={slide}
+                  editable
+                  onBlockChange={setBlock}
+                  onImagePick={() => pickImage("region")}
+                  elementLayer={
+                    <ElementLayer
+                      slide={slide}
+                      editable
+                      selected={selEls}
+                      onSelect={setSelEls}
+                      onDraft={(nx) => putSlide(nx, "draft")}
+                      onCommit={(nx) => putSlide(nx, "commit")}
+                    />
+                  }
+                />
               </FitSlide>
             </div>
 
