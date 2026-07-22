@@ -45,6 +45,17 @@ export {
 } from "./record-core/tasks";
 export type { TaskFieldKeys, TaskConfigOptions, TaskNode, TaskHealth, RepeatRule } from "./record-core/tasks";
 
+/* time tracking — the entry-log timer (one running at a time), spent-vs-estimate
+   budgets and the today/focus day plan (consumed by the "focus" view) */
+export {
+  TIME_KEYS, taskEntries, runningEntry, isTracking, trackingRow, entrySeconds,
+  trackedSeconds, trackedSecondsOn, totalTrackedOn, startTimerPatches,
+  stopTimerPatch, toggleTimerPatches, logTimePatch, secondsToHours,
+  formatDuration, formatClock, timeBudget, isPlannedFor, planForDayPatch,
+  unplanPatch, plannedRows, focusSuggestions, dayLoad,
+} from "./record-core/timeTracking";
+export type { TimeEntry, TimeFieldKeys, TimeBudget, DayLoad } from "./record-core/timeTracking";
+
 /* view registry — self-registering view types (views/<type>/definition.tsx) */
 export { viewDefinitions, getViewDefinition } from "./record-core/views/registry";
 export type { ViewDefinition, ViewProps, ViewToolbarProps, ViewConfigField, ViewInstanceConfig } from "./record-core/views/types";

@@ -21,15 +21,23 @@ export interface TimeEntry {
   note?: string;
 }
 
-export const TIME_KEYS = {
+/* the field KEYS this module reads/writes — every helper takes a Partial
+   override so an object with a different schema wires without a fork */
+export interface TimeFieldKeys {
+  entries: string;
+  spent: string;
+  estimate: string;
+  plannedFor: string;
+  focusOrder: string;
+}
+
+export const TIME_KEYS: TimeFieldKeys = {
   entries: "timeEntries",
   spent: "timeSpent",
   estimate: "estimate",
   plannedFor: "plannedFor",
   focusOrder: "focusOrder",
-} as const;
-
-export type TimeFieldKeys = typeof TIME_KEYS;
+};
 
 /* ------------------------------------------------------------- reading */
 
