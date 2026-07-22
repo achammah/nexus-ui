@@ -25,11 +25,19 @@
 .nxPresTop {
   display: flex;
   align-items: center;
-  gap: var(--nx-gap-2);
+  gap: var(--nx-gap-1);
   padding: var(--nx-gap-2) var(--nx-gap-3);
   border-bottom: 1px solid var(--nx-border);
   background: var(--nx-chrome-bg, var(--nx-bg-raised));
   flex-wrap: wrap;
+  min-height: 44px;
+}
+.nxPresTopDivide {
+  width: 1px;
+  height: 18px;
+  background: var(--nx-border);
+  margin: 0 2px;
+  flex: none;
 }
 .nxPresDeckTitle {
   font: 600 var(--nx-text-body) var(--nx-font-sans);
@@ -44,13 +52,16 @@
 .nxPresDeckTitle:hover { border-color: var(--nx-border); }
 .nxPresDeckTitle:focus-visible { outline: none; border-color: var(--nx-accent); background: var(--nx-bg-raised); }
 
-.nxPresTabs { display: flex; gap: 2px; background: var(--nx-bg-sunken); border-radius: var(--nx-radius-m); padding: 2px; }
+.nxPresTabs { display: flex; gap: 2px; background: var(--nx-bg-sunken); border-radius: var(--nx-radius-m); padding: 2px; margin-left: var(--nx-gap-2); }
 .nxPresTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 0;
   background: transparent;
   color: var(--nx-fg-muted);
   font: 500 var(--nx-text-meta) var(--nx-font-sans);
-  padding: 5px 12px;
+  padding: 4px 10px;
   border-radius: calc(var(--nx-radius-m) - 2px);
   cursor: pointer;
   transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease);
@@ -96,9 +107,19 @@
 .nxPresFilm {
   width: 200px;
   flex: none;
-  overflow-y: auto;
+  overflow: hidden;
   border-right: 1px solid var(--nx-border);
   background: var(--nx-bg-sunken);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* only the slide LIST scrolls; the new-slide control is a real footer, so its
+   menu anchors against the viewport instead of a scroll container */
+.nxPresFilmList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: var(--nx-gap-2);
   display: flex;
   flex-direction: column;
@@ -194,17 +215,38 @@
 .nxPresToolBtn:disabled { opacity: 0.35; cursor: default; background: transparent; color: var(--nx-fg-faint); }
 .nxPresToolLabel { display: flex; align-items: center; gap: 6px; font: 500 var(--nx-text-micro) var(--nx-font-sans); color: var(--nx-fg-faint); }
 
+/* The stage FILLS its surface (like the spreadsheet and map do). The slide is a
+   page sitting on a recessed stage — not a bordered card floating in the page. */
 .nxPresCanvasWell {
   flex: 1;
   min-height: 0;
-  padding: var(--nx-gap-4);
+  padding: var(--nx-gap-3);
   display: flex;
+  position: relative;
+  background: var(--nx-bg-sunken);
 }
 .nxPresCanvas { flex: 1; }
-.nxPresCanvas .nxPresFitClip { box-shadow: var(--nx-shadow-2); border-radius: 10px; }
+.nxPresCanvas .nxPresFitClip {
+  box-shadow: var(--nx-shadow-2);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s);
+}
 
-/* notes drawer */
-.nxPresNotes { border-top: 1px solid var(--nx-border); background: var(--nx-bg-raised); padding: var(--nx-gap-2) var(--nx-gap-3); }
+/* notes — a floating panel OVER the canvas (never a second full-width band;
+   the stage keeps the whole column height) */
+.nxPresNotes {
+  position: absolute;
+  left: var(--nx-gap-3);
+  bottom: var(--nx-gap-3);
+  width: min(480px, calc(100% - 2 * var(--nx-gap-3)));
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  background: color-mix(in srgb, var(--nx-bg-raised) 94%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--nx-shadow-2);
+  padding: var(--nx-gap-2) var(--nx-gap-3);
+  z-index: 5;
+}
 .nxPresNotesLabel {
   font: 600 var(--nx-text-micro) var(--nx-font-sans);
   letter-spacing: var(--nx-label-tracking);
@@ -463,12 +505,14 @@
 /* ---- mobile (≤720px): filmstrip becomes a horizontal rail, panels stack ---- */
 @media (max-width: 720px) {
   .nxPresEditor { flex-direction: column; }
-  .nxPresFilm { width: 100%; flex-direction: row; overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 1px solid var(--nx-border); align-items: stretch; }
+  /* the filmstrip becomes a horizontal rail; the list scrolls sideways and the
+     new-slide control sits at its end */
+  .nxPresFilm { width: 100%; height: auto; flex: none; flex-direction: row; border-right: 0; border-bottom: 1px solid var(--nx-border); align-items: stretch; }
+  .nxPresFilmList { flex-direction: row; overflow-x: auto; overflow-y: hidden; align-items: stretch; }
   .nxPresFilmItem { flex: none; width: 132px; flex-direction: column; }
   .nxPresFilmThumb { flex: none; width: 100%; }
   .nxPresFilmIdx { width: auto; }
-  .nxPresFilmAdd { border-top: 0; border-left: 1px solid var(--nx-border); padding: 0 0 0 var(--nx-gap-2); flex: none; display: flex; flex-direction: column; }
-  .nxPresFilmAddGrid { grid-template-columns: 1fr 1fr; overflow-y: auto; }
+  .nxPresFilmAdd { border-top: 0; border-left: 1px solid var(--nx-border); align-items: center; }
   .nxPresCanvasWell { padding: var(--nx-gap-2); }
   .nxPresTop { padding: var(--nx-gap-1) var(--nx-gap-2); }
   .nxPresDeckTitle { width: 100%; order: -1; }
@@ -652,7 +696,8 @@
 .nxPresSwatch.isNone {
   background: repeating-linear-gradient(45deg, var(--nx-bg-sunken) 0 4px, var(--nx-bg-raised) 4px 8px);
 }
-.nxPresSwatches { grid-template-columns: repeat(5, 1fr); min-width: 0; }
+.nxPresSwatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 2px 4px 4px; }
+.nxPresSwatch.isActive { outline: 2px solid var(--nx-accent); outline-offset: 1px; }
 .nxPresSwatch {
   width: 26px;
   height: 26px;
@@ -737,3 +782,55 @@
   border-radius: var(--nx-radius-s);
 }
 .nxPresDataGrid input[type="number"] { font-family: var(--nx-font-mono); width: 84px; }
+
+
+/* ---- contextual canvas bars ----
+   Formatting and element properties belong to WHAT IS SELECTED, so they ride
+   just above the stage and appear only when something is selected or focused.
+   The surface therefore opens with ONE header bar, not three. */
+.nxPresContextBar,
+.nxPresElBar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  padding: 5px var(--nx-gap-3);
+  border-bottom: 1px solid var(--nx-border);
+  background: var(--nx-bg-raised);
+  flex: none;
+}
+.nxPresElBar { gap: 4px; }
+
+/* menus: icon + label + optional hint, matching the app's dropdown rows */
+.nxPresMenuIcon { display: inline-flex; align-items: center; margin-right: 2px; color: var(--nx-fg-muted); }
+.nxPresMenuHint { margin-left: auto; padding-left: var(--nx-gap-3); color: var(--nx-fg-faint); font: 400 var(--nx-text-micro) var(--nx-font-sans); }
+
+/* the shape picker inside the Insert menu */
+.nxPresShapeGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 2px 4px 4px; }
+.nxPresShapeCell {
+  display: grid;
+  place-items: center;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: var(--nx-radius-s);
+  background: transparent;
+  color: var(--nx-fg-muted);
+  cursor: pointer;
+}
+.nxPresShapeCell:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); border-color: var(--nx-border); }
+.nxPresShapeCell:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; }
+
+.nxPresTipKey { margin-left: 6px; opacity: 0.7; font-family: var(--nx-font-mono); }
+
+/* filmstrip ops are icon buttons now, so give them room to breathe */
+.nxPresMicroBtn { display: inline-grid; place-items: center; width: 22px; height: 22px; }
+.nxPresMicroDanger:hover:not(:disabled) { color: var(--nx-danger); background: var(--nx-danger-soft); }
+/* the new-slide control stays reachable however long the deck gets */
+.nxPresFilmAdd {
+  display: flex;
+  flex: none;
+  padding: var(--nx-gap-2);
+  background: var(--nx-bg-sunken);
+  border-top: 1px solid var(--nx-border);
+}
+.nxPresFilmAdd > * { flex: 1; }

@@ -4,7 +4,42 @@ import { uid } from "./types";
 import { applyViewEvent, createSlide, isDeckSnapshot, seedDeck } from "./snapshot";
 import { LAYOUTS, SlideView, textOf } from "./SlideView";
 import { ElementLayer } from "./ElementLayer";
-import { ElementBar, InsertBar } from "./ElementControls";
+import { ElementBar, InsertMenu } from "./ElementControls";
+import { IconAction, PickerMenu, SectionTabs, TextAction } from "./chrome";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../components/ui/dropdown-menu";
+import { TooltipProvider } from "../../components/ui/tooltip";
+import { Button } from "../../primitives/Button";
+import {
+  Bold,
+  ChartNoAxesColumn,
+  Copy,
+  Download,
+  FileDown,
+  Italic,
+  LayoutTemplate,
+  List,
+  ListOrdered,
+  MessageSquareText,
+  Play,
+  Plus,
+  Presentation as PresentationIcon,
+  Redo2,
+  Share2,
+  Palette,
+  Trash2,
+  Underline,
+  Undo2,
+  Upload,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import {
   addElement,
   createImageElement,
@@ -165,6 +200,8 @@ export function PresentationSurface({
   const [importReport, setImportReport] = React.useState<{ n: number; warnings: string[] } | null>(null);
   const pptxRef = React.useRef<HTMLInputElement>(null);
   const [selEls, setSelEls] = React.useState<string[]>([]);
+  /* which text surface has focus — drives the contextual formatting bar */
+  const [textFocus, setTextFocus] = React.useState(false);
   /* what an image pick should do: replace the layout's image region, or insert an element */
   const imageIntent = React.useRef<"region" | "element">("region");
   const [dragIdx, setDragIdx] = React.useState<number | null>(null);
@@ -356,6 +393,9 @@ export function PresentationSurface({
       if (selEls.length) deleteSelectedEls();
       else deleteSlide(selIdx);
     } else if (e.key === "Escape" && selEls.length) {
+      /* Escape belongs to the topmost layer: if a menu is open it closes that,
+         and must NOT also throw away the element selection underneath. */
+      if (document.querySelector("[data-radix-popper-content-wrapper]")) return;
       e.preventDefault();
       setSelEls([]);
     } else if (e.key === "F5" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
@@ -391,8 +431,12 @@ export function PresentationSurface({
   }
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div ref={surfaceRef} className={`nxPres nxPresTheme-${deck.theme} ${className ?? ""}`} onKeyDown={onSurfaceKey} tabIndex={-1} {...rest}>
-      {/* ---- top bar ---- */}
+      {/* ---- ONE header: identity + sections + deck actions ----
+           Slide-level and selection-level controls do NOT live here; they are
+           contextual to the canvas below, so the surface opens with a single
+           bar like every other view in the app. */}
       <header className="nxPresTop">
         <input
           className="nxPresDeckTitle"
@@ -400,61 +444,68 @@ export function PresentationSurface({
           onChange={(e) => commit({ ...deck, title: e.target.value }, "deck-title")}
           aria-label="Deck title"
         />
-        <nav className="nxPresTabs" role="tablist" aria-label="Presentation sections">
-          {(
+
+        <SectionTabs
+          value={tab}
+          onPick={setTab}
+          tabs={
             [
-              ["slides", "Slides", true],
-              ["share", "Share", feat.share],
-              ["analytics", "Analytics", feat.analytics],
-              ["rooms", "Rooms", feat.rooms],
-            ] as Array<[Tab, string, boolean]>
-          )
-            .filter(([, , on]) => on)
-            .map(([t, label]) => (
-              <button key={t} type="button" role="tab" aria-selected={tab === t} className={`nxPresTab${tab === t ? " isActive" : ""}`} onClick={() => setTab(t)}>
-                {label}
-              </button>
-            ))}
-        </nav>
+              { value: "slides" as Tab, label: "Slides", icon: <PresentationIcon size={13} /> },
+              feat.share ? { value: "share" as Tab, label: "Share", icon: <Share2 size={13} /> } : null,
+              feat.analytics ? { value: "analytics" as Tab, label: "Analytics", icon: <ChartNoAxesColumn size={13} /> } : null,
+              feat.rooms ? { value: "rooms" as Tab, label: "Rooms", icon: <LayoutTemplate size={13} /> } : null,
+            ].filter(Boolean) as Array<{ value: Tab; label: string; icon: React.ReactNode }>
+          }
+        />
+
         <div className="nxPresTopSpacer" />
-        <select
-          className="nxPresSelect"
+
+        {tab === "slides" && (
+          <>
+            <IconAction icon={<Undo2 size={13} />} label="Undo" shortcut="⌘Z" onClick={undo} disabled={!canUndo} testid="undo-btn" />
+            <IconAction icon={<Redo2 size={13} />} label="Redo" shortcut="⌘⇧Z" onClick={redo} disabled={!canRedo} testid="redo-btn" />
+            <span className="nxPresTopDivide" />
+            <InsertMenu
+              onInsertText={() => insertElement(() => addElement(slide, createTextBox()))}
+              onInsertShape={(k) => insertElement(() => addElement(slide, createShape(k)))}
+              onInsertImage={() => pickImage("element")}
+              onInsertChart={(t) => insertElement(() => addElement(slide, createChart(t)))}
+              onInsertTable={() => insertElement(() => addElement(slide, createTable()))}
+            />
+            <SlideMenu
+              slide={slide}
+              onLayout={(l) => patchSlide(slide.id, { layout: l })}
+              onTransition={(t) => patchSlide(slide.id, { transition: t })}
+              notesOpen={notesOpen}
+              onNotes={() => setNotesOpen((v) => !v)}
+            />
+          </>
+        )}
+
+        <PickerMenu
           value={deck.theme}
-          onChange={(e) => commit({ ...deck, theme: e.target.value as DeckThemeId }, "deck-theme")}
-          aria-label="Deck theme"
-        >
-          {THEMES.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-        {feat.pptxImport && (
-          <button
-            type="button"
-            className="nxPresBtn"
-            onClick={() => pptxRef.current?.click()}
-            disabled={busyExport === "import"}
-            title="Import a PowerPoint or Google Slides .pptx"
-            data-testid="import-pptx"
-          >
-            {busyExport === "import" ? "Importing…" : "Import"}
-          </button>
-        )}
-        {feat.pdfExport && (
-          <button type="button" className="nxPresBtn" onClick={doPdf} title="Print / save as PDF">
-            PDF
-          </button>
-        )}
-        {feat.pptxExport && (
-          <button type="button" className="nxPresBtn" onClick={doPptx} disabled={busyExport === "pptx"} data-testid="pptx-export">
-            {busyExport === "pptx" ? "Exporting…" : "PPTX"}
-          </button>
-        )}
+          options={THEMES.map((t) => ({ value: t.id, label: t.label }))}
+          onPick={(v) => commit({ ...deck, theme: v }, "deck-theme")}
+          label="Theme"
+          icon={<Palette size={13} />}
+          testid="theme-menu"
+          align="end"
+        />
+
+        <FileMenu
+          canImport={!!feat.pptxImport}
+          canPdf={!!feat.pdfExport}
+          canPptx={!!feat.pptxExport}
+          busy={busyExport}
+          onImport={() => pptxRef.current?.click()}
+          onPdf={doPdf}
+          onPptx={doPptx}
+        />
+
         {feat.present && (
-          <button type="button" className="nxPresBtn nxPresBtnPrimary" onClick={() => setPresenting(true)} data-testid="present-btn">
+          <TextAction variant="primary" icon={<Play size={13} />} onClick={() => setPresenting(true)} testid="present-btn" title="Present (⌘↵)">
             Present
-          </button>
+          </TextAction>
         )}
         {actions && <div className="nxPresHostActions">{actions}</div>}
       </header>
@@ -462,7 +513,8 @@ export function PresentationSurface({
       {tab === "slides" && (
         <div className={`nxPresEditor${notesOpen ? " hasNotes" : ""}`}>
           {/* ---- filmstrip ---- */}
-          <aside className="nxPresFilm" role="listbox" aria-label="Slides">
+          <aside className="nxPresFilm" aria-label="Slides">
+            <div className="nxPresFilmList" role="listbox" aria-label="Slides">
             {deck.slides.map((s, i) => (
               <div
                 key={s.id}
@@ -498,85 +550,81 @@ export function PresentationSurface({
                     <SlideView slide={s} />
                   </FitSlide>
                 </div>
-                <div className="nxPresFilmOps">
-                  <button type="button" className="nxPresMicroBtn" title="Move up" aria-label="Move slide up" onClick={(e) => { e.stopPropagation(); moveSlide(i, i - 1); }} disabled={i === 0}>↑</button>
-                  <button type="button" className="nxPresMicroBtn" title="Move down" aria-label="Move slide down" onClick={(e) => { e.stopPropagation(); moveSlide(i, i + 1); }} disabled={i === deck.slides.length - 1}>↓</button>
-                  <button type="button" className="nxPresMicroBtn" title="Duplicate" aria-label="Duplicate slide" onClick={(e) => { e.stopPropagation(); duplicateSlide(i); }}>⧉</button>
-                  <button type="button" className="nxPresMicroBtn" title="Delete" aria-label="Delete slide" onClick={(e) => { e.stopPropagation(); deleteSlide(i); }} disabled={deck.slides.length <= 1}>✕</button>
+                <div className="nxPresFilmOps" onPointerDown={(e) => e.stopPropagation()}>
+                  <button type="button" className="nxPresMicroBtn" title="Move up" aria-label="Move slide up" onClick={(e) => { e.stopPropagation(); moveSlide(i, i - 1); }} disabled={i === 0}>
+                    <ChevronUp size={13} />
+                  </button>
+                  <button type="button" className="nxPresMicroBtn" title="Move down" aria-label="Move slide down" onClick={(e) => { e.stopPropagation(); moveSlide(i, i + 1); }} disabled={i === deck.slides.length - 1}>
+                    <ChevronDown size={13} />
+                  </button>
+                  <button type="button" className="nxPresMicroBtn" title="Duplicate" aria-label="Duplicate slide" onClick={(e) => { e.stopPropagation(); duplicateSlide(i); }}>
+                    <Copy size={13} />
+                  </button>
+                  <button type="button" className="nxPresMicroBtn nxPresMicroDanger" title="Delete" aria-label="Delete slide" onClick={(e) => { e.stopPropagation(); deleteSlide(i); }} disabled={deck.slides.length <= 1}>
+                    <Trash2 size={13} />
+                  </button>
                 </div>
               </div>
             ))}
+            </div>
             <div className="nxPresFilmAdd">
-              <span className="nxPresFilmAddLabel">New slide</span>
-              <div className="nxPresFilmAddGrid">
-                {(Object.keys(LAYOUTS) as SlideLayout[]).map((l) => (
-                  <button key={l} type="button" className="nxPresBtn nxPresLayoutBtn" onClick={() => addSlide(l)} data-testid={`add-${l}`}>
-                    {LAYOUTS[l].label}
-                  </button>
-                ))}
-              </div>
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="secondary" icon={<Plus size={13} />} data-testid="add-slide-menu">
+                    New slide
+                  </Button>
+                </DropdownMenuTrigger>
+                {/* the trigger is pinned to the bottom of a scrolling filmstrip, so the
+                    menu opens upward — collision detection against the scroll
+                    container would otherwise push it off-screen */}
+                <DropdownMenuContent align="start" side="top" sideOffset={6}>
+                  <DropdownMenuLabel>Layout</DropdownMenuLabel>
+                  {(Object.keys(LAYOUTS) as SlideLayout[]).map((l) => (
+                    <DropdownMenuCheckboxItem key={l} checked={false} onCheckedChange={() => addSlide(l)} data-testid={`add-${l}`}>
+                      {LAYOUTS[l].label}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </aside>
 
           {/* ---- canvas column ---- */}
           <div className="nxPresMain">
-            <div className="nxPresToolbar" role="toolbar" aria-label="Slide formatting">
-              <div className="nxPresToolGroup">
-                <button type="button" className="nxPresToolBtn" onClick={undo} disabled={!canUndo} title="Undo (⌘Z)" aria-label="Undo" data-testid="undo-btn">↩</button>
-                <button type="button" className="nxPresToolBtn" onClick={redo} disabled={!canRedo} title="Redo (⌘⇧Z)" aria-label="Redo" data-testid="redo-btn">↪</button>
+            {/* contextual: text formatting appears only while a text region or
+                text box has focus — it belongs to what you are editing, not to
+                the surface as a whole */}
+            {textFocus && selEls.length === 0 && (
+              <div className="nxPresContextBar" role="toolbar" aria-label="Text formatting" data-testid="text-format-bar">
+                <IconAction icon={<Bold size={13} />} label="Bold" shortcut="⌘B" onClick={() => fmt("bold")} testid="fmt-bold" />
+                <IconAction icon={<Italic size={13} />} label="Italic" shortcut="⌘I" onClick={() => fmt("italic")} testid="fmt-italic" />
+                <IconAction icon={<Underline size={13} />} label="Underline" shortcut="⌘U" onClick={() => fmt("underline")} testid="fmt-underline" />
+                <span className="nxPresTopDivide" />
+                <IconAction icon={<List size={13} />} label="Bulleted list" onClick={() => fmt("insertUnorderedList")} testid="fmt-ul" />
+                <IconAction icon={<ListOrdered size={13} />} label="Numbered list" onClick={() => fmt("insertOrderedList")} testid="fmt-ol" />
               </div>
-              <div className="nxPresToolGroup">
-                <button type="button" className="nxPresToolBtn" onMouseDown={(e) => e.preventDefault()} onClick={() => fmt("bold")} title="Bold (⌘B)"><b>B</b></button>
-                <button type="button" className="nxPresToolBtn" onMouseDown={(e) => e.preventDefault()} onClick={() => fmt("italic")} title="Italic (⌘I)"><i>I</i></button>
-                <button type="button" className="nxPresToolBtn" onMouseDown={(e) => e.preventDefault()} onClick={() => fmt("underline")} title="Underline (⌘U)"><u>U</u></button>
-                <button type="button" className="nxPresToolBtn" onMouseDown={(e) => e.preventDefault()} onClick={() => fmt("insertUnorderedList")} title="Bulleted list">• list</button>
-                <button type="button" className="nxPresToolBtn" onMouseDown={(e) => e.preventDefault()} onClick={() => fmt("insertOrderedList")} title="Numbered list">1. list</button>
-              </div>
-              <div className="nxPresToolGroup">
-                <label className="nxPresToolLabel">
-                  Layout
-                  <select className="nxPresSelect" value={slide.layout} onChange={(e) => patchSlide(slide.id, { layout: e.target.value as SlideLayout })} aria-label="Slide layout">
-                    {(Object.keys(LAYOUTS) as SlideLayout[]).map((l) => (
-                      <option key={l} value={l}>
-                        {LAYOUTS[l].label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="nxPresToolLabel">
-                  Transition
-                  <select className="nxPresSelect" value={slide.transition ?? "fade"} onChange={(e) => patchSlide(slide.id, { transition: e.target.value as SlideTransition })} aria-label="Slide transition">
-                    {TRANSITIONS.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <InsertBar
-                onInsertText={() => insertElement(() => addElement(slide, createTextBox()))}
-                onInsertShape={(k) => insertElement(() => addElement(slide, createShape(k)))}
-                onInsertImage={() => pickImage("element")}
-                onInsertChart={(t) => insertElement(() => addElement(slide, createChart(t)))}
-                onInsertTable={() => insertElement(() => addElement(slide, createTable()))}
-              />
-              <div className="nxPresToolGroup">
-                <button type="button" className={`nxPresToolBtn${notesOpen ? " isOn" : ""}`} onClick={() => setNotesOpen((v) => !v)} aria-pressed={notesOpen}>
-                  Notes
-                </button>
-              </div>
-            </div>
+            )}
 
             <ElementBar slide={slide} selected={selEls} onSlide={(nx) => putSlide(nx, "commit")} onSelect={setSelEls} />
 
-            <div className="nxPresCanvasWell">
+            <div
+              className="nxPresCanvasWell"
+              onFocusCapture={(e) => {
+                const t = e.target as HTMLElement;
+                setTextFocus(!!t.closest('[contenteditable="true"]'));
+              }}
+              onBlurCapture={(e) => {
+                const next = e.relatedTarget as HTMLElement | null;
+                if (!next || !next.closest('[contenteditable="true"], .nxPresContextBar')) setTextFocus(false);
+              }}
+            >
               <FitSlide className="nxPresCanvas">
                 <SlideView
                   slide={slide}
                   editable
                   onBlockChange={setBlock}
                   onImagePick={() => pickImage("region")}
+                  onRegionFocus={() => setTextFocus(true)}
                   elementLayer={
                     <ElementLayer
                       slide={slide}
@@ -589,20 +637,19 @@ export function PresentationSurface({
                   }
                 />
               </FitSlide>
+              {notesOpen && (
+                <div className="nxPresNotes" data-testid="notes-panel">
+                  <span className="nxPresNotesLabel">Speaker notes</span>
+                  <textarea
+                    className="nxPresNotesArea"
+                    value={slide.notes}
+                    placeholder="Notes only you see in presenter view…"
+                    onChange={(e) => patchSlide(slide.id, { notes: e.target.value })}
+                    aria-label="Speaker notes"
+                  />
+                </div>
+              )}
             </div>
-
-            {notesOpen && (
-              <div className="nxPresNotes">
-                <span className="nxPresNotesLabel">Speaker notes</span>
-                <textarea
-                  className="nxPresNotesArea"
-                  value={slide.notes}
-                  placeholder="Notes only you see in presenter view…"
-                  onChange={(e) => patchSlide(slide.id, { notes: e.target.value })}
-                  aria-label="Speaker notes"
-                />
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -646,6 +693,115 @@ export function PresentationSurface({
 
       {presenting && <PresentMode deck={deck} startIndex={selIdx} onExit={() => setPresenting(false)} />}
     </div>
+    </TooltipProvider>
+  );
+}
+
+/* Slide-level properties (layout · transition · notes) as ONE menu, so the
+   surface needs no third toolbar row. */
+function SlideMenu({
+  slide,
+  onLayout,
+  onTransition,
+  notesOpen,
+  onNotes,
+}: {
+  slide: Slide;
+  onLayout: (l: SlideLayout) => void;
+  onTransition: (t: SlideTransition) => void;
+  notesOpen: boolean;
+  onNotes: () => void;
+}) {
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="ghost" icon={<LayoutTemplate size={13} />} data-testid="slide-menu">
+          Slide
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Layout</DropdownMenuLabel>
+        {(Object.keys(LAYOUTS) as SlideLayout[]).map((l) => (
+          <DropdownMenuCheckboxItem
+            key={l}
+            checked={slide.layout === l}
+            onCheckedChange={() => onLayout(l)}
+            data-testid={`layout-${l}`}
+          >
+            {LAYOUTS[l].label}
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Transition</DropdownMenuLabel>
+        {TRANSITIONS.map((t) => (
+          <DropdownMenuCheckboxItem
+            key={t}
+            checked={(slide.transition ?? "fade") === t}
+            onCheckedChange={() => onTransition(t)}
+            data-testid={`transition-${t}`}
+          >
+            {t === "none" ? "None" : t[0].toUpperCase() + t.slice(1)}
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem checked={notesOpen} onCheckedChange={onNotes} data-testid="notes-toggle">
+          Speaker notes
+        </DropdownMenuCheckboxItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/* Import + both exports under one File menu — three competing button idioms in
+   the header was the widget tell. */
+function FileMenu({
+  canImport,
+  canPdf,
+  canPptx,
+  busy,
+  onImport,
+  onPdf,
+  onPptx,
+}: {
+  canImport: boolean;
+  canPdf: boolean;
+  canPptx: boolean;
+  busy: null | "pptx" | "import";
+  onImport: () => void;
+  onPdf: () => void;
+  onPptx: () => void;
+}) {
+  if (!canImport && !canPdf && !canPptx) return null;
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="ghost" icon={<FileDown size={13} />} busy={!!busy} data-testid="file-menu">
+          File
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {canImport && (
+          <DropdownMenuCheckboxItem checked={false} onCheckedChange={onImport} data-testid="import-pptx">
+            <span className="nxPresMenuIcon"><Upload size={13} /></span>
+            Import .pptx
+            <span className="nxPresMenuHint">PowerPoint · Slides</span>
+          </DropdownMenuCheckboxItem>
+        )}
+        {(canPdf || canPptx) && canImport && <DropdownMenuSeparator />}
+        {canPdf && (
+          <DropdownMenuCheckboxItem checked={false} onCheckedChange={onPdf} data-testid="pdf-export">
+            <span className="nxPresMenuIcon"><Download size={13} /></span>
+            Export PDF
+          </DropdownMenuCheckboxItem>
+        )}
+        {canPptx && (
+          <DropdownMenuCheckboxItem checked={false} onCheckedChange={onPptx} data-testid="pptx-export">
+            <span className="nxPresMenuIcon"><Download size={13} /></span>
+            Export .pptx
+          </DropdownMenuCheckboxItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
