@@ -1,124 +1,112 @@
-# Reskin self-review — React Flow (xyflow) chrome → native app chrome
+# Flow depth lane self-review — ghost-box fix · right-click editor · chrome reskin
 
-Branch `feat/reskin-flow` off `5c1c0c0`. Scope: the two stock xyflow chrome
-components the flow-native pass left in place — the `<Controls>` cluster and the
-`<MiniMap>` — plus a final sweep for any other stock signature (attribution,
-background pattern). Both surfaces: the record flow VIEW (People) and the
-standalone System Map PAGE (`#/p/systemmap`).
+Branch `feat/reskin-flow` off `5c1c0c0` (PR #34, one PR for all three items).
+Both surfaces throughout: the record flow VIEW (People) and the standalone
+System Map PAGE (`#/p/systemmap`).
 
-## Reference (the bar)
+## Item 1 — BUG: ghost boxes on node select (FIXED, root-caused)
 
-The app's own chrome, by name:
-- **Toolbar cards** — `.nxFlowToolbar` / the top-left layout switcher + top-right
-  action cluster of this same view: `--nx-bg-raised` card, `--nx-border`,
-  `--nx-radius-m`, `--nx-shadow-1`, 26-30px icon buttons, `--nx-bg-sunken` hover.
-- **Segmented controls** — `.nxSeg`/`.nxSegBtn` (record-core, calendar picker
-  family): joined buttons, `--nx-accent-soft` + `--nx-accent` active state.
-- **Icon language** — lucide STROKE icons (Crosshair, SquarePlus, Search, X are
-  already on this canvas); never xyflow's filled glyphs.
-- **Canvas well** — the flow canvas itself: `--nx-bg-sunken` inset surface.
+**Symptom:** selecting a node showed two empty blue-outlined rectangles
+flanking the node label (upper-left + upper-right) plus a pale bar over it.
 
-## What changed
+**Root cause (measured, not guessed):** xyflow tags its overlay elements with
+BARE utility classes — resize controls get `top/bottom/left/right/line/handle`,
+panels get `top left`-style pairs, nodes get `selected/draggable/nopan`. The
+host app's own global `.top { display:flex; padding:10px …; background:…;
+border-bottom:… }` header rule matched every element carrying class `top`:
+the two TOP corner resize handles ballooned from 8×8 to ~50×22 outlined boxes
+(border-box width floors at horizontal padding), the top resize line became an
+11px pale bar, and the top toolbar panels got a phantom backdrop. An earlier
+pass had hover-gated the resize controls, which only masked this at rest —
+click a node (pointer hovering) and the ghosts returned.
 
-1. **Stock `<Controls>` → removed entirely.** Replaced by `FlowControls.tsx`
-   (ours): one toolbar card holding zoom-out `−`, a **live zoom % readout**
-   (tabular-nums, click = back to 100%), zoom-in `+`, fit-view, and a **layout
-   lock** — lucide stroke icons, `.nxIconBtn` buttons, `--nx-*` card. Zoom state
-   reads from the xyflow store so wheel/pinch zoom drives the readout too.
-   Disabled states at min/max zoom. The lock pauses node-drag + edge-draw
-   (pan/zoom/open stay live) and renders only when it governs something.
-2. **MiniMap → a miniature canvas well.** Interior `--nx-bg-sunken` (the same
-   surface the real canvas uses), out-of-view region veiled toward
-   `--nx-bg-raised`, viewport window outlined `--nx-border-strong` at a
-   constant hairline (`vector-effect: non-scaling-stroke` — the svg viewBox
-   scales, a raw stroke vanishes or balloons with graph extent). Node dots keep
-   per-record option colors (`--nx-opt-*`) with `--nx-border-strong` fallback.
-   Frame: raised card border + radius + shadow (kept from the prior pass).
-3. **Sweep:** attribution already hidden (proOptions + CSS belt-and-braces,
-   xyflow is MIT — credit lives in NOTICE.md/PROVENANCE.md); background dot
-   grid already token-mapped; edges/handles/selection/resizer already tokened
-   by the flow-native pass — verified live rather than re-done.
+**Fix (library-side, `flow.css`):** pin every box-affecting property on the
+bare-classed elements at high specificity — panels (padding/bg/border), node
+wrappers, resize controls (display/padding/margin/min-*), per-side
+`border-width` pins so each resize line draws only its own edge, the full 8×8
+handle spec, connect-handle padding/margin. The flow surface is now immune to
+ANY consumer app's class namespace, not just this host's `.top`.
 
-All styling flows through `--nx-*` tokens (directly or via the `--xy-*` →
-`--nx-*` mapping on `.nxFlowWrap`) — no hardcoded colors — so dark mode and
-runtime skins re-derive by plain CSS inheritance. Verified LIVE: flipping
-`data-theme` on the open page re-derives the zoombar card and the minimap mask
-with no reload (see verification log below).
+**Evidence:** `ghostbox-BEFORE.png` (ghosts, reproduced pre-fix via stash) →
+`ghostbox-AFTER.png` (System Map) + `ghostbox-AFTER-recordview.png` (People).
+DOM probe post-fix: 4 corner handles exactly 8×8, lines 1px, transparent.
+Multi-node click sweep clean on both surfaces.
 
-## Before / after
+**Host-side note (not this repo):** the starter's `app.css:48 .top` rule is the
+collider; renaming it is starter-repo hygiene the lead may want routed to that
+lane. The library fix stands regardless.
 
-All in `_shots/` (committed on the branch — the /private/tmp worktree was
-externally wiped once during this lane; the branch is the durable home):
+## Item 2 — Right-click editor menu (n8n-class)
 
-| Surface | Before | After |
-|---|---|---|
-| Flow view, light | `flowview-light-before.png` (+`-controls`/`-minimap` crops) | `flowview-light-after.png` (+crops) |
-| Flow view, dark | `flowview-dark-before.png` (+crops) | `flowview-dark-after.png` (+crops) |
-| System Map, light | `sysmap-light-before.png` (+crops) | `sysmap-light-after.png` (+crops) |
-| System Map, dark | `sysmap-dark-before.png` (+crops) | `sysmap-dark-after.png` (+crops) |
-| System Map, mobile 390px | — | `sysmap-mobile-after.png` |
+`FlowContextMenu.tsx` (new) + FlowView wiring + a `renameRequest` channel
+through FlowActions into the node's existing inline title editor.
 
-The controls crops are the story: stock filled `+ − ⛶` glyphs (instantly
-"React Flow" to anyone who has used it) → the app's stroke-icon toolbar card
-with a live `34%` readout — an affordance stock React Flow does not have, which
-reads as designed-for-this-app, not embedded.
+- **Canvas right-click → Add node**: with a type field configured, a typed
+  list (System / Service / Data store / Queue / External — straight from the
+  object config's select options, color-dotted with the option tokens); without
+  one, a single "New node". The node is created THROUGH the surface's own
+  store path (`onCreateDraft` → record draft form on the record view;
+  `onCreate` → the page's app_state content store on System Map) and lands
+  centered on the cursor via the same `positionsPatch` viewState path
+  node-drag persists through.
+- **Node right-click →** Change type (submenu, current value checked; writes
+  `onPatch` on the type field) · Rename (opens the node's inline title editor)
+  · Duplicate (copies all active fields incl. relations, "<name> copy", +28px
+  offset) · Add connected node (self-relation graphs: creates, links via the
+  relation field exactly as a drawn edge would, inherits the parent's type,
+  drops below the parent) · Delete… (two-step arm inside the menu, destructive
+  styling).
+- Config-composable by construction: every item gates on the surface's
+  capabilities (handEdit, onCreate/onCreateDraft/onPatch/onDelete, a type
+  field, a self-relation). People (no type field, relation→companies) shows
+  exactly add/rename/duplicate/delete; System Map shows the full set.
+- Radix dropdown at a cursor-anchored phantom (portal escapes the canvas
+  clip): Escape + outside-click dismiss; canvas pan/zoom closes it; read-only
+  surfaces keep the native browser menu.
 
-## Brutal test: would a cold user still recognize React Flow?
+**Verified (24/24 interactive checks, own band):** pane menu opens on empty
+canvas · Escape closes · typed add creates + persists ACROSS RELOAD with its
+cursor position (store + viewState both debounce-saved) · change-type visibly
+reshapes the node (kind drives shape: Queue = diamond; clipped shapes hide
+meta chips by design) · rename opens the editor + commits · duplicate adds
+"<name> copy" · add-connected adds node AND edge · delete arms then removes ·
+People: plain add routes to the record DRAFT form, no type/connect items,
+rename+delete present · zero page errors.
 
-- **Controls:** no. The stock component is gone from the tree (verified: zero
-  `.react-flow__controls` elements product-wide); nothing visual survives of it.
-  A zoom cluster with a % readout is Figma/Miro language, not xyflow's.
-- **MiniMap:** the *concept* minimap is generic (Figma/Miro/tldraw all have
-  one); what was recognizable — the pale stock rectangle + violet-gray mask
-  hugging the corner — is now the app's sunken well + veil + hairline window in
-  app tokens. A cold user reads "this app has a minimap", not "that's React
-  Flow's minimap".
-- **Attribution:** none rendered.
-- **Node cards / edges / dot grid:** already native (prior pass), re-verified.
-- **Honest residue:** (a) `.react-flow__*` class names and `data-testid`
-  hooks remain in the DOM — invisible without devtools, and journeys select on
-  them; (b) the minimap node dots are plain rounded rects — generic, not a
-  vendor signature; (c) an xyflow POWER user might recognize the interaction
-  physics (zoom curve, selection box), which no reskin can or should change.
-  Visually, on both surfaces and both themes, I found no remaining stock
-  signature. The blind reviewer should hunt specifically for any I'm blind to.
+**Shots:** `menu-pane-open.png`, `menu-node-open.png`, `menu-type-submenu.png`,
+`menu-type-changed.png`, `menu-node-added.png`, `menu-people-node.png`,
+`menu-dark-type-submenu.png` (dark, submenu open — full coherence).
 
-## Functionality intact (17/17 interactive checks, own band :4640)
+**Honest limits:** (a) iOS Safari long-press is NOT wired — the menu rides the
+native `contextmenu` event (desktop right-click + Android long-press work; iOS
+never fires it). Mobile node actions remain via the detail panel, which is the
+touch path today. Wiring a manual 550ms press timer into xyflow's gesture
+system is doable but gesture-conflict-prone — flagged, not smuggled in.
+(b) Adding a node still triggers the view's existing re-fit animation (the
+graph re-frames after add — pre-existing behavior, not introduced here; an
+add-without-refit would be a separate UX decision.)
 
-zoom-in/out drive canvas + readout · % resets to 100 · fit re-fits · lock
-freezes node drag (aria-pressed, verified by a real drag attempt) · unlock
-restores drag · minimap renders + drag-pans the canvas · journey-compat
-`getByRole(/zoom in/i)` resolves · System Map carries the same chrome · zero
-stock `.react-flow__controls` / attribution anywhere · LIVE theme flip
-re-derives zoombar bg (rgb(255,255,255) → rgb(31,30,27)) + minimap mask.
-Runtime skins ride the same mechanism (token override via CSS inheritance) —
-the theme-flip check exercises exactly that path.
+## Item 3 — Chrome reskin (shipped first, in this PR)
 
-`tsc -b` clean · `vite build` clean (in the consuming starter, my UI synced).
+Stock `<Controls>` REPLACED by `FlowControls.tsx`: one `--nx-*` toolbar card —
+zoom out · live zoom % readout (click = 100%) · zoom in · fit · layout lock —
+lucide stroke icons, store-driven readout, min/max disabled states. MiniMap as
+a miniature canvas well: `--nx-bg-sunken` interior, veil toward raised,
+`--nx-border-strong` hairline viewport window (`vector-effect:
+non-scaling-stroke`), option-token node colors. Attribution hidden (MIT;
+credit in NOTICE.md). 17/17 interactive checks incl. LIVE `data-theme` flip
+re-deriving zoombar + minimap mask with no reload; zero
+`.react-flow__controls`/attribution elements product-wide; journey selectors
+(`flow-minimap` testid, `/zoom in/i` name) preserved. Before/after ×
+light/dark × both surfaces in `_shots/` (`*-before/after[-controls|-minimap]`).
 
-Mobile 390px: zoombar fits (188×34 at x=13), no collisions; the record view
-hides the minimap <760px (unchanged rule); the System Map page shows a small
-one on mobile — the pages-primitive lane's own surface decision, wearing this
-skin either way.
+## Gates
 
-## DoD
-
-- [x] Stock xyflow look of Controls + MiniMap killed on BOTH surfaces
-- [x] All styling via `--nx-*` tokens / the `--xy-*`→`--nx-*` skin; re-derives
-      live on theme flip (verified) and skins (same mechanism)
-- [x] Zoom / fit / lock / minimap all work (17 interactive checks)
-- [x] Light + dark coherent (shots, both surfaces)
-- [x] BEFORE/AFTER shots incl. controls + minimap crops, committed
-- [x] tsc + vite clean
-- [x] Journey-compat: `flow-minimap` testid + `/zoom in/i` button name kept
-- [ ] Native-not-widget CERTIFIED — not mine to claim: lead + blind reviewer
-
-Known trade-offs, called out honestly:
-- The lock is a NEW affordance (stock had `showInteractive={false}`, so no lock
-  rendered before). The brief's bar listed lock as part of the cluster; it is
-  small, controlled (`nodesDraggable`/`nodesConnectable` props), renders only
-  when it governs something, and locks LAYOUT (drag/edge-draw), not navigation
-  or opening records — app semantics, not widget semantics. Trivial to drop if
-  the lead prefers strict parity.
-- The zoom % readout is likewise additive — it is the strongest single
-  "native product, not widget" tell, and stock React Flow has nothing like it.
+- tsc -b clean + vite build clean (consuming starter, UI synced) after ALL
+  three items.
+- Chrome regression suite re-run AFTER the menu work: 17/17.
+- Menu E2E: 24/24 with reload-persistence.
+- Cold-user test (chrome): no stock xyflow component remains visible;
+  residue = devtools-only classnames + interaction physics. Blind reviewer
+  should hunt for anything I'm blind to.
+- Not self-certifying "native"/"editor-grade" — lead + blind reviewer decide.

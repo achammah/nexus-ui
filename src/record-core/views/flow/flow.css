@@ -147,6 +147,13 @@
 .nxFlowChipBtn:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
 .nxFlowChipBtn[data-active="true"] { background: var(--nx-accent-soft); border-color: var(--nx-accent); color: var(--nx-accent); }
 
+/* right-click editor menu (FlowContextMenu — dropdown chrome comes from the
+   shared kit; these are the flow-specific bits) */
+.nxFlowMenu { min-width: 176px; }
+.nxFlowMenuTitle { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--nx-fg-faint); }
+.nxFlowMenuDot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+.nxFlowMenuCheck { margin-left: auto; color: var(--nx-accent); font-weight: 700; }
+
 /* search box */
 .nxFlowSearch {
   display: inline-flex;
