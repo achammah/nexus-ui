@@ -187,11 +187,13 @@ export function canvasGridTheme(resolve: (expr: string) => string): CanvasGridTh
     // delta against the stock gray mesh must be OBVIOUS at normal zoom
     gridlinesColor: resolve("color-mix(in srgb, var(--nx-border) 32%, var(--nx-bg-raised))"),
     header: {
-      // the resting grid carries the app's identity: the header band wears a low
-      // accent tint (not a neutral gray slab), its hairlines a stronger one
-      backgroundColor: resolve("color-mix(in srgb, var(--nx-accent) 8%, var(--nx-bg))"),
+      // Notion-model chrome: the header band is ACHROMATIC-but-ours — our sunken
+      // surface, our font, our hairlines. Brand color lives in the STATES around
+      // it (the accent freeze rule, the active-header wash + stroke, selection),
+      // which read clearly against the neutral band
+      backgroundColor: resolve("var(--nx-bg-sunken)"),
       fontColor: resolve("var(--nx-fg-muted)"),
-      borderColor: resolve("color-mix(in srgb, var(--nx-accent) 18%, var(--nx-border))"),
+      borderColor: resolve("var(--nx-border)"),
       fontFamily,
     },
   };
