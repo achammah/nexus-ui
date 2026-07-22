@@ -182,6 +182,9 @@
   padding: 6px 8px; cursor: grab; text-align: left;
 }
 .nxEsPaletteItem:hover:not(:disabled) { border-color: var(--nx-border-strong); }
+/* the icon must never become the drag source — a drag started on the inner SVG
+   does not carry the button's dataTransfer payload */
+.nxEsPaletteItem > * { pointer-events: none; }
 .nxEsPaletteItem.isArmed { border-color: var(--nx-accent); background: var(--nx-accent-soft); color: var(--nx-accent); }
 .nxEsPaletteItem:disabled { opacity: 0.45; cursor: not-allowed; }
 .nxEsGlyph { width: 18px; text-align: center; font-size: 11px; color: var(--nx-fg-muted); }
@@ -309,7 +312,7 @@
 .nxEsField {
   position: absolute;
   border: 1.5px solid var(--fc, var(--nx-opt-blue));
-  background: color-mix(in srgb, var(--fc, var(--nx-opt-blue)) 14%, transparent);
+  background: color-mix(in srgb, var(--fc, var(--nx-opt-blue)) 20%, transparent);
   border-radius: 3px;
   box-sizing: border-box;
   display: flex; align-items: center; justify-content: center;
@@ -329,15 +332,42 @@
   .nxEsField.m-fill:not(.isFilled).isRequired { animation: none; }
 }
 .nxEsFieldTag {
-  position: absolute; top: -18px; left: -1.5px;
-  font-size: 10px; line-height: 1;
+  position: absolute; top: -19px; left: -1.5px;
+  display: flex; align-items: center; gap: 4px;
+  font-size: 10px; line-height: 1; font-weight: 600;
   background: var(--fc, var(--nx-opt-blue)); color: #fff;
   padding: 3px 6px; border-radius: 3px 3px 3px 0;
   white-space: nowrap; pointer-events: none;
-  max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+  max-width: 220px; overflow: hidden;
 }
-.nxEsField.ft-checkbox .nxEsFieldTag { display: none; }
+.nxEsFieldTag .nxEsGlyph { display: inline-flex; opacity: 0.9; }
+.nxEsFieldTagText { overflow: hidden; text-overflow: ellipsis; }
+.nxEsFieldReq { font-style: normal; opacity: 0.85; }
+/* who the field belongs to, under the box — the second half of "this is an
+   owned object", so a page of fields reads as a routing plan not a set of boxes */
+/* INSIDE the box, not below it — a label hanging under the field collides with
+   the document's own text (signature blocks always have a printed name under
+   the line, which is exactly where the field sits) */
+.nxEsFieldWho {
+  position: absolute; bottom: 2px; right: 4px;
+  font-size: 9px; line-height: 1; letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--fc, var(--nx-opt-blue)) 70%, var(--nx-fg));
+  white-space: nowrap; pointer-events: none;
+  max-width: calc(100% - 8px); overflow: hidden; text-overflow: ellipsis;
+}
+/* a short field has no room for an interior caption */
+.nxEsField.ft-date .nxEsFieldWho,
+.nxEsField.ft-text .nxEsFieldWho,
+.nxEsField.ft-dropdown .nxEsFieldWho,
+.nxEsField.ft-initials .nxEsFieldWho { display: none; }
+.nxEsField.ft-checkbox .nxEsFieldTag { top: -19px; }
+.nxEsField.ft-checkbox .nxEsFieldWho { display: none; }
 .nxEsField.ft-checkbox { justify-content: center; }
+/* a checkbox is tiny — give it a visible box rather than a faint outline */
+.nxEsField.ft-checkbox.m-edit, .nxEsField.ft-checkbox.m-view {
+  background: color-mix(in srgb, var(--fc, var(--nx-opt-blue)) 22%, transparent);
+  border-width: 2px;
+}
 .nxEsFieldDel {
   position: absolute; top: -10px; right: -10px;
   width: 20px; height: 20px; border-radius: 50%;

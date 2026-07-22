@@ -5,6 +5,11 @@
 // value/onChange/reloadNonce; this component owns the flow. All chrome rides
 // --nx-* tokens (esign.css); pdf engines load lazily (pdf.ts).
 import * as React from "react";
+import {
+  Baseline, Calendar, CheckSquare, ChevronDownSquare, Signature, Type,
+  Check, ChevronLeft, ChevronRight, GripVertical, LayoutTemplate, Minus, Plus, Trash2, X,
+  type LucideIcon,
+} from "lucide-react";
 import "./esign.css";
 import {
   activeSignerIds, appendEvent, computeCertificateId, envelopeStatusAfterSign,
@@ -43,6 +48,8 @@ function envMatchesSeed(env: EsignEnvelope, state: EsignSeedState): boolean {
    narrow pane can never park the control at a disabled bound with a clipped page */
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 2;
+/** auto-fit stops here; the user can still zoom to ZOOM_MAX by hand */
+const ZOOM_FIT_MAX = 1.5;
 const ALL_FIELD_TYPES: EsignFieldType[] = ["signature", "initials", "date", "text", "checkbox", "dropdown"];
 const STATUS_LABEL: Record<EsignEnvelope["status"], string> = {
   draft: "Draft", sent: "Sent", partially_signed: "Partially signed", completed: "Completed",
@@ -129,12 +136,14 @@ export default function ESignSurface({
     if (!first || !box) return;
     const fit = () => {
       if (zoomTouched.current) return;
-      // slack covers the page gutter plus the page's own border/shadow, so the
-      // fit result never lands one pixel wide and clips
+      // FIT WIDTH — the document is the subject of this surface, so it fills the
+      // stage rather than sitting as a small sheet in a field of grey. Scales UP
+      // as well as down (capped, so an ultrawide monitor does not blow the page
+      // up past readability). Slack covers the gutter plus the page's own
+      // border/shadow so the result never lands one pixel wide and clips.
       const avail = box.clientWidth - 40;
-      const next = first.width > avail
-        ? Math.max(ZOOM_MIN, Math.floor((avail / first.width) * 100) / 100)
-        : 1;
+      const raw = avail / first.width;
+      const next = clamp(Math.floor(raw * 100) / 100, ZOOM_MIN, ZOOM_FIT_MAX);
       setZoom((z) => (z === next ? z : next));
     };
     fit();
@@ -456,7 +465,7 @@ export default function ESignSurface({
       {notice && (
         <div className="nxEsNotice" role="status">
           <span>{notice}</span>
-          <button type="button" className="nxEsIconBtn" aria-label="Dismiss" onClick={() => setNotice(null)}>×</button>
+          <button type="button" className="nxEsIconBtn" aria-label="Dismiss" onClick={() => setNotice(null)}><X size={14} /></button>
         </div>
       )}
       {!editable && tab === "prepare" && (
@@ -572,7 +581,7 @@ export default function ESignSurface({
                 ))}
               </ol>
               {editable && (
-                <button type="button" className="nxEsBtn isBlock" onClick={addSigner} data-testid="esign-add-signer">+ Add signer</button>
+                <button type="button" className="nxEsBtn isBlock" onClick={addSigner} data-testid="esign-add-signer"><Plus size={14} /> Add signer</button>
               )}
             </section>
 
@@ -580,7 +589,7 @@ export default function ESignSurface({
               <h3 className="nxEsRailTitle">Templates</h3>
               {env.templates.length > 0 && (
                 <button type="button" className="nxEsBtn isBlock" onClick={() => setTplOpen(true)}>
-                  Apply a template ({env.templates.length})
+                  <LayoutTemplate size={14} /> Apply a template ({env.templates.length})
                 </button>
               )}
               {editable && env.fields.length > 0 && (
@@ -703,17 +712,17 @@ export default function ESignSurface({
         <div className="nxEsCanvasWrap">
           <div className="nxEsCanvasBar">
             <div className="nxEsPageNav">
-              <button type="button" className="nxEsIconBtn" aria-label="Previous page" disabled={pageIndex <= 0} onClick={() => gotoPage(pageIndex - 1)}>‹</button>
+              <button type="button" className="nxEsIconBtn" aria-label="Previous page" disabled={pageIndex <= 0} onClick={() => gotoPage(pageIndex - 1)}><ChevronLeft size={16} /></button>
               <span className="nxEsPageLabel">Page {Math.min(pageIndex + 1, Math.max(pages.length, 1))} / {Math.max(pages.length, env.document?.pageCount ?? 0, 1)}</span>
-              <button type="button" className="nxEsIconBtn" aria-label="Next page" disabled={pageIndex >= pages.length - 1} onClick={() => gotoPage(pageIndex + 1)}>›</button>
+              <button type="button" className="nxEsIconBtn" aria-label="Next page" disabled={pageIndex >= pages.length - 1} onClick={() => gotoPage(pageIndex + 1)}><ChevronRight size={16} /></button>
             </div>
             {signer && tab === "sign" && (
               <span className="nxEsSigningAs">Signing as <strong>{signer.name}</strong></span>
             )}
             <div className="nxEsZoom">
-              <button type="button" className="nxEsIconBtn" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoomManual((z) => Math.max(ZOOM_MIN, +(z - 0.15).toFixed(2)))}>−</button>
+              <button type="button" className="nxEsIconBtn" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoomManual((z) => Math.max(ZOOM_MIN, +(z - 0.15).toFixed(2)))}><Minus size={15} /></button>
               <span className="nxEsPageLabel">{Math.round(zoom * 100)}%</span>
-              <button type="button" className="nxEsIconBtn" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoomManual((z) => Math.min(ZOOM_MAX, +(z + 0.15).toFixed(2)))}>+</button>
+              <button type="button" className="nxEsIconBtn" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoomManual((z) => Math.min(ZOOM_MAX, +(z + 0.15).toFixed(2)))}><Plus size={15} /></button>
             </div>
           </div>
           <div className="nxEsScroll" ref={scrollRef} data-testid="esign-scroll">
@@ -1070,10 +1079,16 @@ function FieldBox({ field: f, env, mode, selected, onSelect, onPatch, onRemove, 
       onKeyDown={(e) => { if (mode === "edit" && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onSelect(); } }}
     >
       {mode !== "fill" && (
-        <span className="nxEsFieldTag">
-          {label}
-          {f.required && <em aria-hidden> *</em>}
-        </span>
+        <>
+          {/* the tag sits ABOVE the box so a field reads as an owned object even
+              when the box itself is only a few millimetres of a signature line */}
+          <span className="nxEsFieldTag">
+            <FieldGlyph type={f.type} size={11} />
+            <span className="nxEsFieldTagText">{label}</span>
+            {f.required && <em className="nxEsFieldReq" title="Required" aria-hidden>*</em>}
+          </span>
+          <span className="nxEsFieldWho">{signer?.name || signer?.role || "Unassigned"}</span>
+        </>
       )}
       {mode === "view" && filled && <SignatureOrValue field={f} />}
       {fillControl()}
@@ -1083,7 +1098,7 @@ function FieldBox({ field: f, env, mode, selected, onSelect, onPatch, onRemove, 
             type="button" className="nxEsFieldDel" aria-label={`Delete ${label}`}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          >×</button>
+          ><X size={11} /></button>
           <span className="nxEsFieldGrip" aria-hidden onPointerDown={(e) => onPointerDown(e, "resize")} />
         </>
       )}
@@ -1106,11 +1121,24 @@ function SignatureOrValue({ field: f }: { field: EsignField }) {
   return <span className="nxEsValText">{v.text}</span>;
 }
 
-function FieldGlyph({ type }: { type: EsignFieldType }) {
-  const g: Record<EsignFieldType, string> = {
-    signature: "✍", initials: "AB", date: "📅", text: "T", checkbox: "☑", dropdown: "▾",
-  };
-  return <span className="nxEsGlyph" aria-hidden>{g[type]}</span>;
+/** Field-type icons in the app's lucide stroke language — emoji glyphs read as
+ *  a widget, and nothing else in this library uses them as UI icons. */
+const FIELD_TYPE_ICON: Record<EsignFieldType, LucideIcon> = {
+  signature: Signature,
+  initials: Baseline,
+  date: Calendar,
+  text: Type,
+  checkbox: CheckSquare,
+  dropdown: ChevronDownSquare,
+};
+
+function FieldGlyph({ type, size = 14 }: { type: EsignFieldType; size?: number }) {
+  const Icon = FIELD_TYPE_ICON[type];
+  return (
+    <span className="nxEsGlyph" aria-hidden>
+      <Icon size={size} />
+    </span>
+  );
 }
 
 /* ----------------------------------------------------------------- helpers */
