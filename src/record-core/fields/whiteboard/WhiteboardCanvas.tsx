@@ -84,15 +84,38 @@ export default function WhiteboardCanvas({ value, onSave, readOnly, config, boar
   // reactive selection (drives the ops rail); updated from excalidraw's onChange
   const [selection, setSelection] = React.useState<Record<string, boolean>>({});
   const selSig = React.useRef("");
-  // compact rail when the canvas itself is narrow (mobile overlay / small embeds)
+  // op-feedback toast (bottom-centre of the canvas; fired by the ops rail)
+  const [toast, setToast] = React.useState<string | null>(null);
+  const toastTimer = React.useRef<number | undefined>(undefined);
+  const flash = React.useCallback((m: string) => {
+    setToast(m);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 3200);
+  }, []);
+  // compact rail when the canvas itself is narrow (mobile overlay / small embeds), and
+  // fit a POPULATED board to view once the canvas has a real size — the field can mount
+  // below the fold where an early fit measures a 0-size viewport. Fires from here (real
+  // size) OR the ready-effect below, whichever lands after both are ready; once only.
   const [compact, setCompact] = React.useState(false);
+  const didFit = React.useRef(false);
+  const fitToView = React.useCallback(() => {
+    const api = apiRef.current;
+    if (!api || didFit.current) return;
+    const els = api.getSceneElements();
+    if (els.length <= 3) return;
+    api.scrollToContent(els, { fitToViewport: true, viewportZoomFactor: 0.8, animate: false } as never);
+    didFit.current = true;
+  }, []);
   React.useEffect(() => {
     const el = wrapRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([e]) => setCompact(e.contentRect.width < 560));
+    const ro = new ResizeObserver(([e]) => {
+      setCompact(e.contentRect.width < 560);
+      if (e.contentRect.width > 200) fitToView();
+    });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [fitToView]);
 
   // seed-once per mount (keyed by epoch upstream): the canvas owns the live scene
   const seed = React.useMemo(() => {
@@ -106,6 +129,14 @@ export default function WhiteboardCanvas({ value, onSave, readOnly, config, boar
 
   const { saveState, trigger: saveScene } = useDebouncedSave<WhiteboardScene>((next) => onSave(next), 700);
   React.useEffect(() => { onSaveState?.(saveState); }, [saveState, onSaveState]);
+
+  // the other fit trigger: once excalidraw hands us its API (ready), fit after it
+  // settles — catches the case where the canvas already had its size before ready.
+  React.useEffect(() => {
+    if (!ready) return;
+    const t = window.setTimeout(fitToView, 220);
+    return () => window.clearTimeout(t);
+  }, [ready, fitToView]);
 
   const onChange = React.useCallback((elements: ExcalidrawElements, appState: WbAppState, files: SceneFiles) => {
     // reactive selection snapshot for the ops rail (updates only when the set changes)
@@ -187,7 +218,7 @@ export default function WhiteboardCanvas({ value, onSave, readOnly, config, boar
         isCollaborating={config.presence && !readOnly}
         UIOptions={UI_OPTIONS as never}
         excalidrawAPI={(api) => { apiRef.current = api as unknown as WbApi; setReady(true); }}
-        initialData={{ elements: seed.elements as never, files: seed.files as never, appState: { showWelcomeScreen: false, viewBackgroundColor: "transparent" } as never, scrollToContent: true }}
+        initialData={{ elements: seed.elements as never, files: seed.files as never, appState: { showWelcomeScreen: false, viewBackgroundColor: "transparent" } as never, scrollToContent: seed.elements.length <= 3 /* small/empty: corner default; populated: the fit-to-view effect owns it */ }}
         onChange={onChange as never}
         onPointerUpdate={onPointerUpdate as never}
       >
@@ -197,8 +228,9 @@ export default function WhiteboardCanvas({ value, onSave, readOnly, config, boar
         </MainMenu>
       </Excalidraw>
       {ready && !readOnly && apiRef.current && (
-        <OpsRail api={apiRef.current} config={config} selection={selection} compact={compact} templates={templates} peers={peers} />
+        <OpsRail api={apiRef.current} config={config} selection={selection} compact={compact} templates={templates} peers={peers} onFlash={flash} />
       )}
+      {toast && <div className="nxWbToast" role="status" data-testid="wb-ops-toast">{toast}</div>}
     </div>
   );
 }

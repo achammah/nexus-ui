@@ -29,6 +29,8 @@ interface OpsRailProps {
   compact: boolean;
   templates: ResolvedTemplate[];
   peers: PresencePeer[];
+  /* surface an op-feedback message; the canvas renders it as a bottom-centre toast */
+  onFlash: (msg: string) => void;
 }
 
 const bounds = (els: readonly WbElement[]) => {
@@ -85,16 +87,11 @@ const MenuItem = ({ onClick, disabled, icon, children, testid }: {
   </button>
 );
 
-export default function OpsRail({ api, config, selection, compact, templates, peers }: OpsRailProps) {
+export default function OpsRail({ api, config, selection, compact, templates, peers, onFlash }: OpsRailProps) {
   const [open, setOpen] = React.useState<string | null>(null);
-  const [msg, setMsg] = React.useState<string | null>(null);
   const [channel, setChannel] = React.useState<"backgroundColor" | "strokeColor">("backgroundColor");
 
-  const flash = React.useCallback((m: string) => {
-    setMsg(m);
-    window.clearTimeout((flash as unknown as { t?: number }).t);
-    (flash as unknown as { t?: number }).t = window.setTimeout(() => setMsg(null), 3200);
-  }, []);
+  const flash = onFlash;
 
   const selectedIds = React.useMemo(
     () => Object.entries(selection || {}).filter(([, v]) => v).map(([k]) => k),
@@ -236,8 +233,6 @@ export default function OpsRail({ api, config, selection, compact, templates, pe
           </div>
         </Cluster>
       )}
-
-      {msg && <div className="nxWbOpsToast" role="status" data-testid="wb-ops-toast">{msg}</div>}
     </div>
   );
 }

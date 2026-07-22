@@ -18,7 +18,11 @@ export interface ResolvedTemplate {
 /* excalidraw pastel background set — legible on both themes */
 const BG = { blue: "#a5d8ff", green: "#b2f2bb", yellow: "#ffec99", red: "#ffc9c9", violet: "#d0bfff", grey: "#e9ecef" };
 
-const note = (x: number, y: number, text: string, bg: string, w = 150, h = 90): Skeleton => ({
+/* A sticky note: a rounded rect with a CENTERED bound label. The card is sized wide
+   enough (and the label small enough) that even the longest demo label renders on one
+   line WITHOUT shearing — excalidraw renders Virgil wider than convertToExcalidraw
+   elements' width estimate, so a too-narrow card clips the leading/trailing glyph. */
+const note = (x: number, y: number, text: string, bg: string, w = 184, h = 84): Skeleton => ({
   type: "rectangle",
   x,
   y,
@@ -29,7 +33,7 @@ const note = (x: number, y: number, text: string, bg: string, w = 150, h = 90): 
   strokeColor: "#1e1e1e",
   strokeWidth: 1,
   roundness: { type: 3 },
-  label: { text, fontSize: 16 },
+  label: { text, fontSize: 14 },
 });
 
 const heading = (x: number, y: number, text: string, fontSize = 28): Skeleton => ({
@@ -53,17 +57,19 @@ const hArrow = (x: number, y: number, w: number): Skeleton => ({
 });
 
 function kanban(): Skeleton[] {
+  // labels kept short (≤13 chars) so the centered bound text clears the card at the
+  // hand-drawn font's real (wide) render — a long label shears its edge glyphs
   const cols = [
-    { t: "To do", bg: BG.grey, notes: ["Draft the brief", "Collect assets"] },
-    { t: "In progress", bg: BG.blue, notes: ["Wire the API", "Design review"] },
+    { t: "To do", bg: BG.grey, notes: ["Draft brief", "List assets"] },
+    { t: "In progress", bg: BG.blue, notes: ["Wire the API", "Design pass"] },
     { t: "Done", bg: BG.green, notes: ["Kickoff call"] },
   ];
   const out: Skeleton[] = [];
   cols.forEach((c, i) => {
-    const cx = i * 220;
-    out.push({ type: "rectangle", x: cx, y: 0, width: 190, height: 460, backgroundColor: "transparent", strokeColor: "#adb5bd", strokeStyle: "dashed", strokeWidth: 1, roundness: { type: 3 } });
+    const cx = i * 244;
+    out.push({ type: "rectangle", x: cx, y: 0, width: 212, height: 452, backgroundColor: "transparent", strokeColor: "#adb5bd", strokeStyle: "dashed", strokeWidth: 1, roundness: { type: 3 } });
     out.push(heading(cx + 16, 14, c.t, 20));
-    c.notes.forEach((n, j) => out.push(note(cx + 20, 60 + j * 110, n, c.bg, 150, 90)));
+    c.notes.forEach((n, j) => out.push(note(cx + 14, 60 + j * 104, n, c.bg, 184, 84)));
   });
   return out;
 }
