@@ -1,6 +1,10 @@
 import * as React from "react";
 import { createRoot } from "react-dom/client";
 import "../src/tokens/tokens.css";
+/* the app's shadcn layer (via the harness sheet, which points Tailwind at src/) —
+   the vendored Button/DropdownMenu/Tooltip primitives are styled by it exactly
+   as in a consuming app */
+import "./harness.css";
 import {
   PresentationSurface,
   PresentationViewer,

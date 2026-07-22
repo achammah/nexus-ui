@@ -14,6 +14,21 @@ const KEY = "presentation:dev-demo";
 
 const results = [];
 const stripTagsJS = (h) => h.replace(/<[^>]*>/g, "");
+/* the chrome is the app's dropdown grammar now: open the menu, then pick */
+const pickFrom = async (menuTestid, itemTestid) => {
+  /* close anything already open, or the trigger click would just toggle it shut */
+  /* only a VISIBLE menu counts as open — Escape on a stale closed node would
+     reach the surface and clear the element selection under test */
+  if (await page.locator('[role="menu"]:visible').count()) {
+    await page.keyboard.press("Escape");
+    await page.waitForSelector('[role="menu"]', { state: "detached" }).catch(() => {});
+  }
+  await page.locator(`[data-testid="${menuTestid}"]`).click();
+  await page.waitForSelector(`[data-testid="${itemTestid}"]`, { state: "visible" });
+  await page.locator(`[data-testid="${itemTestid}"]`).click();
+  await page.waitForSelector('[role="menu"]', { state: "detached" }).catch(() => {});
+  await page.waitForTimeout(80);
+};
 let SEED_N = 0; // slide count of the seeded deck, read once in J1
 const ok = (name, pass, detail = "") => {
   results.push({ name, pass, detail });
@@ -50,9 +65,9 @@ await page.waitForSelector(".nxPresFilmItem");
   await body.click();
   await page.keyboard.press("ControlOrMeta+a");
   /* toggle OFF (selection starts on seeded <b>) then ON across the whole body */
-  await page.locator('.nxPresToolbar .nxPresToolBtn[title^="Bold"]').click();
+  await page.locator('[data-testid="fmt-bold"]').click();
   const afterOff = await page.locator(".nxPresCanvasWell .nxPresBody").innerHTML();
-  await page.locator('.nxPresToolbar .nxPresToolBtn[title^="Bold"]').click();
+  await page.locator('[data-testid="fmt-bold"]').click();
   await page.locator(".nxPresNotesArea").click();
   await page.waitForTimeout(250);
   let d = await deck();
@@ -74,7 +89,7 @@ await page.waitForSelector(".nxPresFilmItem");
 
 /* J3 — slide CRUD: add quote after sel, duplicate (⌘D), delete btn, move down */
 {
-  await page.locator('[data-testid="add-quote"]').click();
+  await pickFrom("add-slide-menu", "add-quote");
   await page.waitForTimeout(200);
   let d = await deck();
   ok("J3a add slide", d.slides.length === SEED_N + 1 && d.slides[3].layout === "quote");
@@ -117,16 +132,16 @@ await page.waitForSelector(".nxPresFilmItem");
 /* J4 — layout + transition switches */
 {
   await page.locator(".nxPresFilmItem .nxPresFilmIdx").nth(1).click();
-  await page.locator('select[aria-label="Slide layout"]').selectOption("title-body");
+  await pickFrom("slide-menu", "layout-title-body");
   await page.waitForTimeout(150);
   let d = await deck();
   ok("J4a layout switch", d.slides[1].layout === "title-body");
-  await page.locator('select[aria-label="Slide layout"]').selectOption("section");
-  await page.locator('select[aria-label="Slide transition"]').selectOption("slide");
+  await pickFrom("slide-menu", "layout-section");
+  await pickFrom("slide-menu", "transition-slide");
   await page.waitForTimeout(150);
   d = await deck();
   ok("J4b transition switch", d.slides[1].transition === "slide");
-  await page.locator('select[aria-label="Slide transition"]').selectOption("zoom");
+  await pickFrom("slide-menu", "transition-zoom");
 }
 
 /* J5 — image slide: file upload lands as data URL */
@@ -181,15 +196,15 @@ await page.waitForSelector(".nxPresFilmItem");
 
 /* J7 — themes re-skin the deck */
 {
-  await page.locator('select[aria-label="Deck theme"]').selectOption("midnight");
+  await pickFrom("theme-menu", "theme-menu-midnight");
   await page.waitForTimeout(150);
   const bg = await page.evaluate(() => getComputedStyle(document.querySelector(".nxPresCanvasWell .nxPresSlide")).backgroundColor);
   ok("J7a midnight theme applies", bg === "rgb(16, 19, 34)", bg);
   await shot("pres-theme-midnight.png");
-  await page.locator('select[aria-label="Deck theme"]').selectOption("gradient");
+  await pickFrom("theme-menu", "theme-menu-gradient");
   await page.waitForTimeout(150);
   await shot("pres-theme-gradient.png");
-  await page.locator('select[aria-label="Deck theme"]').selectOption("native");
+  await pickFrom("theme-menu", "theme-menu-native");
 }
 
 /* J8 — dark mode: chrome + native theme follow tokens */
@@ -295,8 +310,8 @@ await page.waitForSelector(".nxPresFilmItem");
 {
   await page.getByRole("tab", { name: "Slides" }).click();
   const [download] = await Promise.all([
-    page.waitForEvent("download", { timeout: 30000 }),
-    page.getByRole("button", { name: "PPTX" }).click(),
+    page.waitForEvent("download", { timeout: 60000 }),
+    pickFrom("file-menu", "pptx-export"),
   ]);
   const path = await download.path();
   const size = statSync(path).size;
@@ -306,8 +321,8 @@ await page.waitForSelector(".nxPresFilmItem");
 /* J14 — PDF export opens the print window with one .page per slide */
 {
   const [popup] = await Promise.all([
-    page.waitForEvent("popup", { timeout: 15000 }),
-    page.getByRole("button", { name: "PDF" }).click(),
+    page.waitForEvent("popup", { timeout: 30000 }),
+    pickFrom("file-menu", "pdf-export"),
   ]);
   await popup.waitForTimeout(700);
   const pages = await popup.evaluate(() => document.querySelectorAll(".page").length).catch(() => -1);
@@ -341,12 +356,28 @@ await page.waitForSelector(".nxPresFilmItem");
 /* J16 — a11y structure: roles + focus ring visible on tab */
 {
   await page.waitForSelector(".nxPresFilmItem");
-  const roles = await page.evaluate(() => ({
+  /* the formatting toolbar is CONTEXTUAL now: absent at rest, present once a
+     text region has focus. Assert both halves of that contract. */
+  const atRest = await page.evaluate(() => ({
     tablist: !!document.querySelector('[role="tablist"]'),
     toolbar: !!document.querySelector('[role="toolbar"]'),
     textboxes: document.querySelectorAll('[contenteditable="true"][role="textbox"]').length,
   }));
-  ok("J16 a11y roles", roles.tablist && roles.toolbar && roles.textboxes > 0, JSON.stringify(roles));
+  ok("J16a a11y roles + no toolbar at rest", atRest.tablist && !atRest.toolbar && atRest.textboxes > 0, JSON.stringify(atRest));
+  await page.locator(".nxPresCanvasWell .nxPresRegion").first().click();
+  await page.waitForSelector('[data-testid="text-format-bar"]');
+  const focused = await page.evaluate(() => ({
+    toolbar: !!document.querySelector('[role="toolbar"]'),
+    labelled: document.querySelector('[role="toolbar"]')?.getAttribute("aria-label") || "",
+  }));
+  ok("J16b formatting toolbar appears on text focus", focused.toolbar && !!focused.labelled, JSON.stringify(focused));
+  /* every icon action carries an accessible name (icons replaced text labels) */
+  const unnamed = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid="text-format-bar"] button')].filter(
+      (b) => !b.getAttribute("aria-label") && !b.textContent.trim(),
+    ).length,
+  );
+  ok("J16c every icon action has an accessible name", unnamed === 0, `${unnamed} unnamed`);
 }
 
 /* J17 — document history: undo/redo the destructive ops (the old data-loss path) */
@@ -361,7 +392,7 @@ await page.waitForSelector(".nxPresFilmItem");
 
   /* the seed only persists once something changes it — add a slide so the
      snapshot (and therefore its slide ids) exist to assert against */
-  await page.locator('[data-testid="add-title"]').click();
+  await pickFrom("add-slide-menu", "add-title");
   const base = await page.locator(".nxPresFilmItem").count();
 
   /* delete a slide, then undo it back — content identity, not just the count */
@@ -389,7 +420,7 @@ await page.waitForSelector(".nxPresFilmItem");
   ok("J17d cmd+z undoes", (await deck()).slides.length === base);
 
   /* a new op after undo clears the redo branch */
-  await page.locator('[data-testid="add-title"]').click();
+  await pickFrom("add-slide-menu", "add-title");
   ok("J17e new op clears redo", await page.locator('[data-testid="redo-btn"]').isDisabled());
 
   /* typing COALESCES: a burst of title keystrokes is ONE undo step, not N */
@@ -441,8 +472,7 @@ async function p18() {
   await page.locator(".nxPresFilmItem").first().click();
   const kinds = ["rect", "roundRect", "ellipse", "triangle", "arrow", "line", "star", "callout"];
   for (const k of kinds) {
-    await page.locator('[data-testid="insert-shape-menu"]').click();
-    await page.locator(`[data-testid="insert-shape-${k}"]`).click();
+    await pickFrom("insert-menu", `insert-shape-${k}`);
   }
   let sl = await slideNow();
   ok("J18b all 8 shape kinds insert", sl && kinds.every((k) => sl.elements.some((e) => e.shape === k)), `n=${sl?.elements.length}`);
@@ -452,8 +482,7 @@ async function p18() {
   await page.goto(URL0);
   await page.waitForSelector(".nxPresFilmItem");
   await page.locator(".nxPresFilmItem").first().click();
-  await page.locator('[data-testid="insert-shape-menu"]').click();
-  await page.locator('[data-testid="insert-shape-rect"]').click();
+  await pickFrom("insert-menu", "insert-shape-rect");
   ok("J18c element bar appears on selection", await page.locator('[data-testid="element-bar"]').isVisible());
 
   /* drag to move — asserts the PERSISTED coords, not just the DOM */
@@ -487,8 +516,7 @@ async function p18() {
   ok("J18f rotate handle rotates", Math.abs(after.rot || 0) > 5, `rot=${after.rot}`);
 
   /* style: fill colour + fill opacity */
-  await page.locator('[data-testid="fill-well"]').click();
-  await page.locator('[data-testid="swatch-e5484d"]').click();
+  await pickFrom("fill-well", "swatch-e5484d");
   after = (await slideNow()).elements[0];
   ok("J18g fill colour applies", after.style.fill === "#e5484d", after.style.fill);
   await page.locator('[data-testid="opacity-range"]').fill("40");
@@ -496,8 +524,7 @@ async function p18() {
   ok("J18h fill opacity applies (text stays opaque)", Math.round(after.style.fillOpacity * 100) === 40 && (after.style.opacity ?? 1) === 1);
 
   /* multi-select + group + align + z-order */
-  await page.locator('[data-testid="insert-shape-menu"]').click();
-  await page.locator('[data-testid="insert-shape-ellipse"]').click();
+  await pickFrom("insert-menu", "insert-shape-ellipse");
   await canvasEl(0).click({ modifiers: ["Shift"] });
   let sel = await page.locator('[data-testid="element-bar"] .nxPresElBarCount').textContent();
   ok("J18i shift-click multi-selects", /2 selected/.test(sel || ""), sel);
@@ -579,7 +606,7 @@ async function p18() {
   );
 
   /* text box: insert, type, persist */
-  await page.locator('[data-testid="insert-text"]').click();
+  await pickFrom("insert-menu", "insert-text");
   const tb = page.locator(".nxPresCanvas .nxPresEl-text").first();
   await tb.dblclick();
   await page.keyboard.type("Free-placed text");
@@ -689,11 +716,10 @@ async function p19() {
   await shot("pres-import-foreign.png");
 
   /* --- round trip: export this deck to .pptx, re-import it, structure survives --- */
-  const dl = await Promise.race([
+  const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 60000 }),
-    page.locator('[data-testid="pptx-export"]').click().then(() => null),
+    pickFrom("file-menu", "pptx-export"),
   ]);
-  const download = dl || (await page.waitForEvent("download", { timeout: 60000 }));
   const rtPath = join(root, "dev", "roundtrip.pptx");
   await download.saveAs(rtPath);
 
@@ -765,18 +791,18 @@ async function p20() {
 
   /* insert a chart, switch its type, edit the data */
   await page.locator(".nxPresFilmItem").first().click();
-  await page.locator('[data-testid="insert-chart"]').click();
+  await pickFrom("insert-menu", "insert-chart");
   await page.waitForSelector(".nxPresCanvas .nxPresEl-chart svg");
   ok("J20d chart inserts", !!(await slideWith("chart")));
 
-  await page.locator('[data-testid="chart-type"]').selectOption("line");
+  await pickFrom("chart-type", "chart-type-line");
   await page.waitForTimeout(150);
   const lines = await page.locator(".nxPresCanvas .nxPresEl-chart .recharts-line").count();
   ok("J20e chart type switches to line", lines === 2, `${lines} lines`);
-  await page.locator('[data-testid="chart-type"]').selectOption("pie");
+  await pickFrom("chart-type", "chart-type-pie");
   await page.waitForTimeout(150);
   ok("J20f chart type switches to pie", (await page.locator(".nxPresCanvas .nxPresEl-chart .recharts-pie-sector").count()) > 0);
-  await page.locator('[data-testid="chart-type"]').selectOption("bar");
+  await pickFrom("chart-type", "chart-type-bar");
   await page.waitForTimeout(150);
 
   await page.locator('[data-testid="chart-data-btn"]').click();
@@ -801,7 +827,7 @@ async function p20() {
 
   /* tables: insert, edit a cell, add/remove rows and columns, header toggle */
   await page.keyboard.press("Escape");
-  await page.locator('[data-testid="insert-table"]').click();
+  await pickFrom("insert-menu", "insert-table");
   await page.waitForSelector(".nxPresCanvas .nxPresTable");
   let tbl = (await slideWith("table")).elements.find((e) => e.kind === "table").table;
   const cols0 = tbl.rows[0].length;

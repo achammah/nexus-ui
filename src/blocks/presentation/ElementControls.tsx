@@ -13,86 +13,109 @@ import {
   type ZOp,
 } from "./elements";
 import { SHAPE_LABELS, ShapeGlyph } from "./ShapeRender";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../../components/ui/dropdown-menu";
+import { Button } from "../../primitives/Button";
+import { IconAction, PickerMenu } from "./chrome";
+import {
+  AlignCenter,
+  AlignEndHorizontal,
+  AlignHorizontalDistributeCenter,
+  AlignLeft,
+  AlignRight,
+  AlignStartHorizontal,
+  AlignVerticalDistributeCenter,
+  ChartNoAxesColumn,
+  Columns3,
+  Group,
+  Image as ImageIcon,
+  MoveDown,
+  MoveUp,
+  Plus,
+  Rows3,
+  SendToBack,
+  Table2,
+  Trash2,
+  Type,
+  Ungroup,
+} from "lucide-react";
 import { addColumn, addRow, removeColumn, removeRow } from "./TableElement";
 
 const SHAPES: ShapeKind[] = ["rect", "roundRect", "ellipse", "triangle", "arrow", "line", "star", "callout"];
 
-/* ---- insert ---- */
+/* ---- insert ----
+   One menu button in the app's dropdown grammar, rather than a row of bespoke
+   buttons plus a hand-rolled popover. */
 
-export function InsertBar({
+export function InsertMenu({
   onInsertShape,
   onInsertText,
   onInsertImage,
   onInsertChart,
   onInsertTable,
-  extra,
 }: {
   onInsertShape: (s: ShapeKind) => void;
   onInsertText: () => void;
   onInsertImage: () => void;
   onInsertChart: (t: ChartKind) => void;
   onInsertTable: () => void;
-  extra?: React.ReactNode;
 }) {
+  /* the shape GRID is plain buttons rather than menu rows (it is a palette), so
+     the menu is controlled and closes explicitly on pick */
   const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => {
-    if (!open) return;
-    const away = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
-  }, [open]);
-
   return (
-    <div className="nxPresToolGroup" ref={ref}>
-      <button type="button" className="nxPresToolBtn" onClick={onInsertText} title="Insert a text box" data-testid="insert-text">
-        Text box
-      </button>
-      <div className="nxPresMenuWrap">
-        <button
-          type="button"
-          className={`nxPresToolBtn${open ? " isOn" : ""}`}
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-haspopup="menu"
-          data-testid="insert-shape-menu"
-        >
-          Shape ▾
-        </button>
-        {open && (
-          <div className="nxPresMenu" role="menu" aria-label="Insert shape">
-            {SHAPES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                role="menuitem"
-                className="nxPresMenuItem"
-                data-testid={`insert-shape-${s}`}
-                onClick={() => {
-                  onInsertShape(s);
-                  setOpen(false);
-                }}
-              >
-                <ShapeGlyph shape={s} />
-                <span>{SHAPE_LABELS[s]}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <button type="button" className="nxPresToolBtn" onClick={onInsertImage} title="Insert an image" data-testid="insert-image">
-        Image
-      </button>
-      <button type="button" className="nxPresToolBtn" onClick={() => onInsertChart("bar")} title="Insert a chart" data-testid="insert-chart">
-        Chart
-      </button>
-      <button type="button" className="nxPresToolBtn" onClick={onInsertTable} title="Insert a table" data-testid="insert-table">
-        Table
-      </button>
-      {extra}
-    </div>
+    <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="ghost" icon={<Plus size={13} />} data-testid="insert-menu">
+          Insert
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Insert</DropdownMenuLabel>
+        <DropdownMenuCheckboxItem checked={false} onCheckedChange={onInsertText} data-testid="insert-text">
+          <span className="nxPresMenuIcon"><Type size={13} /></span>
+          Text box
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuCheckboxItem checked={false} onCheckedChange={onInsertImage} data-testid="insert-image">
+          <span className="nxPresMenuIcon"><ImageIcon size={13} /></span>
+          Image
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuCheckboxItem checked={false} onCheckedChange={() => onInsertChart("bar")} data-testid="insert-chart">
+          <span className="nxPresMenuIcon"><ChartNoAxesColumn size={13} /></span>
+          Chart
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuCheckboxItem checked={false} onCheckedChange={onInsertTable} data-testid="insert-table">
+          <span className="nxPresMenuIcon"><Table2 size={13} /></span>
+          Table
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Shape</DropdownMenuLabel>
+        <div className="nxPresShapeGrid">
+          {SHAPES.map((k) => (
+            <button
+              key={k}
+              type="button"
+              className="nxPresShapeCell"
+              onClick={() => {
+                onInsertShape(k);
+                setOpen(false);
+              }}
+              aria-label={SHAPE_LABELS[k]}
+              title={SHAPE_LABELS[k]}
+              data-testid={`insert-shape-${k}`}
+            >
+              <ShapeGlyph shape={k} />
+            </button>
+          ))}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -213,95 +236,80 @@ export function ElementBar({
 
       {first.kind === "chart" && first.chart && (
         <>
-          <label className="nxPresToolLabel">
-            Type
-            <select
-              className="nxPresSelect"
-              value={first.chart.type}
-              onChange={(e) => onSlide(updateElement(slide, first.id, { chart: { ...first.chart!, type: e.target.value as ChartKind } }))}
-              aria-label="Chart type"
-              data-testid="chart-type"
-            >
-              {(["bar", "line", "area", "pie", "scatter"] as ChartKind[]).map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className={`nxPresToolBtn${dataOpen ? " isOn" : ""}`}
+          <PickerMenu
+            value={first.chart.type}
+            options={(["bar", "line", "area", "pie", "scatter"] as ChartKind[]).map((t) => ({ value: t, label: t[0].toUpperCase() + t.slice(1) }))}
+            onPick={(t) => onSlide(updateElement(slide, first.id, { chart: { ...first.chart!, type: t } }))}
+            label="Chart type"
+            icon={<ChartNoAxesColumn size={13} />}
+            testid="chart-type"
+            align="end"
+          />
+          <Button
+            size="sm"
+            variant={dataOpen ? "secondary" : "ghost"}
             onClick={() => setDataOpen((v) => !v)}
             aria-expanded={dataOpen}
             data-testid="chart-data-btn"
           >
             Edit data
-          </button>
+          </Button>
         </>
       )}
 
       {first.kind === "table" && first.table && (
         <>
-          <button type="button" className="nxPresToolBtn" data-testid="table-add-row" onClick={() => onSlide(updateElement(slide, first.id, { table: addRow(first.table as TableSpec) }))}>
-            + Row
-          </button>
-          <button type="button" className="nxPresToolBtn" data-testid="table-add-col" onClick={() => onSlide(updateElement(slide, first.id, { table: addColumn(first.table as TableSpec) }))}>
-            + Col
-          </button>
-          <button type="button" className="nxPresToolBtn" data-testid="table-del-row" onClick={() => onSlide(updateElement(slide, first.id, { table: removeRow(first.table as TableSpec, first.table!.rows.length - 1) }))}>
-            − Row
-          </button>
-          <button type="button" className="nxPresToolBtn" data-testid="table-del-col" onClick={() => onSlide(updateElement(slide, first.id, { table: removeColumn(first.table as TableSpec, (first.table!.rows[0]?.length ?? 1) - 1) }))}>
-            − Col
-          </button>
-          <button
-            type="button"
-            className={`nxPresToolBtn${first.table.headerRow !== false ? " isOn" : ""}`}
-            data-testid="table-header-toggle"
-            aria-pressed={first.table.headerRow !== false}
+          <IconAction icon={<Rows3 size={13} />} label="Add row" onClick={() => onSlide(updateElement(slide, first.id, { table: addRow(first.table as TableSpec) }))} testid="table-add-row" />
+          <IconAction icon={<Columns3 size={13} />} label="Add column" onClick={() => onSlide(updateElement(slide, first.id, { table: addColumn(first.table as TableSpec) }))} testid="table-add-col" />
+          <IconAction icon={<Rows3 size={13} />} label="Remove row" onClick={() => onSlide(updateElement(slide, first.id, { table: removeRow(first.table as TableSpec, first.table!.rows.length - 1) }))} testid="table-del-row" />
+          <IconAction icon={<Columns3 size={13} />} label="Remove column" onClick={() => onSlide(updateElement(slide, first.id, { table: removeColumn(first.table as TableSpec, (first.table!.rows[0]?.length ?? 1) - 1) }))} testid="table-del-col" />
+          <IconAction
+            icon={<Table2 size={13} />}
+            label="Header row"
+            active={first.table.headerRow !== false}
             onClick={() => onSlide(updateElement(slide, first.id, { table: { ...first.table!, headerRow: first.table!.headerRow === false } }))}
-          >
-            Header
-          </button>
+            testid="table-header-toggle"
+          />
         </>
       )}
 
-      <div className="nxPresElBarSep" />
-      <button type="button" className="nxPresToolBtn" onClick={() => z("front")} title="Bring to front" data-testid="z-front">⤒</button>
-      <button type="button" className="nxPresToolBtn" onClick={() => z("forward")} title="Bring forward">↑</button>
-      <button type="button" className="nxPresToolBtn" onClick={() => z("backward")} title="Send backward">↓</button>
-      <button type="button" className="nxPresToolBtn" onClick={() => z("back")} title="Send to back" data-testid="z-back">⤓</button>
+      <span className="nxPresTopDivide" />
+      <IconAction icon={<MoveUp size={13} />} label="Bring to front" onClick={() => z("front")} testid="z-front" />
+      <IconAction icon={<MoveDown size={13} />} label="Send to back" onClick={() => z("back")} testid="z-back" />
+      <PickerMenu
+        value={"none" as string}
+        options={[
+          { value: "forward", label: "Bring forward" },
+          { value: "backward", label: "Send backward" },
+        ]}
+        onPick={(v) => z(v as ZOp)}
+        label="Order"
+        icon={<SendToBack size={13} />}
+        showValue={false}
+        testid="z-more"
+        align="end"
+      />
 
-      <div className="nxPresElBarSep" />
-      <button type="button" className="nxPresToolBtn" onClick={() => align("left")} title="Align left" data-testid="align-left">⇤</button>
-      <button type="button" className="nxPresToolBtn" onClick={() => align("hcenter")} title="Align centre">↔</button>
-      <button type="button" className="nxPresToolBtn" onClick={() => align("right")} title="Align right">⇥</button>
-      <button type="button" className="nxPresToolBtn" onClick={() => align("top")} title="Align top">⤒</button>
-      <button type="button" className="nxPresToolBtn" onClick={() => align("vcenter")} title="Align middle">↕</button>
-      <button type="button" className="nxPresToolBtn" onClick={() => align("bottom")} title="Align bottom">⤓</button>
+      <span className="nxPresTopDivide" />
+      <IconAction icon={<AlignLeft size={13} />} label="Align left" onClick={() => align("left")} testid="align-left" />
+      <IconAction icon={<AlignCenter size={13} />} label="Align centre" onClick={() => align("hcenter")} testid="align-hcenter" />
+      <IconAction icon={<AlignRight size={13} />} label="Align right" onClick={() => align("right")} testid="align-right" />
+      <IconAction icon={<AlignStartHorizontal size={13} />} label="Align top" onClick={() => align("top")} testid="align-top" />
+      <IconAction icon={<AlignEndHorizontal size={13} />} label="Align bottom" onClick={() => align("bottom")} testid="align-bottom" />
       {sel.length > 2 && (
         <>
-          <button type="button" className="nxPresToolBtn" onClick={() => onSlide(distributeElements(slide, selected, "h"))} title="Distribute horizontally" data-testid="dist-h">
-            ⇹
-          </button>
-          <button type="button" className="nxPresToolBtn" onClick={() => onSlide(distributeElements(slide, selected, "v"))} title="Distribute vertically">
-            ⇵
-          </button>
+          <IconAction icon={<AlignHorizontalDistributeCenter size={13} />} label="Distribute horizontally" onClick={() => onSlide(distributeElements(slide, selected, "h"))} testid="dist-h" />
+          <IconAction icon={<AlignVerticalDistributeCenter size={13} />} label="Distribute vertically" onClick={() => onSlide(distributeElements(slide, selected, "v"))} testid="dist-v" />
         </>
       )}
 
       {(many || grouped) && (
         <>
-          <div className="nxPresElBarSep" />
+          <span className="nxPresTopDivide" />
           {grouped ? (
-            <button type="button" className="nxPresToolBtn" onClick={() => onSlide(ungroupElements(slide, selected))} data-testid="ungroup-btn">
-              Ungroup
-            </button>
+            <IconAction icon={<Ungroup size={13} />} label="Ungroup" onClick={() => onSlide(ungroupElements(slide, selected))} testid="ungroup-btn" />
           ) : (
-            <button type="button" className="nxPresToolBtn" onClick={() => onSlide(groupElements(slide, selected))} data-testid="group-btn">
-              Group
-            </button>
+            <IconAction icon={<Group size={13} />} label="Group" onClick={() => onSlide(groupElements(slide, selected))} testid="group-btn" />
           )}
         </>
       )}
@@ -313,19 +321,17 @@ export function ElementBar({
         />
       )}
 
-      <div className="nxPresElBarSep" />
-      <button
-        type="button"
-        className="nxPresToolBtn nxPresToolDanger"
+      <span className="nxPresTopDivide" />
+      <IconAction
+        icon={<Trash2 size={13} />}
+        label="Delete element"
+        shortcut="⌫"
         onClick={() => {
           onSlide({ ...slide, elements: list.filter((e) => !selected.includes(e.id)) });
           onSelect([]);
         }}
-        title="Delete element"
-        data-testid="el-delete"
-      >
-        Delete
-      </button>
+        testid="el-delete"
+      />
     </div>
   );
 }
@@ -333,6 +339,7 @@ export function ElementBar({
 const labelOf = (e: SlideElement): string =>
   e.kind === "shape" ? SHAPE_LABELS[e.shape ?? "rect"] : e.kind === "image" ? "Image" : "Text box";
 
+/* Colour picker on the app's dropdown grammar (was a hand-rolled popover). */
 function ColorWell({
   label,
   value,
@@ -345,36 +352,22 @@ function ColorWell({
   testid?: string;
 }) {
   const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => {
-    if (!open) return;
-    const away = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
-  }, [open]);
   return (
-    <div className="nxPresMenuWrap" ref={ref}>
-      <button
-        type="button"
-        className="nxPresColorWell"
-        onClick={() => setOpen((v) => !v)}
-        aria-label={`${label} colour`}
-        aria-expanded={open}
-        data-testid={testid}
-      >
-        <span className="nxPresColorWellLabel">{label}</span>
-        <span className={`nxPresColorChip${value === "none" ? " isNone" : ""}`} style={{ background: value === "none" ? undefined : value }} />
-      </button>
-      {open && (
-        <div className="nxPresMenu nxPresSwatches" role="menu" aria-label={`${label} colour`}>
+    <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="ghost" aria-label={`${label} colour`} data-testid={testid}>
+          <span className={`nxPresColorChip${value === "none" ? " isNone" : ""}`} style={{ background: value === "none" ? undefined : value }} />
+          {label}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuLabel>{label}</DropdownMenuLabel>
+        <div className="nxPresSwatches">
           {SWATCHES.map((c) => (
             <button
               key={c}
               type="button"
-              role="menuitem"
-              className={`nxPresSwatch${c === "none" ? " isNone" : ""}`}
+              className={`nxPresSwatch${c === "none" ? " isNone" : ""}${c === value ? " isActive" : ""}`}
               style={{ background: c === "none" ? undefined : c }}
               aria-label={c === "none" ? "No colour" : c}
               data-testid={`swatch-${c.replace(/[^a-z0-9]/gi, "")}`}
@@ -385,8 +378,8 @@ function ColorWell({
             />
           ))}
         </div>
-      )}
-    </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

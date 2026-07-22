@@ -1,4 +1,8 @@
 import * as React from "react";
+import { Copy, Eye, Plus, Trash2 } from "lucide-react";
+import { Button } from "../../primitives/Button";
+import { Checkbox } from "../../components/ui/checkbox";
+import { Input } from "../../components/ui/input";
 import type { DataRoom, DeckSnapshot, PresentationConfig, ShareLink } from "./types";
 import { uid } from "./types";
 import { textOf } from "./SlideView";
@@ -51,9 +55,9 @@ export function SharePanel({
     <section className="nxPresPanel" data-testid="share-panel">
       <header className="nxPresPanelHead">
         <h3 className="nxPresPanelTitle">Share links</h3>
-        <button type="button" className="nxPresBtn nxPresBtnPrimary" onClick={create}>
+        <Button size="sm" variant="primary" icon={<Plus size={13} />} onClick={create}>
           New link
-        </button>
+        </Button>
       </header>
       {deck.sharing.links.length === 0 && (
         <p className="nxPresPanelEmpty">No links yet. Create one to share this deck read-only and track who views it.</p>
@@ -82,9 +86,10 @@ export function SharePanel({
               </div>
             </div>
             <div className="nxPresLinkCtl">
-              <button
-                type="button"
-                className="nxPresBtn"
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Copy size={13} />}
                 onClick={() => {
                   navigator.clipboard?.writeText(url).catch(() => undefined);
                   setCopied(l.id);
@@ -92,10 +97,10 @@ export function SharePanel({
                 }}
               >
                 {copied === l.id ? "Copied" : "Copy"}
-              </button>
-              <button type="button" className="nxPresBtn" onClick={() => onOpenViewer(l.slug)}>
+              </Button>
+              <Button size="sm" variant="ghost" icon={<Eye size={13} />} onClick={() => onOpenViewer(l.slug)}>
                 Preview
-              </button>
+              </Button>
               <label className="nxPresCheck">
                 <input type="checkbox" checked={!!l.emailGate} onChange={(e) => patch(l.id, { emailGate: e.target.checked })} />
                 Email gate
@@ -201,9 +206,10 @@ export function RoomsPanel({ deck, onChange }: { deck: DeckSnapshot; onChange: (
     <section className="nxPresPanel" data-testid="rooms-panel">
       <header className="nxPresPanelHead">
         <h3 className="nxPresPanelTitle">Data rooms</h3>
-        <button
-          type="button"
-          className="nxPresBtn nxPresBtnPrimary"
+        <Button
+          size="sm"
+          variant="primary"
+          icon={<Plus size={13} />}
           onClick={() =>
             onChange({
               ...deck,
@@ -220,7 +226,7 @@ export function RoomsPanel({ deck, onChange }: { deck: DeckSnapshot; onChange: (
           }
         >
           New room
-        </button>
+        </Button>
       </header>
       <p className="nxPresPanelHint">
         A room bundles this deck with other decks/documents into one shared set. Items pointing at other pages are
@@ -235,9 +241,10 @@ export function RoomsPanel({ deck, onChange }: { deck: DeckSnapshot; onChange: (
               onChange={(e) => patchRoom(room.id, { name: e.target.value })}
               aria-label="Room name"
             />
-            <button
-              type="button"
-              className="nxPresBtn"
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Plus size={13} />}
               onClick={() =>
                 patchRoom(room.id, {
                   items: [...room.items, { id: `ri-${uid()}`, kind: "link", title: "New document", href: "#" }],
@@ -245,10 +252,10 @@ export function RoomsPanel({ deck, onChange }: { deck: DeckSnapshot; onChange: (
               }
             >
               Add item
-            </button>
-            <button type="button" className="nxPresBtn nxPresBtnDanger" onClick={() => onChange({ ...deck, rooms: deck.rooms.filter((r) => r.id !== room.id) })}>
+            </Button>
+            <Button size="sm" variant="danger" icon={<Trash2 size={13} />} onClick={() => onChange({ ...deck, rooms: deck.rooms.filter((r) => r.id !== room.id) })}>
               Delete
-            </button>
+            </Button>
           </div>
           <ul className="nxPresRoomItems">
             {room.items.map((it) => (
@@ -263,13 +270,14 @@ export function RoomsPanel({ deck, onChange }: { deck: DeckSnapshot; onChange: (
                   aria-label="Item title"
                 />
                 {it.kind === "link" && (
-                  <button
-                    type="button"
-                    className="nxPresBtn"
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={<Trash2 size={13} />}
                     onClick={() => patchRoom(room.id, { items: room.items.filter((x) => x.id !== it.id) })}
                   >
                     Remove
-                  </button>
+                  </Button>
                 )}
               </li>
             ))}

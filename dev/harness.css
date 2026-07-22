@@ -1,0 +1,7 @@
+/* Harness stylesheet. The vite root is dev/, so Tailwind v4 would only scan this
+   folder and emit none of the utilities the vendored shadcn components use —
+   @source points it at the library source, reproducing what a consuming app
+   compiles. Without this the harness renders unstyled primitives and any craft
+   judgement made from it would be wrong. */
+@source "../src";
+@import "../src/styles/shadcn.css";
