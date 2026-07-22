@@ -53,6 +53,8 @@ export interface Viewer3DLook {
     /* shadow-camera half-extent + depth, in model radii */
     frustumMul: number;
     farMul: number;
+    /* a building casts one huge hard slab — scale the catcher down in plan mode */
+    planOpacityMul: number;
   };
   camera: {
     fov: number;
@@ -62,6 +64,13 @@ export interface Viewer3DLook {
        that stop the user flying inside or under the model */
     fitMul: number;
     topMul: number;
+    /* a floor plan is read from ABOVE — a building framed on the object preset
+       shows you its outside walls, not its rooms. Steeper default + own distance. */
+    planDir: [number, number, number];
+    planFitMul: number;
+    /* where the plan camera aims, as a fraction of the model's height above its
+       floor — 0 sits on the slab, 1 at the top of the tallest (ghosted) level */
+    planTargetFrac: number;
     minDistanceMul: number;
     maxDistanceMul: number;
     /* just under PI/2 — keeps the camera above the ground plane */
@@ -90,6 +99,11 @@ export interface Viewer3DLook {
     floor: { roughness: number };
     /* inactive floors in a multi-level plan */
     ghostOpacity: number;
+    /* how far the plan's walls / alternating floor slabs are pulled OFF the page
+       background toward the foreground color — the whole legibility of the plan
+       in LIGHT mode lives on these two (white walls on a white ground vanish). */
+    wallMixPct: number;
+    floorAltMixPct: number;
   };
 }
 
@@ -107,13 +121,16 @@ export const LOOK: Viewer3DLook = {
     hemi: { sky: "#ffffff", ground: "#8a8578", intensity: 0.5 },
     key: { color: "#ffffff", intensity: 1.6, dir: [0.62, 1.6, 0.37] },
   },
-  ground: { radiusMul: 4, opacityLight: 0.24, opacityDark: 0.42, frustumMul: 2.2, farMul: 12 },
+  ground: { radiusMul: 4, opacityLight: 0.24, opacityDark: 0.42, frustumMul: 2.2, farMul: 12, planOpacityMul: 0.35 },
   camera: {
     fov: 42,
     near: 0.05,
     far: 500,
     fitMul: 2.6,
     topMul: 2.2,
+    planDir: [1, 1.5, 1],
+    planFitMul: 2.95,
+    planTargetFrac: 0.22,
     minDistanceMul: 0.7,
     maxDistanceMul: 6,
     maxPolarAngle: Math.PI * 0.495,
@@ -138,6 +155,8 @@ export const LOOK: Viewer3DLook = {
     wall: { roughness: 0.95 },
     floor: { roughness: 1 },
     ghostOpacity: 0.07,
+    wallMixPct: 64,
+    floorAltMixPct: 14,
   },
 };
 
@@ -169,13 +188,20 @@ export function derivePalette(paint?: string): ScenePalette {
     headEmissive: "#cfd8e8",
     tailColor: "#7a1420",
     tailEmissive: "#a11326",
-    wall: r("color-mix(in srgb, var(--nx-bg-raised) 88%, var(--nx-fg))"),
+    wall: r(`color-mix(in srgb, var(--nx-bg-raised) ${LOOK.materials.wallMixPct}%, var(--nx-fg))`),
     wallEdge: r("var(--nx-border-strong)"),
     floor: r("var(--nx-bg-sunken)"),
-    floorAlt: r("color-mix(in srgb, var(--nx-accent) 7%, var(--nx-bg-sunken))"),
+    floorAlt: r(`color-mix(in srgb, var(--nx-accent) ${LOOK.materials.floorAltMixPct}%, var(--nx-bg-sunken))`),
   };
 }
 
-/* the two theme-dependent scalars, in one place */
+/* the theme-dependent scalars, in one place */
 export const envIntensity = (): number => (isDarkTheme() ? LOOK.env.intensityDark : LOOK.env.intensityLight);
-export const groundShadowOpacity = (): number => (isDarkTheme() ? LOOK.ground.opacityDark : LOOK.ground.opacityLight);
+export const groundShadowOpacity = (isPlan = false): number =>
+  (isDarkTheme() ? LOOK.ground.opacityDark : LOOK.ground.opacityLight) * (isPlan ? LOOK.ground.planOpacityMul : 1);
+
+/* the default framing direction + distance for a mode */
+export const fitFor = (mode: "object" | "floorplan"): { dir: [number, number, number]; mul: number } =>
+  mode === "floorplan"
+    ? { dir: LOOK.camera.planDir, mul: LOOK.camera.planFitMul }
+    : { dir: PRESET_DIRS.iso, mul: LOOK.camera.fitMul };

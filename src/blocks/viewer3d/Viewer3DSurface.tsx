@@ -12,7 +12,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { useThemeNonce } from "../workbook/workbook-theme";
 import { buildLevel, buildSedan, setLevelGhost, type BuiltLevel } from "./builders";
-import { derivePalette, envIntensity, groundShadowOpacity, EASE, LOOK, PRESET_DIRS, type Preset } from "./look";
+import { derivePalette, envIntensity, fitFor, groundShadowOpacity, EASE, LOOK, PRESET_DIRS, type Preset } from "./look";
 import { seedScene, type Viewer3DHotspot, type Viewer3DSnapshot } from "./scene";
 import "./viewer3d.css";
 
@@ -144,8 +144,12 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
         ro.disconnect();
         controls.dispose();
         disposeObject(scene);
+        scene.environment?.dispose();
         pmrem.dispose();
         renderer.dispose();
+        // hard-release the GPU context: renderer.dispose() alone leaves it alive
+        // until GC, so repeated navigations hit the browser's ~16-context cap.
+        renderer.forceContextLoss();
         renderer.domElement.remove();
       },
     };
@@ -163,7 +167,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       const groundY = Math.min(box.min.y, 0) - 0.001;
       const ground = new THREE.Mesh(
         new THREE.CircleGeometry(r * G.radiusMul, 48),
-        new THREE.ShadowMaterial({ opacity: groundShadowOpacity() }),
+        new THREE.ShadowMaterial({ opacity: groundShadowOpacity(s.mode === "floorplan") }),
       );
       ground.rotation.x = -Math.PI / 2;
       ground.position.y = groundY;
@@ -181,8 +185,15 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       controls.minDistance = r * C.minDistanceMul;
       controls.maxDistance = r * C.maxDistanceMul;
       controls.target.copy(engine.sphere.center);
-      const dir = new THREE.Vector3(...PRESET_DIRS.iso).normalize();
-      camera.position.copy(engine.sphere.center).addScaledVector(dir, r * C.fitMul);
+      if (s.mode === "floorplan") {
+        // aim low: the ghosted upper level pulls the fit sphere up and would sit
+        // the building in the bottom of the frame
+        controls.target.y = box.min.y + (box.max.y - box.min.y) * C.planTargetFrac;
+        engine.sphere.center.copy(controls.target);
+      }
+      const fit = fitFor(s.mode);
+      const dir = new THREE.Vector3(...fit.dir).normalize();
+      camera.position.copy(engine.sphere.center).addScaledVector(dir, r * fit.mul);
       camera.lookAt(engine.sphere.center);
       controls.update();
       setPhase("ready");
@@ -340,7 +351,8 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
   // top-down ↔ perspective
   React.useEffect(() => {
     if (mode !== "floorplan" || phase !== "ready") return;
-    flyTo(topDown ? PRESET_DIRS.top : PRESET_DIRS.iso, topDown ? LOOK.camera.topMul : LOOK.camera.fitMul);
+    const f = fitFor(mode);
+    flyTo(topDown ? PRESET_DIRS.top : f.dir, topDown ? LOOK.camera.topMul : f.mul);
   }, [topDown, mode, phase, flyTo]);
 
   // re-theme materials + env when the app theme flips or a skin lands
@@ -350,7 +362,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     const pal = derivePalette(snapRef.current.object?.paint);
     e.scene.environmentIntensity = envIntensity();
     const ground = e.scene.getObjectByName("nx-ground") as THREE.Mesh | undefined;
-    if (ground) (ground.material as THREE.ShadowMaterial).opacity = groundShadowOpacity();
+    if (ground) (ground.material as THREE.ShadowMaterial).opacity = groundShadowOpacity(mode === "floorplan");
     if (mode === "floorplan") {
       e.levels.forEach((built) => built.group.traverse((o) => {
         const m = o as THREE.Mesh;
@@ -378,7 +390,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     e.anim = { kind: "spin", t0: performance.now(), ms: LOOK.feel.spinMs, last: 0 };
   };
 
-  const resetView = () => flyTo(PRESET_DIRS.iso, LOOK.camera.fitMul);
+  const resetView = () => { const f = fitFor(mode); flyTo(f.dir, f.mul); };
 
   /* keyboard camera controls on the canvas host */
   const onKeyDown = (ev: React.KeyboardEvent) => {

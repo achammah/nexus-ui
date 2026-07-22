@@ -107,6 +107,8 @@
 .nxV3Pin {
   position: absolute;
   left: 0; top: 0;
+  /* interactive markers always paint above the passive room labels */
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -141,6 +143,7 @@
   white-space: nowrap;
 }
 .nxV3Pin:hover .nxV3PinLabel { border-color: var(--nx-border-strong); }
+.nxV3Pin--open { z-index: 3; }
 .nxV3Pin--open .nxV3PinDot { box-shadow: 0 0 0 4px color-mix(in srgb, var(--nx-accent) 25%, transparent); }
 .nxV3Pin--occluded { opacity: 0.35; }
 
@@ -148,6 +151,7 @@
 .nxV3RoomLabel {
   position: absolute;
   left: 0; top: 0;
+  z-index: 1;
   font: var(--nx-text-micro);
   letter-spacing: var(--nx-tracking-micro);
   text-transform: uppercase;
