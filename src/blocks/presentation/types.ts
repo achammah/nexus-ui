@@ -47,7 +47,15 @@ export type ShapeKind =
   | "star"
   | "callout";
 
-export type ElementKind = "text" | "shape" | "image" | "chart" | "table";
+export type ElementKind = "text" | "shape" | "image" | "chart" | "table" | "video";
+
+/* Entrance animation for one element — plays when its slide ENTERS in present
+   mode / the shared viewer (never while editing). Order among a slide's animated
+   elements = array order; each step staggers after the previous. */
+export type AnimEffect = "none" | "fade" | "rise" | "pop" | "wipe";
+export interface ElementAnim {
+  effect: AnimEffect;
+}
 
 export type ChartKind = "bar" | "line" | "pie" | "area" | "scatter";
 
@@ -100,6 +108,9 @@ export interface ElementStyle {
   fontFamily?: string;
   align?: "left" | "center" | "right";
   valign?: "top" | "middle" | "bottom";
+  /* text depth — multiplier (1.0–2.5) and px tracking; text + shape labels */
+  lineHeight?: number;
+  letterSpacing?: number;
 }
 
 export interface SlideElement {
@@ -120,9 +131,13 @@ export interface SlideElement {
   shape?: ShapeKind;
   /* kind:"text" (sanitized rich HTML) — also the label drawn inside a shape */
   html?: string;
-  /* kind:"image" — data URL or href */
+  /* kind:"image" — data URL or href · kind:"video" — mp4/webm URL (or data URL) */
   src?: string;
   alt?: string;
+  /* kind:"video" — optional poster frame */
+  poster?: string;
+  /* entrance animation (present/viewer only) */
+  anim?: ElementAnim;
   /* kind:"chart" */
   chart?: ChartSpec;
   /* kind:"table" */
@@ -141,6 +156,44 @@ export interface Slide {
 }
 
 export type DeckThemeId = "native" | "paper" | "midnight" | "accent" | "gradient";
+
+/* ---- slide master + templates (PPT parity) ----
+   The MASTER is deck-level defaults layered over the theme: fonts for headings/
+   body, palette overrides, a footer line + slide numbers, and a logo stamped on
+   every slide. TEMPLATES are user-saved slides re-insertable from the New-slide
+   menu (a lightweight slide-library, not a separate authoring surface). */
+
+export interface DeckMaster {
+  fonts?: {
+    /* CSS font-family stacks; headings = title/section/H, body = the rest */
+    heading?: string;
+    body?: string;
+  };
+  colors?: {
+    bg?: string;
+    fg?: string;
+    accent?: string;
+    muted?: string;
+  };
+  logo?: {
+    /* data URL or href */
+    src: string;
+    pos: "tl" | "tr" | "bl" | "br";
+    /* height in design px (default 40) */
+    size?: number;
+  };
+  footer?: {
+    text?: string;
+    showSlideNum?: boolean;
+  };
+}
+
+export interface SlideTemplate {
+  id: string;
+  name: string;
+  /* the saved slide, id-less — inserting clones it under fresh ids */
+  slide: Omit<Slide, "id">;
+}
 
 /* ---- papermark layer (share + track) ---- */
 
@@ -203,6 +256,10 @@ export interface DeckSnapshot {
   id: string;
   title: string;
   theme: DeckThemeId;
+  /* deck-level defaults over the theme (fonts/colors/logo/footer) */
+  master?: DeckMaster;
+  /* user-saved reusable slides */
+  templates?: SlideTemplate[];
   slides: Slide[];
   sharing: { links: ShareLink[] };
   analytics: { sessions: ViewSession[] };

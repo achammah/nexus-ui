@@ -873,6 +873,92 @@ async function p20() {
   await page.keyboard.press("Escape");
 }
 
+/* J21 — parity wave: master (footer/fonts), templates, text depth, animation, video */
+{
+  await page.goto(URL0);
+  await page.waitForSelector(".nxPresFilmItem");
+  await page.locator(".nxPresFilmItem .nxPresFilmIdx").nth(0).click();
+
+  /* a — seeded master footer + slide number on the canvas */
+  const footer = await page.locator(".nxPresCanvasWell .nxPresMasterFooter").textContent();
+  ok("J21a master footer renders", /Confidential/.test(footer || "") && /1$/.test((footer || "").trim()), footer);
+
+  /* b — master panel: heading font -> serif applies to the canvas title */
+  await page.locator('[data-testid="slide-menu"]').click();
+  await page.locator('[data-testid="master-toggle"]').click();
+  await page.waitForSelector('[data-testid="master-panel"]');
+  await page.locator('[data-testid="master-font-h"]').click();
+  await page.locator('[data-testid="master-font-h-serif"]').click();
+  await page.waitForTimeout(200);
+  const titleFont = await page.evaluate(() => getComputedStyle(document.querySelector(".nxPresCanvasWell .nxPresTitle")).fontFamily);
+  ok("J21b master heading font applies", /Georgia/i.test(titleFont), titleFont);
+  await shot("pres-master-panel.png");
+  await page.locator('[data-testid="master-close"]').click();
+
+  /* c — save current slide as a template, insert it from the New-slide menu */
+  const count0 = await page.locator(".nxPresFilmItem").count();
+  await page.locator('[data-testid="slide-menu"]').click();
+  await page.locator('[data-testid="save-template"]').click();
+  await page.locator('[data-testid="add-slide-menu"]').click();
+  await page.locator('[data-testid^="add-tpl-"]').first().click();
+  await page.waitForTimeout(250);
+  const d1 = await deck();
+  ok(
+    "J21c template save + insert",
+    (d1.templates?.length ?? 0) === 1 && d1.slides.length === count0 + 1 && d1.slides[1].layout === d1.slides[0].layout,
+    `templates=${d1.templates?.length} slides=${d1.slides.length}`,
+  );
+
+  /* d — text depth: text box + serif + centred + line height through the element bar */
+  await page.locator('[data-testid="insert-menu"]').click();
+  await page.locator('[data-testid="insert-text"]').click();
+  await page.waitForSelector('[data-testid="element-bar"]');
+  await page.locator('[data-testid="el-font"]').click();
+  await page.locator('[data-testid="el-font-serif"]').click();
+  await page.locator('[data-testid="el-text-align"]').click();
+  await page.locator('[data-testid="el-text-align-center"]').click();
+  await page.locator('[data-testid="el-lineheight"]').fill("1.8");
+  await page.waitForTimeout(250);
+  let d2 = await deck();
+  let elNew = (d2.slides[1].elements ?? []).find((e) => e.kind === "text");
+  ok(
+    "J21d text depth persists",
+    !!elNew && /Georgia/i.test(elNew.style?.fontFamily || "") && elNew.style?.align === "center" && elNew.style?.lineHeight === 1.8,
+    JSON.stringify(elNew?.style || {}),
+  );
+
+  /* e — animation: Rise on the selected element; plays in present mode */
+  await page.locator('[data-testid="el-anim"]').click();
+  await page.locator('[data-testid="el-anim-rise"]').click();
+  await page.waitForTimeout(200);
+  d2 = await deck();
+  elNew = (d2.slides[1].elements ?? []).find((e) => e.kind === "text");
+  ok("J21e anim persists", elNew?.anim?.effect === "rise", JSON.stringify(elNew?.anim));
+  const editorAnims = await page.evaluate(() => document.querySelectorAll(".nxPresCanvasWell [data-anim]").length);
+  await page.locator('[data-testid="present-btn"]').click();
+  await page.waitForSelector('[data-testid="present-mode"]');
+  await page.waitForTimeout(120);
+  const presentAnim = await page.evaluate(() => {
+    const el = document.querySelector('[data-testid="present-mode"] [data-anim="rise"]');
+    return el ? el.getAnimations().filter((a) => a.animationName === "nxPresElRise").length : -1;
+  });
+  ok("J21f anim plays in present, never in editor", editorAnims === 0 && presentAnim > 0, `editor=${editorAnims} present=${presentAnim}`);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+
+  /* f — video element via Insert menu (data URL avoids network) */
+  const dataMp4 = "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=";
+  await page.locator('[data-testid="insert-menu"]').click();
+  await page.locator('[data-testid="insert-video-url"]').fill(dataMp4);
+  await page.locator('[data-testid="insert-video-add"]').click();
+  await page.waitForTimeout(250);
+  const d3 = await deck();
+  const vid = (d3.slides[1].elements ?? []).find((e) => e.kind === "video");
+  const videoInDom = await page.locator(".nxPresCanvasWell video.nxPresElVideo").count();
+  ok("J21g video element inserts + renders", !!vid && videoInDom === 1, `dom=${videoInDom}`);
+  await shot("pres-parity-editor.png");
+}
+
 const fails = results.filter((r) => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 await browser.close();

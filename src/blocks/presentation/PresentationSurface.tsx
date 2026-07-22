@@ -1,10 +1,10 @@
 import * as React from "react";
-import type { DeckSnapshot, DeckThemeId, PresentationConfig, Slide, SlideBlocks, SlideLayout, SlideTransition } from "./types";
+import type { DeckMaster, DeckSnapshot, DeckThemeId, PresentationConfig, Slide, SlideBlocks, SlideLayout, SlideTemplate, SlideTransition } from "./types";
 import { uid } from "./types";
 import { applyViewEvent, createSlide, isDeckSnapshot, seedDeck } from "./snapshot";
 import { LAYOUTS, SlideView, textOf } from "./SlideView";
 import { ElementLayer } from "./ElementLayer";
-import { ElementBar, InsertMenu } from "./ElementControls";
+import { ColorWell, ElementBar, FONT_STACKS, InsertMenu } from "./ElementControls";
 import { IconAction, PickerMenu, SectionTabs, TextAction } from "./chrome";
 import {
   DropdownMenu,
@@ -47,6 +47,7 @@ import {
   createShape,
   createTable,
   createTextBox,
+  createVideo,
   duplicateElements,
   els,
   removeElements,
@@ -83,6 +84,16 @@ const THEMES: Array<{ id: DeckThemeId; label: string }> = [
 const TRANSITIONS: SlideTransition[] = ["none", "fade", "slide", "zoom"];
 
 type Tab = "slides" | "share" | "analytics" | "rooms";
+
+const MASTER_FONT_OPTIONS = [
+  { value: "theme", label: "Theme font" },
+  { value: "sans", label: "Sans" },
+  { value: "serif", label: "Serif" },
+  { value: "mono", label: "Mono" },
+  { value: "display", label: "Display" },
+];
+const masterFontValue = (family?: string): string =>
+  (Object.entries(FONT_STACKS).find(([, v]) => v === family)?.[0] as string | undefined) ?? "theme";
 
 /* PresentationSurface — a full deck editor (filmstrip + 16:9 canvas + notes +
    present mode + export) with the papermark layer (share links, viewer preview,
@@ -202,8 +213,10 @@ export function PresentationSurface({
   const [selEls, setSelEls] = React.useState<string[]>([]);
   /* which text surface has focus — drives the contextual formatting bar */
   const [textFocus, setTextFocus] = React.useState(false);
-  /* what an image pick should do: replace the layout's image region, or insert an element */
-  const imageIntent = React.useRef<"region" | "element">("region");
+  /* what an image pick should do: replace the layout's image region, insert an
+     element, or set the deck-master logo */
+  const imageIntent = React.useRef<"region" | "element" | "logo">("region");
+  const [masterOpen, setMasterOpen] = React.useState(false);
   const [dragIdx, setDragIdx] = React.useState<number | null>(null);
   const [dropIdx, setDropIdx] = React.useState<number | null>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);
@@ -292,7 +305,7 @@ export function PresentationSurface({
     active?.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
-  const pickImage = (intent: "region" | "element" = "region") => {
+  const pickImage = (intent: "region" | "element" | "logo" = "region") => {
     imageIntent.current = intent;
     fileRef.current?.click();
   };
@@ -302,10 +315,38 @@ export function PresentationSurface({
     fr.onload = () => {
       const src = String(fr.result);
       if (imageIntent.current === "element") insertElement(() => addElement(slide, createImageElement(src)));
+      else if (imageIntent.current === "logo")
+        setMaster({ logo: { src, pos: deck.master?.logo?.pos ?? "br", size: deck.master?.logo?.size ?? 40 } });
       else setBlock("imageUrl", src);
     };
     fr.readAsDataURL(f);
   };
+
+  /* ---- deck master + templates ---- */
+  const setMaster = (patch: Partial<DeckMaster>) =>
+    commit({ ...deck, master: { ...deck.master, ...patch } }, "master");
+  const setMasterFooter = (patch: Partial<NonNullable<DeckMaster["footer"]>>) =>
+    setMaster({ footer: { ...deck.master?.footer, ...patch } });
+
+  const saveTemplate = () => {
+    const { id: _drop, ...rest } = slide;
+    const name = textOf(slide.blocks.title) || `${LAYOUTS[slide.layout].label} template`;
+    const tpl: SlideTemplate = { id: `tpl-${uid()}`, name, slide: structuredClone(rest) };
+    commit({ ...deck, templates: [...(deck.templates ?? []), tpl] });
+  };
+  const insertTemplate = (tpl: SlideTemplate) => {
+    const s: Slide = {
+      ...structuredClone(tpl.slide),
+      id: `sl-${uid()}`,
+      elements: (tpl.slide.elements ?? []).map((e) => ({ ...e, id: `el-${uid()}` })),
+    };
+    const slides = deck.slides.slice();
+    slides.splice(selIdx + 1, 0, s);
+    commit({ ...deck, slides });
+    setSel(selIdx + 1);
+  };
+  const removeTemplate = (id: string) =>
+    commit({ ...deck, templates: (deck.templates ?? []).filter((t) => t.id !== id) });
 
   const doPdf = () => {
     const el = surfaceRef.current?.querySelector(".nxPresCanvas .nxPresSlide") as HTMLElement | null;
@@ -471,6 +512,7 @@ export function PresentationSurface({
               onInsertImage={() => pickImage("element")}
               onInsertChart={(t) => insertElement(() => addElement(slide, createChart(t)))}
               onInsertTable={() => insertElement(() => addElement(slide, createTable()))}
+              onInsertVideo={(src) => insertElement(() => addElement(slide, createVideo(src)))}
             />
             <SlideMenu
               slide={slide}
@@ -478,6 +520,9 @@ export function PresentationSurface({
               onTransition={(t) => patchSlide(slide.id, { transition: t })}
               notesOpen={notesOpen}
               onNotes={() => setNotesOpen((v) => !v)}
+              onSaveTemplate={saveTemplate}
+              masterOpen={masterOpen}
+              onMaster={() => setMasterOpen((v) => !v)}
             />
           </>
         )}
@@ -547,7 +592,7 @@ export function PresentationSurface({
                 <span className="nxPresFilmIdx">{i + 1}</span>
                 <div className="nxPresFilmThumb" aria-label={`Slide ${i + 1}: ${textOf(s.blocks.title) || s.layout}`}>
                   <FitSlide className="nxPresFilmFit">
-                    <SlideView slide={s} />
+                    <SlideView slide={s} master={deck.master} slideNum={i + 1} />
                   </FitSlide>
                 </div>
                 <div className="nxPresFilmOps" onPointerDown={(e) => e.stopPropagation()}>
@@ -584,6 +629,35 @@ export function PresentationSurface({
                       {LAYOUTS[l].label}
                     </DropdownMenuCheckboxItem>
                   ))}
+                  {(deck.templates?.length ?? 0) > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel>Your templates</DropdownMenuLabel>
+                      {deck.templates!.map((t) => (
+                        <DropdownMenuCheckboxItem
+                          key={t.id}
+                          checked={false}
+                          onCheckedChange={() => insertTemplate(t)}
+                          data-testid={`add-tpl-${t.id}`}
+                        >
+                          {t.name}
+                          <button
+                            type="button"
+                            className="nxPresTplRemove"
+                            aria-label={`Delete template ${t.name}`}
+                            onPointerDown={(e) => {
+                              /* pointerdown: fire before the menu item's own select closes the menu */
+                              e.preventDefault();
+                              e.stopPropagation();
+                              removeTemplate(t.id);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -621,6 +695,8 @@ export function PresentationSurface({
               <FitSlide className="nxPresCanvas">
                 <SlideView
                   slide={slide}
+                  master={deck.master}
+                  slideNum={selIdx + 1}
                   editable
                   onBlockChange={setBlock}
                   onImagePick={() => pickImage("region")}
@@ -638,6 +714,82 @@ export function PresentationSurface({
                 />
               </FitSlide>
             </div>
+
+            {masterOpen && (
+              <div className="nxPresMasterPanel" data-testid="master-panel">
+                <div className="nxPresMasterPanelHead">
+                  <span className="nxPresNotesLabel">Deck master</span>
+                  <button type="button" className="nxPresBtn" onClick={() => setMasterOpen(false)} data-testid="master-close">
+                    Done
+                  </button>
+                </div>
+                <div className="nxPresMasterRow">
+                  <PickerMenu
+                    value={masterFontValue(deck.master?.fonts?.heading)}
+                    options={MASTER_FONT_OPTIONS}
+                    onPick={(v) => setMaster({ fonts: { ...deck.master?.fonts, heading: v === "theme" ? undefined : FONT_STACKS[v] } })}
+                    label="Heading font"
+                    testid="master-font-h"
+                  />
+                  <PickerMenu
+                    value={masterFontValue(deck.master?.fonts?.body)}
+                    options={MASTER_FONT_OPTIONS}
+                    onPick={(v) => setMaster({ fonts: { ...deck.master?.fonts, body: v === "theme" ? undefined : FONT_STACKS[v] } })}
+                    label="Body font"
+                    testid="master-font-b"
+                  />
+                </div>
+                <div className="nxPresMasterRow">
+                  <ColorWell label="Background" value={deck.master?.colors?.bg ?? "none"} onPick={(v) => setMaster({ colors: { ...deck.master?.colors, bg: v === "none" ? undefined : v } })} testid="master-bg" />
+                  <ColorWell label="Accent" value={deck.master?.colors?.accent ?? "none"} onPick={(v) => setMaster({ colors: { ...deck.master?.colors, accent: v === "none" ? undefined : v } })} testid="master-accent" />
+                </div>
+                <div className="nxPresMasterRow">
+                  {deck.master?.logo?.src ? (
+                    <>
+                      <img className="nxPresMasterLogoPreview" src={deck.master.logo.src} alt="Logo preview" />
+                      <PickerMenu
+                        value={deck.master.logo.pos}
+                        options={[
+                          { value: "tl", label: "Top left" },
+                          { value: "tr", label: "Top right" },
+                          { value: "bl", label: "Bottom left" },
+                          { value: "br", label: "Bottom right" },
+                        ]}
+                        onPick={(pos) => setMaster({ logo: { ...deck.master!.logo!, pos } })}
+                        label="Logo position"
+                        testid="master-logo-pos"
+                      />
+                      <Button size="sm" variant="ghost" onClick={() => setMaster({ logo: undefined })} data-testid="master-logo-remove">
+                        Remove
+                      </Button>
+                    </>
+                  ) : (
+                    <Button size="sm" variant="secondary" onClick={() => pickImage("logo")} data-testid="master-logo-add">
+                      Add logo…
+                    </Button>
+                  )}
+                </div>
+                <div className="nxPresMasterRow">
+                  <input
+                    className="nxPresVideoInput"
+                    placeholder="Footer text (every slide)"
+                    value={deck.master?.footer?.text ?? ""}
+                    onChange={(e) => setMasterFooter({ text: e.target.value || undefined })}
+                    aria-label="Footer text"
+                    data-testid="master-footer-text"
+                  />
+                  <label className="nxPresCheck">
+                    <input
+                      type="checkbox"
+                      checked={!!deck.master?.footer?.showSlideNum}
+                      onChange={(e) => setMasterFooter({ showSlideNum: e.target.checked })}
+                      data-testid="master-slidenum"
+                    />
+                    Slide №
+                  </label>
+                </div>
+              </div>
+            )}
 
             {/* notes are a sibling of the stage, not a child of it — inside the
                 well they would lay out as a column beside the slide */}
@@ -708,12 +860,18 @@ function SlideMenu({
   onTransition,
   notesOpen,
   onNotes,
+  onSaveTemplate,
+  masterOpen,
+  onMaster,
 }: {
   slide: Slide;
   onLayout: (l: SlideLayout) => void;
   onTransition: (t: SlideTransition) => void;
   notesOpen: boolean;
   onNotes: () => void;
+  onSaveTemplate: () => void;
+  masterOpen: boolean;
+  onMaster: () => void;
 }) {
   return (
     <DropdownMenu modal={false}>
@@ -749,6 +907,15 @@ function SlideMenu({
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem checked={notesOpen} onCheckedChange={onNotes} data-testid="notes-toggle">
           Speaker notes
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem checked={false} onCheckedChange={onSaveTemplate} data-testid="save-template">
+          Save as template
+          <span className="nxPresMenuHint">reusable slide</span>
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuCheckboxItem checked={masterOpen} onCheckedChange={onMaster} data-testid="master-toggle">
+          Deck master…
+          <span className="nxPresMenuHint">fonts · logo · footer</span>
         </DropdownMenuCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>

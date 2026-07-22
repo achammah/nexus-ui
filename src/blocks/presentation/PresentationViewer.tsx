@@ -153,8 +153,8 @@ function ViewerPlayer({
         <span className="nxPresViewerMeta">{link.label || "Shared presentation"}</span>
       </header>
       <div className="nxPresViewerStage" onClick={() => go(1)}>
-        <FitSlide>
-          <SlideView slide={deck.slides[index]} />
+        <FitSlide className="nxPresAnimate">
+          <SlideView key={deck.slides[index].id} slide={deck.slides[index]} master={deck.master} slideNum={index + 1} />
         </FitSlide>
       </div>
       <footer className="nxPresViewerBar">

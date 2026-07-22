@@ -263,6 +263,10 @@ export function seedDeck(): DeckSnapshot {
     id: `deck-${uid()}`,
     title: "Atlas Q2 Business Review",
     theme: "native",
+    /* the master is part of the flagship demo: footer + slide numbers on every
+       slide proves the deck-level layer on first open */
+    master: { footer: { text: "Atlas · Q2 2026 · Confidential", showSlideNum: true } },
+    templates: [],
     slides,
     sharing: {
       links: [

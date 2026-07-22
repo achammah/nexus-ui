@@ -63,3 +63,30 @@
   corrected.
 - Verified this pass by me, not inherited: tsc clean (block), harness build clean, 42/42 journeys run
   live, shots re-captured.
+
+## PPT-parity wave (post-audit pass)
+
+Sequenced by the lead's off-hold list: text depth → master/templates → animation → media; review /
+track-changes deliberately LAST (it reuses record-core `useSuggestions` + `SuggestionPanel` — the
+document lane's engine — and is not yet built; see gaps).
+
+| Feature | Verdict | Evidence |
+|---|---|---|
+| Text depth: per-element font stack (Theme/Sans/Serif/Mono/Display), h/v alignment, line height, letter spacing in the model | works | J21d, `pres-parity-editor.png` |
+| Deck master: heading/body fonts, palette overrides, logo (4 corners), footer + slide numbers; edited in a floating panel | works | J21a/J21b, `pres-master-panel.png` |
+| Slide templates: save current slide, insert from the New-slide menu, delete | works | J21c |
+| Element entrance animation (fade/rise/pop/wipe), staggered by element order; present + viewer only, never in the editor; reduced-motion respected | works | J21e/J21f — a RUNNING `nxPresElRise` animation asserted in present, 0 armed in the editor |
+| Video elements: URL insert, inert while editing, real controls in present/viewer | works | J21g |
+| Seed carries the master (footer + slide №) so the layer is visible on first open | works | J21a |
+
+Honest gaps (this wave):
+1. **Review / track-changes not built yet** — next wave; plan is Suggesting-mode edits captured as
+   `Suggestion` rows over slide text regions/elements, reviewed via record-core `SuggestionPanel`.
+2. **PPTX export of the new layer**: master fonts/colors resolve into the PDF (computed-style path)
+   but PPTX text keeps Helvetica; a video exports as its poster or a labeled placeholder (pptxgenjs
+   media not wired); `lineHeight/letterSpacing` don't map to PPTX runs.
+3. **Video is URL-based** (mp4/webm or data URL) — no YouTube/Vimeo oEmbed, no in-app upload storage
+   (a host data seam; a data-URL upload would bloat the snapshot blob).
+4. **Templates are per-deck**, not a cross-deck library (host registry seam).
+
+Verified: tsc clean (block), 111/111 journeys live against the harness, shots re-captured.

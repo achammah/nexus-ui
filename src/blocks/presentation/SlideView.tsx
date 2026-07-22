@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { Slide, SlideBlocks, SlideLayout } from "./types";
+import type { DeckMaster, Slide, SlideBlocks, SlideLayout } from "./types";
 import { ElementLayer } from "./ElementLayer";
 
 /* Very small allowlist sanitizer for stored rich-text HTML: strips script/style
@@ -92,15 +92,35 @@ export interface SlideViewProps {
   /* free-placement layer (ElementLayer in the editor; a static render elsewhere).
      Kept as a slot so SlideView stays presentational and the editor owns gestures. */
   elementLayer?: React.ReactNode;
+  /* deck master (fonts/colors/logo/footer) — applied as slide-scoped CSS vars + overlays */
+  master?: DeckMaster;
+  /* 1-based slide number, shown when master.footer.showSlideNum */
+  slideNum?: number;
+}
+
+/* master -> slide-scoped CSS custom properties (theme vars win only when the
+   master leaves a channel unset) */
+function masterVars(m?: DeckMaster): React.CSSProperties | undefined {
+  if (!m) return undefined;
+  const v: Record<string, string> = {};
+  if (m.colors?.bg) v["--pres-bg"] = m.colors.bg;
+  if (m.colors?.fg) v["--pres-fg"] = m.colors.fg;
+  if (m.colors?.accent) v["--pres-accent"] = m.colors.accent;
+  if (m.colors?.muted) v["--pres-muted"] = m.colors.muted;
+  if (m.fonts?.heading) v["--pres-font-h"] = m.fonts.heading;
+  if (m.fonts?.body) v["--pres-font-b"] = m.fonts.body;
+  return Object.keys(v).length ? (v as React.CSSProperties) : undefined;
 }
 
 /* Renders ONE slide at its natural 16:9 box (the host scales via transform or
    width). Used by the editor canvas (editable), the filmstrip (scaled down),
    present mode and the read-only viewer. */
-export function SlideView({ slide, editable, onBlockChange, onImagePick, onRegionFocus, elementLayer }: SlideViewProps) {
+export function SlideView({ slide, editable, onBlockChange, onImagePick, onRegionFocus, elementLayer, master, slideNum }: SlideViewProps) {
   const { spec } = LAYOUTS[slide.layout] ?? LAYOUTS.blank;
+  const footer = master?.footer;
+  const logo = master?.logo;
   return (
-    <div className={`nxPresSlide nxPresLayout-${slide.layout}`} data-slide-id={slide.id}>
+    <div className={`nxPresSlide nxPresLayout-${slide.layout}`} data-slide-id={slide.id} style={masterVars(master)}>
       {spec.hasImage && (
         <div className="nxPresImageWell">
           {slide.blocks.imageUrl ? (
@@ -134,6 +154,20 @@ export function SlideView({ slide, editable, onBlockChange, onImagePick, onRegio
         />
       ))}
       {elementLayer ?? (slide.elements?.length ? <StaticElements slide={slide} /> : null)}
+      {logo?.src && (
+        <img
+          className={`nxPresMasterLogo nxPresMasterLogo-${logo.pos}`}
+          style={{ height: logo.size ?? 40 }}
+          src={logo.src}
+          alt="Logo"
+        />
+      )}
+      {(footer?.text || (footer?.showSlideNum && slideNum != null)) && (
+        <div className="nxPresMasterFooter" aria-hidden>
+          <span className="nxPresMasterFooterText">{footer?.text ?? ""}</span>
+          {footer?.showSlideNum && slideNum != null && <span className="nxPresMasterFooterNum">{slideNum}</span>}
+        </div>
+      )}
     </div>
   );
 }

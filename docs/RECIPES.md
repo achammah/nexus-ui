@@ -112,3 +112,25 @@ Viewer analytics folds are deliberately NOT undoable — they are recorded facts
 Editor (outside text): ↑/↓ select slide, ⌘D duplicate, Delete remove, ⌘Enter present, ⌘Z / ⌘⇧Z (or ⌘Y) undo/redo.
 Present: ←/→/Space/PageUp/PageDown navigate, Home/End jump, P presenter notes, Esc exit.
 Viewer: ←/→/Space navigate.
+
+### PPT-parity layer (masters · templates · text depth · animation · video)
+
+- **Deck master** (`DeckSnapshot.master`): deck-level defaults over the theme — heading/body font
+  stacks, palette overrides (`bg/fg/accent/muted`), a logo stamped on every slide (`pos: tl|tr|bl|br`,
+  `size` design-px), and a footer line with optional slide numbers. Edited in-surface (Slide →
+  "Deck master…"); applied as slide-scoped CSS vars (`--pres-font-h/--pres-font-b` + `--pres-*`
+  color overrides), so filmstrip, canvas, present, viewer and PDF all agree.
+- **Slide templates** (`DeckSnapshot.templates`): Slide → "Save as template" stores the current
+  slide (id-less); the New-slide menu grows a "Your templates" section; inserting clones under
+  fresh ids. A lightweight slide library per deck — not a cross-deck store (that would be a host
+  registry seam).
+- **Text depth** (element level): `ElementStyle` adds `lineHeight` (multiplier) and
+  `letterSpacing` (px) on top of `fontSize/fontFamily/align/valign/color`; the element bar exposes
+  font (Theme/Sans/Serif/Mono/Display), horizontal + vertical alignment, and line height.
+- **Entrance animation**: `SlideElement.anim = { effect: "fade"|"rise"|"pop"|"wipe" }` — plays in
+  PRESENT mode and the shared viewer only (editor stays static), staggered in element order,
+  disabled under `prefers-reduced-motion`. Slide-level transitions are unchanged.
+- **Video elements**: Insert → video URL (mp4/webm, or a data URL). Inert while editing
+  (drag/resize like any element), real `<video controls>` in present/viewer. PPTX export flattens a
+  video to its poster/placeholder (pptxgenjs media embedding is not wired); PDF prints the poster
+  frame — both noted honestly rather than silently dropped.

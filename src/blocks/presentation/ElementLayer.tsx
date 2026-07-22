@@ -267,14 +267,20 @@ export function ElementLayer({ slide, editable, selected = [], onSelect, onDraft
       style={{ width: SLIDE_W, height: SLIDE_H }}
       data-testid="element-layer"
     >
-      {list.map((el) => {
+      {(() => {
+        /* entrance-animation order = array order among the slide's animated elements */
+        let animIdx = -1;
+        return list.map((el) => {
         const isSel = selected.includes(el.id);
         const st = el.style ?? {};
+        const animated = !editable && el.anim && el.anim.effect !== "none";
+        if (animated) animIdx += 1;
         return (
           <div
             key={el.id}
             className={`nxPresEl nxPresEl-${el.kind}${isSel ? " isSelected" : ""}${el.locked ? " isLocked" : ""}`}
             data-el-id={el.id}
+            data-anim={animated ? el.anim!.effect : undefined}
             style={{
               left: el.x,
               top: el.y,
@@ -282,6 +288,7 @@ export function ElementLayer({ slide, editable, selected = [], onSelect, onDraft
               height: el.h,
               transform: el.rot ? `rotate(${el.rot}deg)` : undefined,
               opacity: st.opacity ?? 1,
+              ...(animated ? ({ "--anim-order": animIdx } as React.CSSProperties) : null),
             }}
             onPointerDown={(e) => onElementPointerDown(e, el)}
             onDoubleClick={() => {
@@ -317,6 +324,18 @@ export function ElementLayer({ slide, editable, selected = [], onSelect, onDraft
                 draggable={false}
               />
             )}
+            {el.kind === "video" && (
+              /* editor: inert (drag/resize like any element); present/viewer: real controls */
+              <video
+                className={`nxPresElVideo${editable ? " isInert" : ""}`}
+                src={el.src}
+                poster={el.poster}
+                controls={!editable}
+                playsInline
+                preload="metadata"
+                style={{ borderRadius: st.radius ? `${st.radius}px` : undefined }}
+              />
+            )}
             {(el.kind === "text" || el.kind === "shape") && (
               <ElementText
                 el={el}
@@ -329,7 +348,8 @@ export function ElementLayer({ slide, editable, selected = [], onSelect, onDraft
             )}
           </div>
         );
-      })}
+        });
+      })()}
 
       {/* selection chrome — one box per element, plus handles on the bounds */}
       {editable &&
@@ -388,6 +408,7 @@ export function ElementLayer({ slide, editable, selected = [], onSelect, onDraft
 function ariaFor(el: SlideElement): string {
   if (el.kind === "shape") return `${el.shape ?? "shape"} element`;
   if (el.kind === "image") return el.alt || "Image element";
+  if (el.kind === "video") return "Video element";
   if (el.kind === "chart") return `${el.chart?.type ?? "bar"} chart`;
   if (el.kind === "table") return `Table, ${el.table?.rows.length ?? 0} rows`;
   return "Text box";
@@ -438,6 +459,8 @@ function ElementText({ el, editing, onDone }: { el: SlideElement; editing: boole
         fontSize: st.fontSize,
         fontFamily: st.fontFamily,
         textAlign: st.align,
+        lineHeight: st.lineHeight,
+        letterSpacing: st.letterSpacing != null ? `${st.letterSpacing}px` : undefined,
         justifyContent: st.valign === "middle" ? "center" : st.valign === "bottom" ? "flex-end" : "flex-start",
       }}
       onBlur={(e) => editing && onDone(e.currentTarget.innerHTML)}

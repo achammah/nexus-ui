@@ -40,11 +40,29 @@ import {
   Plus,
   Rows3,
   SendToBack,
+  Sparkles,
   Table2,
   Trash2,
   Type,
   Ungroup,
 } from "lucide-react";
+
+/* text-depth font stacks — token-anchored; "theme" clears back to the deck font */
+export const FONT_STACKS: Record<string, string> = {
+  sans: "var(--nx-font-sans)",
+  serif: "Georgia, 'Times New Roman', serif",
+  mono: "var(--nx-font-mono)",
+  display: "'Avenir Next', 'Segoe UI', var(--nx-font-sans)",
+};
+const FONT_OPTIONS = [
+  { value: "theme", label: "Theme font" },
+  { value: "sans", label: "Sans" },
+  { value: "serif", label: "Serif" },
+  { value: "mono", label: "Mono" },
+  { value: "display", label: "Display" },
+];
+const fontValue = (family?: string): string =>
+  (Object.entries(FONT_STACKS).find(([, v]) => v === family)?.[0] as string | undefined) ?? "theme";
 import { addColumn, addRow, removeColumn, removeRow } from "./TableElement";
 
 const SHAPES: ShapeKind[] = ["rect", "roundRect", "ellipse", "triangle", "arrow", "line", "star", "callout"];
@@ -59,16 +77,19 @@ export function InsertMenu({
   onInsertImage,
   onInsertChart,
   onInsertTable,
+  onInsertVideo,
 }: {
   onInsertShape: (s: ShapeKind) => void;
   onInsertText: () => void;
   onInsertImage: () => void;
   onInsertChart: (t: ChartKind) => void;
   onInsertTable: () => void;
+  onInsertVideo: (src: string) => void;
 }) {
   /* the shape GRID is plain buttons rather than menu rows (it is a palette), so
      the menu is controlled and closes explicitly on pick */
   const [open, setOpen] = React.useState(false);
+  const [videoUrl, setVideoUrl] = React.useState("");
   return (
     <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -94,6 +115,32 @@ export function InsertMenu({
           <span className="nxPresMenuIcon"><Table2 size={13} /></span>
           Table
         </DropdownMenuCheckboxItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Video (mp4 / webm URL)</DropdownMenuLabel>
+        <form
+          className="nxPresVideoForm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const src = videoUrl.trim();
+            if (!src) return;
+            onInsertVideo(src);
+            setVideoUrl("");
+            setOpen(false);
+          }}
+        >
+          <input
+            className="nxPresVideoInput"
+            placeholder="https://…/clip.mp4"
+            value={videoUrl}
+            onChange={(e) => setVideoUrl(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation() /* typing must not drive menu typeahead */}
+            aria-label="Video URL"
+            data-testid="insert-video-url"
+          />
+          <Button size="sm" variant="secondary" type="submit" disabled={!videoUrl.trim()} data-testid="insert-video-add">
+            Add
+          </Button>
+        </form>
         <DropdownMenuSeparator />
         <DropdownMenuLabel>Shape</DropdownMenuLabel>
         <div className="nxPresShapeGrid">
@@ -220,19 +267,96 @@ export function ElementBar({
         </label>
       )}
       {hasText && (
-        <label className="nxPresToolLabel">
-          Size
-          <input
-            className="nxPresNum"
-            type="number"
-            min={8}
-            max={200}
-            value={st.fontSize ?? 24}
-            onChange={(e) => style({ fontSize: Number(e.target.value) })}
-            aria-label="Font size"
+        <>
+          <label className="nxPresToolLabel">
+            Size
+            <input
+              className="nxPresNum"
+              type="number"
+              min={8}
+              max={200}
+              value={st.fontSize ?? 24}
+              onChange={(e) => style({ fontSize: Number(e.target.value) })}
+              aria-label="Font size"
+            />
+          </label>
+          <PickerMenu
+            value={fontValue(st.fontFamily)}
+            options={FONT_OPTIONS}
+            onPick={(v) => style({ fontFamily: v === "theme" ? undefined : FONT_STACKS[v] })}
+            label="Font"
+            icon={<Type size={13} />}
+            testid="el-font"
+            align="end"
           />
-        </label>
+          <PickerMenu
+            value={st.align ?? "left"}
+            options={[
+              { value: "left", label: "Left" },
+              { value: "center", label: "Centre" },
+              { value: "right", label: "Right" },
+            ]}
+            onPick={(v) => style({ align: v as "left" | "center" | "right" })}
+            label="Align text"
+            icon={<AlignLeft size={13} />}
+            showValue={false}
+            testid="el-text-align"
+            align="end"
+          />
+          <PickerMenu
+            value={st.valign ?? "top"}
+            options={[
+              { value: "top", label: "Top" },
+              { value: "middle", label: "Middle" },
+              { value: "bottom", label: "Bottom" },
+            ]}
+            onPick={(v) => style({ valign: v as "top" | "middle" | "bottom" })}
+            label="Vertical align"
+            icon={<AlignStartHorizontal size={13} />}
+            showValue={false}
+            testid="el-text-valign"
+            align="end"
+          />
+          <label className="nxPresToolLabel">
+            Line
+            <input
+              className="nxPresNum"
+              type="number"
+              min={0.8}
+              max={3}
+              step={0.1}
+              value={st.lineHeight ?? 1.4}
+              onChange={(e) => style({ lineHeight: Number(e.target.value) })}
+              aria-label="Line height"
+              data-testid="el-lineheight"
+            />
+          </label>
+        </>
       )}
+
+      <PickerMenu
+        value={(first.anim?.effect ?? "none") as string}
+        options={[
+          { value: "none", label: "No animation" },
+          { value: "fade", label: "Fade in" },
+          { value: "rise", label: "Rise" },
+          { value: "pop", label: "Pop" },
+          { value: "wipe", label: "Wipe" },
+        ]}
+        onPick={(v) =>
+          onSlide(
+            selected.reduce(
+              (s, id) => updateElement(s, id, { anim: v === "none" ? undefined : { effect: v as Exclude<import("./types").AnimEffect, "none"> } }),
+              slide,
+            ),
+          )
+        }
+        label="Animate"
+        icon={<Sparkles size={13} />}
+        showValue={false}
+        testid="el-anim"
+        align="end"
+      />
 
       {first.kind === "chart" && first.chart && (
         <>
@@ -337,10 +461,21 @@ export function ElementBar({
 }
 
 const labelOf = (e: SlideElement): string =>
-  e.kind === "shape" ? SHAPE_LABELS[e.shape ?? "rect"] : e.kind === "image" ? "Image" : "Text box";
+  e.kind === "shape"
+    ? SHAPE_LABELS[e.shape ?? "rect"]
+    : e.kind === "image"
+      ? "Image"
+      : e.kind === "video"
+        ? "Video"
+        : e.kind === "chart"
+          ? "Chart"
+          : e.kind === "table"
+            ? "Table"
+            : "Text box";
 
-/* Colour picker on the app's dropdown grammar (was a hand-rolled popover). */
-function ColorWell({
+/* Colour picker on the app's dropdown grammar (was a hand-rolled popover).
+   Exported: the deck-master panel reuses it for palette overrides. */
+export function ColorWell({
   label,
   value,
   onPick,

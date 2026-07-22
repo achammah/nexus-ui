@@ -86,6 +86,20 @@ export function createImageElement(src: string, at?: { x: number; y: number }): 
   };
 }
 
+export function createVideo(src: string, at?: { x: number; y: number }): SlideElement {
+  return {
+    id: `el-${uid()}`,
+    kind: "video",
+    src,
+    x: at?.x ?? 320,
+    y: at?.y ?? 180,
+    w: 640,
+    h: 360,
+    rot: 0,
+    style: { opacity: 1, radius: 8 },
+  };
+}
+
 export function createChart(type: ChartKind = "bar", at?: { x: number; y: number }): SlideElement {
   return {
     id: `el-${uid()}`,

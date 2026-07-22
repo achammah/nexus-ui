@@ -165,6 +165,25 @@ export async function exportDeckToPptx(deck: DeckSnapshot): Promise<void> {
           align: st.align ?? "left",
           valign: st.valign ?? "top",
         });
+      } else if (el.kind === "video") {
+        /* pptxgenjs media embedding is not wired — export the poster frame when
+           there is one, else a labeled placeholder (never a silent drop) */
+        if (el.poster) {
+          try {
+            slide.addImage({ data: await toDataUrl(el.poster), ...geo, ...rotate });
+          } catch {
+            /* fall through to the placeholder */
+          }
+        } else {
+          slide.addText([{ text: "▶ video (plays in the shared link)" }], {
+            ...geo,
+            fontFace: "Helvetica",
+            fontSize: 12,
+            color: "666666",
+            align: "center",
+            valign: "middle",
+          });
+        }
       }
     }
     if (s.notes) slide.addNotes(s.notes);

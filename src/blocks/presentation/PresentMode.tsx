@@ -90,9 +90,9 @@ export function PresentMode({ deck, startIndex = 0, onExit, onSlideShown }: Pres
       data-testid="present-mode"
     >
       <div className="nxPresStage" onClick={() => go(1)}>
-        <div key={`${slide.id}:${anim}`} className={`nxPresStageSlide nxPresEnter-${slide.transition ?? "fade"}`}>
+        <div key={`${slide.id}:${anim}`} className={`nxPresStageSlide nxPresAnimate nxPresEnter-${slide.transition ?? "fade"}`}>
           <FitSlide>
-            <SlideView slide={slide} />
+            <SlideView slide={slide} master={deck.master} slideNum={index + 1} />
           </FitSlide>
         </div>
       </div>
