@@ -51,3 +51,6 @@ export * from "./blocks/mobile";
 
 /* blocks — full spreadsheet workbook (Univer) as a standalone surface (lazy engine) */
 export * from "./blocks/workbook";
+
+/* blocks — e-signature surface (DocuSeal-class; lazy pdf engines) */
+export * from "./blocks/esign";
