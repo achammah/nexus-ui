@@ -217,3 +217,21 @@ const resolved = resolveWorkspaceConfig({ preset: "library" }, undefined);
 ```
 
 > Note: `suggestions` (track-changes) and `comments` are separate capabilities; their toggles land with those features and are not yet part of `WorkspaceConfig`.
+
+## Suggesting mode — Word × Notion tracked changes
+
+`DocumentSurface` ships a full **Editing ↔ Suggesting** review flow, composing the app's existing suggestions engine (`useSuggestions` + the tracked-change widget + `SuggestionPanel`). Toggle it off with `config.suggestions === false`.
+
+```tsx
+<DocumentSurface value={doc} onChange={persist} author={{ name: "Ada Lovelace", color: "#7c3aed" }} />
+```
+
+- **Mode toggle** in the toolbar. In **Suggesting** mode a block edit is captured as a tracked change (`original → replacement`, keyed to the block) instead of committing — the change **materialises on blur** as an inline `del`/`ins` widget, so typing stays caret-safe. Insertions have an empty original, deletions an empty replacement; each is **anchored to its block + offset** (not a substring search), so empty-original changes never leak into other blocks.
+- **Author attribution** — the `author` prop names the reviewer; it shows on the widget (hover title) and each panel card.
+- **Review panel** — pending/resolved count, **jump-to** (click a card → scroll to the change), accept/reject per change, **accept-all / reject-all**, undo, and **comments-on-change** (a note per pending change).
+- **Persistence** — changes live on `DocumentSnapshot.suggestions` (and `PageNode.suggestions` in a workspace), so a review survives a reload; the accepted text lives in `blocks`, the review state alongside.
+- **Export honesty** — with pending changes, every export (md/html/pdf/docx) renders them as visible marks `[-old-][+new+]` and the menu notes `N tracked changes marked`, so nothing is silently shipped.
+
+The **record `richText` field** path (server-proposed substring substitutions, no `blockId`) is unchanged — `changesFor`/`foldChange` fall back to the original first-occurrence substring match when a change carries no `blockId`.
+
+> v1 tracks TEXT edits within a block, one active change per block per pass; structural edits (adding/removing/retyping a block) commit directly. Resolve a block's change before re-editing that block.

@@ -193,3 +193,29 @@ Explicit `outline:false` / `backlinks:false` overrides confirmed to win over the
 **Not in this pass:** items 2-3 (Notion controls, embedded chrome) were completed + committed in the prior session (commit 39a8c2d, sections above). `suggestions`/`comments` toggles are deferred to Phase 2 when those features exist (no dead knobs shipped).
 
 **tsc:** my lane (`blocks/document`, `record-core`) is clean. Pre-existing `blocks/workbook` errors are missing `@univerjs/*` deps — a different lane's concern, untouched by me.
+
+---
+
+## Phase 2 — Suggesting / track-changes (Word × Notion child)
+
+Built by composing the app's EXISTING suggestions infra (`useSuggestions` + tracked-change widget + `SuggestionPanel`) into `DocumentSurface`. Verdicts my own; exercised live in the harness (desktop 1440, both themes).
+
+| # | Behaviour | Verdict | Evidence |
+|---|---|---|---|
+| 1 | Editing ↔ Suggesting mode toggle | ✅ | toolbar segmented switch; `config.suggestions` gate |
+| 2 | Edit captured as a tracked change (not committed) | ✅ | typed " and mid-market" in Suggesting → change `sug-b3` created, committed text unchanged |
+| 3 | Inline insertion / deletion / substitution + author | ✅ | insertion (empty del, "You · insertion"), substitution (seed "third quarter → fourth quarter", "Ava Chen · edit"); del/ins widget both themes |
+| 4 | Materialise-on-blur (caret-safe while typing) | ✅ | widget appears in the RIGHT block on blur — needed a new `onBlur` reconcile in NotionEditor |
+| 5 | Block+offset anchoring (empty-original bug) | ✅ FIXED | before: insertion matched every block via `includes("")` and rendered in b1/b2; after: `changesFor`/`buildBlockHtml`/`foldChange` anchor by `blockId`+`offset` |
+| 6 | accept / reject per change | ✅ | accept folds "fourth quarter" into b2, insertion into b3; widget clears |
+| 7 | accept-all / reject-all | ✅ | accept-all resolved both; committed text correct after blur |
+| 8 | Review panel — count + jump-to + undo + comments | ✅ | "N pending · M resolved · T total"; `scrollToChange`; comment input persists to `reason` |
+| 9 | Persistence | ✅ | `DocumentSnapshot.suggestions` + `PageNode.suggestions` + PageWorkspace `onDocChange`; harness onChange round-trips |
+| 10 | Export honest about tracked marks | ✅ | md export captured: `[-third quarter-][+fourth quarter+]`; menu notes "1 tracked change marked" (md/html/pdf/docx all use the marked blocks) |
+| 11 | record `richText` field NOT regressed | ✅ | regression view still renders server change (del/ins), no author attr, markdown mirror serialises to original |
+
+Shots: `suggest-01-light.png`, `suggest-02-dark.png`.
+
+**Scope note (honest):** v1 tracks TEXT edits within a block, one active change per block per pass; structural edits (add/remove/retype a block) commit directly. The focus-guard means a change materialises on blur, not mid-keystroke (Google-Docs-like) — the committed model is always correct; only the un-blurred DOM is briefly raw. `suggestions`/`comments` are now real (superseding the Phase-1 "deferred" note for suggestions; standalone threaded comments beyond change-notes remain future work).
+
+tsc clean on my lane throughout; pre-existing `blocks/workbook` @univerjs errors untouched.
