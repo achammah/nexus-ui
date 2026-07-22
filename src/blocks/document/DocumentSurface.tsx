@@ -1,5 +1,5 @@
 import * as React from "react";
-import { NotionEditor, type Block, type EditorConfig } from "../../record-core/NotionEditor";
+import { NotionEditor, type Block, type EditorConfig, type PageContext } from "../../record-core/NotionEditor";
 import { DocumentOutline } from "../../record-core/DocumentOutline";
 import { exportMarkdown, exportHtml, exportPdf, exportDocx, importFile, IMPORT_ACCEPT } from "../../record-core/editor-io";
 import { seedDocument, coverBackground, COVER_PRESETS, type DocumentSnapshot } from "./snapshot";
@@ -31,6 +31,14 @@ export interface DocumentSurfaceProps {
   actions?: React.ReactNode;
   config?: DocumentConfig;
   readOnly?: boolean;
+  /* the page-workspace seam — forwarded to the editor so sub-page blocks + [[page:]] links
+     resolve/open/create (PageWorkspace passes this; a standalone document omits it) */
+  pageContext?: PageContext;
+  /* rendered inside the page column AFTER the editor — PageWorkspace puts the backlinks
+     ("linked references") panel here */
+  footer?: React.ReactNode;
+  /* a header slot ABOVE the toolbar — PageWorkspace puts breadcrumbs + Cmd-K here */
+  topBar?: React.ReactNode;
   "data-testid"?: string;
 }
 
@@ -39,7 +47,7 @@ const stripMarks = (t: string) =>
   t.replace(/\[\[[ch]:[a-z]+\|([^\]]*)\]\]/g, "$1").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/(\*\*|__|~~|\+\+|==|`|\*|_|^#{1,3}\s)/gm, "");
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-export function DocumentSurface({ value, onChange, reloadNonce = 0, className, actions, config, readOnly, ...rest }: DocumentSurfaceProps) {
+export function DocumentSurface({ value, onChange, reloadNonce = 0, className, actions, config, readOnly, pageContext, footer, topBar, ...rest }: DocumentSurfaceProps) {
   const cfg = config || {};
   const showOutline = cfg.outline !== false;
   const showIO = cfg.importExport !== false && !readOnly;
@@ -51,11 +59,14 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
 
   const [snap, setSnap] = React.useState<DocumentSnapshot>(() => value ?? seedDocument());
   const onChangeRef = React.useRef(onChange); onChangeRef.current = onChange;
+  const snapRef = React.useRef(snap); snapRef.current = snap;
   // reseed when the host forces a reload (mirrors WorkbookSurface's reloadNonce)
-  React.useEffect(() => { setSnap(value ?? seedDocument()); /* eslint-disable-next-line */ }, [reloadNonce]);
+  React.useEffect(() => { const s = value ?? seedDocument(); snapRef.current = s; setSnap(s); /* eslint-disable-next-line */ }, [reloadNonce]);
 
+  // compute next state from the ref and fire onChange OUTSIDE the setState updater — a
+  // side effect inside an updater setStates the host during render (React warns)
   const patch = React.useCallback((p: Partial<DocumentSnapshot>) => {
-    setSnap((s) => { const n = { ...s, ...p }; onChangeRef.current?.(n); return n; });
+    const n = { ...snapRef.current, ...p }; snapRef.current = n; setSnap(n); onChangeRef.current?.(n);
   }, []);
   const setBlocks = React.useCallback((blocks: Block[]) => patch({ blocks }), [patch]);
 
@@ -126,6 +137,7 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
 
   return (
     <div className={["nxDoc", wide ? "is-wide" : "is-narrow", className].filter(Boolean).join(" ")} {...rest}>
+      {topBar}
       {/* toolbar */}
       <div className="nxDoc-bar" data-testid="doc-toolbar">
         <div className="nxDoc-bar-l">
@@ -209,7 +221,8 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
                   placeholder="Untitled" onChange={(e) => patch({ title: e.target.value })} />
               </div>
             )}
-            <NotionEditor blocks={snap.blocks} onChange={setBlocks} readOnly={readOnly} config={cfg.editor} />
+            <NotionEditor blocks={snap.blocks} onChange={setBlocks} readOnly={readOnly} config={cfg.editor} pageContext={pageContext} />
+            {footer}
           </div>
         </div>
 

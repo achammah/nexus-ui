@@ -15,12 +15,12 @@ Built via a minimal vite harness bundling the document paths:
 
 | Chunk | raw | gzip | when it loads |
 |---|---|---|---|
-| base (editor + surface + outline + editor-io pure parts + React + used lucide icons) | 236 kB | **73.8 kB** | eagerly |
+| base (page workspace + editor + surface + outline + editor-io pure parts + React + used lucide icons) | 260 kB | **80.7 kB** | eagerly |
 | `docx` chunk | 411 kB | 118 kB | only when the user exports `.docx` |
 | `mammoth` chunk | 496 kB | 130 kB | only when the user imports `.docx` |
-| CSS | 11.7 kB | 2.9 kB | eagerly |
+| CSS | 21 kB | 4.3 kB | eagerly |
 
-So importing/using `DocumentSurface` adds ~73.8 kB gz to a page (most of which is React itself, shared with any other surface); the two large libraries stay out of the base bundle and only download when a user actually triggers a Word export/import.
+So importing/using `PageWorkspace` (tree + Cmd-K + backlinks + the document surface) adds ~80.7 kB gz to a page (most of which is React itself, shared with any other surface — the page system itself is ~7 kB gz over the single document surface); the two large libraries stay out of the base bundle and only download when a user actually triggers a Word export/import.
 
 ## Deliberate zero-dependency choices (seams)
 

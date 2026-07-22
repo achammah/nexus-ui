@@ -25,6 +25,7 @@ export function inlineToHtml(text: string): string {
     .replace(/`([^`]+)`/g, (_m, c) => keep(`<code style="font-family:ui-monospace,Menlo,monospace;background:#f2f1ef;border:1px solid #e4e2dd;border-radius:3px;padding:0 4px;font-size:.9em">${c}</code>`))
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, t, u) => keep(`<a href="${u}" style="color:#${ACCENT}">${t}</a>`));
   s = s
+    .replace(/\[\[page:([^\]|]+)(?:\|([^\]]*))?\]\]/g, (_m, id, t) => `<a href="#page-${id}" style="color:#${ACCENT};font-weight:500">${t || "page"}</a>`)
     .replace(/\[\[c:([a-z]+)\|([^\]]*)\]\]/g, (_m, c, t) => `<span style="color:#${OPT_HEX[c] || "1c1b19"}">${t}</span>`)
     .replace(/\[\[h:([a-z]+)\|([^\]]*)\]\]/g, (_m, c, t) => `<mark style="background:#${OPT_HEX[c] || ACCENT}44">${t}</mark>`)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
@@ -73,6 +74,7 @@ export function blocksToHtml(blocks: Block[], opts: { full?: boolean; title?: st
       case "ol": return `<ol${ind}><li>${inlineToHtml(b.text)}</li></ol>`;
       case "todo": return `<div class="todo"${ind}><input type="checkbox" ${b.checked ? "checked" : ""} disabled><span${b.checked ? ' style="text-decoration:line-through;color:#a3a099"' : ""}>${inlineToHtml(b.text)}</span></div>`;
       case "toggle": return `<details${ind} open><summary>${inlineToHtml(b.text)}</summary></details>`;
+      case "page": return `<p class="page-ref"${ind}><a href="#page-${b.pageId}" style="font-weight:500;text-decoration:none">${b.icon ? esc(b.icon) + " " : "📄 "}${esc(b.title || "Sub-page")}</a></p>`;
       default: return `<p${ind}>${inlineToHtml((b as { text: string }).text)}</p>`;
     }
   };

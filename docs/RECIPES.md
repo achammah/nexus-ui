@@ -1,11 +1,38 @@
-# RECIPES — the document surface
+# RECIPES — the page workspace & document surface
 
-A Notion×Google-Docs document, block-rich and portable to Word. Two entry points:
+A Notion×Google-Docs **linked page workspace**: everything is a page, pages nest and reference each other, and each page is a block-rich document portable to Word. Three entry points, largest first:
 
-- **`DocumentSurface`** (`src/blocks/document`) — a full page: cover, icon, title, outline rail, word count, page-width toggle, find & replace, export/import menu, over the editor. Free-surface (host owns the snapshot).
+- **`PageWorkspace`** (`src/blocks/document`) — the whole workspace: a page-tree sidebar + breadcrumbs + Cmd-K quick-switcher + backlinks, hosting a document per page. Free-surface (host owns the whole `PageStore`). **This is what a Pages host mounts for a `kind:"document"` page.**
+- **`DocumentSurface`** (`src/blocks/document`) — a single page: cover, icon, title, outline rail, word count, page-width toggle, find & replace, export/import menu, over the editor. `PageWorkspace` mounts one of these per page.
 - **`NotionEditor`** (`src/record-core/NotionEditor`) — the bare block editor. This is the `richText` field editor; use it directly when you only want the editing canvas.
 
 Everything is `--nx-*`-tokened (light + dark), config-composable, and mobile-by-construction.
+
+## PageWorkspace (the page system)
+
+```tsx
+import { PageWorkspace, type PageStore } from "@nexus/ui";
+
+<PageWorkspace
+  value={pageStore}                // PageStore | null (null seeds a nested demo workspace)
+  onChange={(next) => save(next)}  // fired on every mutation — the host persists the store
+  reloadNonce={n}                  // bump to force a fresh mount from `value`
+  documentConfig={docConfig}       // forwarded to each page's DocumentSurface
+/>
+```
+
+What you get, out of the box: nested **sub-pages** (infinite), a **tree sidebar** (expand/collapse, drag-to-move before/after/inside, new/duplicate/delete/favorite), **breadcrumbs** (root→here), inline **sub-page blocks** (`/page` or the tree `+`), **`[[`/`@` page-link autocomplete** → clickable links, a **backlinks** panel (“linked references”, with parent/sub-page/link kinds), a **⌘K quick-switcher**, and **full-text search** across pages.
+
+### The page store (what you persist)
+
+```ts
+interface PageNode { id; title; icon?; cover?; parentId: string | null; order: number; blocks: Block[]; favorite?; createdAt; updatedAt }
+interface PageStore { version; pages: Record<id, PageNode>; activeId?; expanded?: Record<id, boolean> }
+```
+
+The store is a **flat adjacency list** — pages keyed by id, each pointing at its `parentId`, ordered by a **fractional `order`** key. The tree, breadcrumbs, backlinks and search are all *derived* by scanning `pages` (never stored redundantly), which makes it **external-writer-tolerant**: a concurrent writer patches one page's entry, so a merge is per-page with no structural tree conflicts. Persist the whole `PageStore` as one blob under `pageStoreKey(pageKey)`; `isPageStore(x)` guards a corrupt blob; `seedPageStore()` is the demo. Pure store ops (all node-testable) are exported: `createPage`, `duplicatePage`, `deletePage`, `movePage`, `renamePage`, `setPageBlocks`, `toggleFavorite`, `breadcrumb`, `backlinksOf`, `searchPages`, `childrenOf`, …
+
+Links: an inline **`[[page:<id>|<title>]]`** token in block text (a clickable link, title re-resolved from the store so renames propagate) and a **sub-page block** `{ type:"page"; pageId }`. The editor renders and creates both through the `pageContext` seam — so `NotionEditor` stays entity-agnostic (a `richText` field with no `pageContext` degrades a page ref to a static chip).
 
 ## DocumentSurface
 

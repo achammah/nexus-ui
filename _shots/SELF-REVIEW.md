@@ -1,63 +1,61 @@
-# SELF-REVIEW v2 — document depth (Notion × Google Docs)
+# SELF-REVIEW v2 — P0 page workspace (Notion × Google Docs)
 
-Lane: `feat/document-depth` · extends `src/record-core/NotionEditor.tsx` (additive) + new `src/blocks/document/` surface.
-References held to: **Notion** (block richness, slash, toggles, callouts, outline) and **Google Docs** (inline toolbar, find & replace, Word import/export, page chrome).
+Lane: `feat/document-depth` (extends PR #37). Scope reframed by the user to center the **PAGE SYSTEM**: everything is a page, pages nest and reference each other; the editor edits ONE page within a linked workspace.
 
-**I am not certifying this.** Verdicts below are my own read; the lead + a blind reviewer decide. Shots in this folder; every feature was exercised live in a vite harness (desktop light/dark 1440, mobile 390), and the import/export round-trips were asserted programmatically (block-type histograms), not eyeballed.
+References held to: **Notion** (page tree, nesting, sub-pages, links + backlinks, Cmd-K, blocks, slash, toggles, callouts, outline) and **Google Docs** (inline toolbar, find & replace, Word import/export, page chrome).
 
-## Per-feature verdict
+**I am not certifying this.** Verdicts are my own read; lead + a blind reviewer decide. Every feature was exercised live in a vite harness (desktop light/dark 1440, mobile 390); the store spine ops + import/export round-trips were asserted programmatically (histograms / tree integrity), not eyeballed. Shots in this folder.
+
+## P0 — page system (the reframe headline)
 
 | # | Feature | Ref | Verdict | Evidence |
 |---|---|---|---|---|
-| 1 | Block richness — H1/H2/H3, to-do, toggle, callout, code, nested lists, quote/divider/image/table | Notion | ✅ deep | `01`, `04` — todo (checkbox+strike), toggle (chevron+collapse), callout (💡+tint), code (lang+highlight), 2-level nested bullets all render |
-| 2 | Slash "/" command menu (all 14 types, keyboard nav, filter) | Notion | ✅ | `03` — full menu + block handle |
-| 3 | Block drag-reorder (mouse HTML5 + touch pointer-drag) | Notion | ✅ mouse verified; ⚠ touch drag written, not device-tested | code path present; drop-line feedback shared with mouse path |
-| 4 | Block convert + markdown shortcuts (`#`,`-`,`[]`,`` ``` ``,`>`,`\|`,`---`) | Notion | ✅ | shortcut table in RECIPES; converts from a paragraph |
-| 5 | Inline formatting toolbar on selection (bold/italic/underline/strike/code/link/highlight/color) | GDocs | ✅ | `05` — toolbar + 9-color palette over a live selection |
-| 6 | **Live outline / TOC** (click-scroll, active-highlight on scroll, collapsible, live) | Notion+GDocs | ✅ strong | `01` "Overview" active at top; `03`/`07` "Data" active when scrolled — tracking works |
-| 7 | **Import/Export** — MD/HTML/PDF/DOCX export, DOCX/MD/HTML import, paste-normalize | GDocs | ✅ | `06` menu; round-trips asserted (below) |
-| 8 | Doc chrome — title, icon, cover, word count, page-width, find & replace | GDocs+Notion | ✅ | `01` cover/icon/title/count; `07` find & replace (3 matches, replace-all) |
-| 9 | Standalone `DocumentSurface` (free-surface, mirrors WorkbookSurface) | — | ✅ | exported eagerly; value-shape below |
-| 10 | Config-composable (`DocumentConfig`/`EditorConfig`) | — | ✅ | documented in RECIPES; flags default-on |
-| 11 | Both themes, `--nx-*` only | — | ✅ | `02` — full dark flip via tokens, zero foreign chrome |
-| 12 | Mobile-by-construction (390px) | — | ✅ | `08` — always-visible handles (+→slash), wrapping toolbar, hidden rail |
-| 13 | Regression: record `richText` field unchanged | — | ✅ | `09` — tracked-change widget + bold/code + `blocksToMarkdown` mirror all intact |
+| 1 | **Page store** — flat adjacency list (id/title/icon/parentId/order/blocks), fractional order, external-writer-tolerant | — | ✅ spine solid | `page-store.ts`; ops asserted: create/move/duplicate/delete/backlinks/breadcrumb all correct, cycle-guard rejects moving a page into its own descendant |
+| 2 | **Nested sub-pages** (infinite) + **page tree** sidebar (expand/collapse, actions, favorites) | Notion | ✅ | `10` — Handbook → Engineering → {Architecture, Onboarding} + Roadmap; favorites shelf |
+| 3 | Tree **drag-to-move** (before / after / inside via movePage) | Notion | ⚠ logic verified, HTML5 tree-DnD not driven in-harness | movePage before/after/inside + reparent asserted programmatically; the row DnD handlers wire to it |
+| 4 | **Breadcrumbs** (root→here, live) | Notion | ✅ | `11` — “Aurora Handbook › Engineering”; a link click reached a 3-level crumb |
+| 5 | Inline **sub-page blocks** (`/page`, click to open) | Notion | ✅ | `10`/`11` — Engineering + Roadmap cards on home; clicking Engineering opened it + updated crumbs/tree/backlinks |
+| 6 | **`[[` / `@` page-link autocomplete** → clickable link | Notion | ✅ | typed `[[Arch` → menu ranked Architecture + “New page” → selected → inserted `data-page` link → **clicking it navigated to Architecture** (3-level crumb) |
+| 7 | **Backlinks** panel (“linked references”, link/sub-page/child kinds + a link index) | Notion | ✅ strong | `11` — Engineering shows 3 refs from Handbook with PARENT / SUB-PAGE / LINK tags |
+| 8 | **⌘K quick-switcher** (jump to any page) | Notion | ✅ | `12` — ⌘K opens; keyboard-nav + Enter |
+| 9 | **Full-text search** across pages (title + body) | Notion | ✅ | `12` — “onboard” → Onboarding (title) then Aurora Handbook (body snippet) |
+| 10 | Cover + page **icon/emoji** header | Notion | ✅ | `10`/`13` — cover + 📘 icon per page |
 
-## Import/export round-trip (asserted, not eyeballed)
+## P0 — core editor + import/export (from PR #37, additive, still green)
 
-Seed = the demo doc (21 blocks: every type + inline marks). Histograms compared after each round-trip:
+| Feature | Verdict | Evidence |
+|---|---|---|
+| Blocks: H1-3, to-do, toggle, callout, code (syntax+lang), nested lists, quote/divider/image/table | ✅ | PR #37 shots `01`,`04`; the new `page` block is additive |
+| Slash menu (now incl. `/page`), markdown shortcuts, drag-reorder, turn-into, Tab nesting | ✅ | `03` + workspace |
+| Inline toolbar (bold/italic/underline/strike/code/link/highlight/color) | ✅ | `05` |
+| Live outline / TOC (click-scroll, active highlight) | ✅ | `01`,`10` |
+| Import/Export — MD/HTML/PDF/DOCX + paste-from-Word/GDocs | ✅ | `06`; round-trips asserted (HTML lossless, DOCX preserves structure+text, GDocs/Word paste normalized) |
+| Both themes, `--nx-*` only; mobile-by-construction | ✅ | `13` dark, `14` mobile tree drawer |
+| **Regression:** record `richText` field unchanged | ✅ | `09` — tracked-change widget + `blocksToMarkdown` intact; `page` excluded from the suggestions text-guard so a richText field never breaks |
 
-- **Markdown** → 20 blocks, headings/to-dos/callout/code/quote/table/image all survive (toggle→list, the one representational gap markdown can't hold).
-- **HTML** → **21 blocks, exact histogram match, nesting preserved to indent 2** (lossless).
-- **DOCX** → a valid 10 kB `.docx` exports and re-imports to 26 blocks; headings (5), lists, table + all text preserved. To-do/callout/code/toggle/quote degrade to paragraphs — Word has no native equivalent (same boundary Google Docs hits). This is the named test ("export a rich doc to DOCX, re-import it, blocks survive") and it passes on structure + content.
-- **Paste normalization** — a Google-Docs fragment (outer `<b style="font-weight:normal">` wrapper, foreign colors/fonts, nested `<ul>`) → clean h2 + paragraph (bold/italic/highlight kept as marks) + nested list (indent restored); a Word fragment → h1 + paragraph + table. Foreign styles stripped.
+## Bugs found + fixed during review
 
-## Bug found + fixed during review (why this isn't a toy)
-
-- **Callout nested-box** — the callout container's `.ne-callout` class collided with the text element's `ne-${type}` class; the CSS rule doubled the box. Renamed the container to `.ne-callout-box`. (`01` after fix = single clean callout.)
-- **Code highlighter markup leak** — the `class` keyword matched the literal `class=` attribute of token spans inserted by earlier passes, breaking the HTML (visible as `class="ne-t-s">` text). Rewrote `highlightCode` to stash comments/strings behind ASCII sentinels and run keyword before number, so no pass re-scans inserted markup. (`04` after fix = clean highlighting.)
-- **GDocs paste flattening** — the outer `<b>` wrapper was treated as inline → one flattened paragraph. Made any wrapper with block-level children transparent (recurse). (Paste now preserves structure.)
+- **setState-in-render** — DocumentSurface's `patch` called `onChange` *inside* the `setSnap` updater (harmless in PR #37 where onChange was a no-op; once PageWorkspace's onChange setStates the store, React warned "cannot update PageWorkspace while rendering DocumentSurface"). Fixed with a `snapRef` — compute next + fire onChange outside the updater. (No console errors after.)
+- **Seed title/H1 duplication** — every seed page repeated its title as a leading H1; removed (the page title is the heading).
+- (PR #37, still standing) callout class-collision + code-highlighter markup leak + GDocs `<b>`-wrapper paste flattening — all fixed there.
 
 ## The brutal "still a toy?" test
 
-- Can it hold a real 20-block PRD with structure, code, a table, and an image, and let me navigate it by outline? **Yes.**
-- Does a colleague's Word doc come in as blocks, and does my doc go back out to a `.docx` they can open? **Yes** (structure + text; specialty blocks flatten, honestly documented).
-- Does selecting text feel like Google Docs (a real formatting bar), and typing `/` feel like Notion? **Yes.**
-- Does it survive the theme flip and a 390px phone without foreign chrome? **Yes.**
-- Did I ship the one demo instance, or the config-driven class? **The class** — every affordance is a `DocumentConfig`/`EditorConfig` flag, documented.
-- **Weakest points (honest):** (a) touch drag-reorder is written but not device-tested; (b) DOCX images export as a placeholder line (seam noted); (c) the emoji/cover pickers cycle a set rather than a full picker popover — functional, not yet delightful; (d) find & replace scrolls to a match rather than highlighting the exact hit in-place. None of these are toy-tier gaps; they are the honest edge of a genuinely deep surface.
+- Does it read as a **workspace**, not one text box? **Yes** — a page tree, nested sub-pages, breadcrumbs, per-page covers/icons.
+- Do pages actually **reference each other**? **Yes** — sub-page blocks + `[[` links, and a backlinks panel that shows what points here (with the *kind*). This is the Notion “linked references” model, working.
+- Can I **jump anywhere** fast? **Yes** — ⌘K full-text switcher.
+- Is the **spine** sound (not a demo hack)? **Yes** — a flat, external-writer-tolerant store with fractional ordering; every derived view (tree/crumbs/backlinks/search) is a pure scan; cycle-guarded moves.
+- Did I ship the class or one instance? **The class** — `PageWorkspace` is config-driven and value = the whole store; the seed is just a demo.
+- **Weakest points (honest):** (a) tree drag-to-move: the store logic (before/after/inside) is asserted but I did not drive the HTML5 row-DnD in-harness — needs a manual pass; (b) no per-page cover on child pages in the seed (cosmetic); (c) full-text search is a linear scan (fine to hundreds of pages; an index is a P1 optimization); (d) icon/cover pickers still cycle a set rather than a full picker. None are toy-tier.
 
-Verdict: **not a toy.** It reads as "if Notion and Google Docs had a child." The two named ‼ asks (live outline, Word/GDocs import-export) are done and verified.
+## Definition of Done (P0)
 
-## Definition of Done
-
-- [x] Extends `NotionEditor.tsx` additively — Block union, exports, and the three consumers (RecordPage richText, useSuggestions, DataTable) unchanged and verified (`09` + tsc compiles RecordPage clean).
-- [x] Native `--nx-*` tokens only; both themes; no foreign editor chrome.
-- [x] Config-composable; defaults sensible; documented in `docs/RECIPES.md`.
-- [x] Mobile-by-construction; 390px shots.
-- [x] `DocumentSurface` mirrors `WorkbookSurface` (free-surface value/onChange); exported from `src/index.ts`.
-- [x] MIT/permissive libs, CSP-safe, bundleable, lazy-loaded; bundle delta measured in `docs/DEPENDENCIES.md`.
-- [x] `tsc --noEmit` clean (the only errors are 7 pre-existing `@univerjs/*` missing-dep lines in the workbook block — another lane, not in this repo's package.json).
-- [x] `vite build` clean (no warnings; docx/mammoth split into lazy chunks).
-- [x] Catalog regenerated (`docs/catalog.json` + `INDEX.md`); PROVENANCE + NOTICE updated.
+- [x] Page store spine (flat, fractional order, external-writer-tolerant) — reported to lead early for sanity-check; pure + node-testable.
+- [x] Nested sub-pages, tree sidebar, breadcrumbs, sub-page blocks, `[[`/`@` links + autocomplete, backlinks, ⌘K, full-text search — all verified live.
+- [x] Additive over `NotionEditor` — the `page` block + `pageContext` seam; record `richText` field unchanged (verified).
+- [x] `PageWorkspace` exported (value = PageStore) — what a Pages host mounts for `kind:document`.
+- [x] Native `--nx-*`, both themes, config-composable, mobile; documented in `docs/RECIPES.md`.
+- [x] `tsc --noEmit` clean (only the 7 pre-existing `@univerjs/*` errors, another lane). `vite build` clean; docx/mammoth still lazy chunks; base +7 kB gz over PR #37.
+- [x] Catalog regenerated; PROVENANCE/NOTICE/RECIPES/DEPENDENCIES updated.
+- [ ] P1 (equation/columns/media/bookmark/embed/templates/print-layout) + P2 (synced blocks, link-to-records, comments, presence, version history) — **not started; reporting P0 first per the brief.**
 - [ ] Blind review + lead sign-off — **pending (theirs to give).**

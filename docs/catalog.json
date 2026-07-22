@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 126,
+  "count": 129,
   "items": [
     {
       "name": "accordion",
@@ -806,6 +806,27 @@
       "kind": "wrapper",
       "import": "src/blocks/document/snapshot.ts",
       "when": "the document block's pure core (no editor runtime, node-testable): DocumentSnapshot shape ({id,title,blocks,icon?,cover?,pageWidth?}), app_state store-key namespacing, snapshot validation for a stored blob, cover-preset gradients, and the rich demo seed (every block type + inline mark, several headings for the outline)",
+      "source": "ours"
+    },
+    {
+      "name": "PageWorkspace",
+      "kind": "wrapper",
+      "import": "src/blocks/document/PageWorkspace.tsx",
+      "when": "the standalone LINKED PAGE WORKSPACE — Notion's \"everything is a page; pages nest + reference each other\". Free-surface (value = the whole PageStore); renders the page-tree sidebar + breadcrumbs + Cmd-K quick-switcher (full-text search) + backlinks (linked references), and mounts a DocumentSurface for the active page, wiring the pageContext seam so sub-page blocks + [[page:]] links resolve/open/create against the store. This is what a Pages host mounts for a kind:document page",
+      "source": "ours"
+    },
+    {
+      "name": "PageTree",
+      "kind": "wrapper",
+      "import": "src/blocks/document/PageTree.tsx",
+      "when": "the workspace sidebar: the page hierarchy derived live from the flat store, with expand/collapse, drag-to-move (before/after/inside a target via the store's movePage), per-node actions (new sub-page, favorite, duplicate, delete) and a Favorites shelf; presentation only, host owns every mutation via callbacks",
+      "source": "ours"
+    },
+    {
+      "name": "PageStore · PageNode · createPage · movePage · duplicatePage · deletePage · breadcrumb · backlinksOf · searchPages · seedPageStore",
+      "kind": "wrapper",
+      "import": "src/blocks/document/page-store.ts",
+      "when": "the SPINE of the page workspace — a FLAT adjacency-list store (pages keyed by id, each with a parentId + fractional order + Block[] body). External-writer-tolerant (a concurrent writer patches ONE page); the tree, breadcrumbs, backlinks (link + sub-page + child kinds) and full-text search are all DERIVED by scanning the map. Links live as an inline [[page:id]] token + a `page` block. Pure + node-testable",
       "source": "ours"
     },
     {

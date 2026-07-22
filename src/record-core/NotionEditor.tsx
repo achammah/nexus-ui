@@ -1,5 +1,5 @@
 import * as React from "react";
-import { GripVertical, Plus, Trash2, ImagePlus, Table as TableIcon, Type, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Minus, X, CheckSquare, Check, ChevronRight, Code2, Lightbulb, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code as CodeInline, Link2, Highlighter, Baseline, Copy } from "lucide-react";
+import { GripVertical, Plus, Trash2, ImagePlus, Table as TableIcon, Type, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Minus, X, CheckSquare, Check, ChevronRight, Code2, Lightbulb, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code as CodeInline, Link2, Highlighter, Baseline, Copy, FileText, ChevronRight as PageArrow } from "lucide-react";
 
 /* record-core — a Notion-grade block editor, the `richText` field type's editor.
    Blocks are contenteditable; "/" opens a command menu (text, headings, lists,
@@ -27,6 +27,7 @@ export type Block =
   | { id: string; type: "toggle"; text: string; collapsed?: boolean; indent?: number }
   | { id: string; type: "callout"; text: string; emoji?: string; tone?: CalloutTone; indent?: number }
   | { id: string; type: "code"; text: string; lang?: string; indent?: number }
+  | { id: string; type: "page"; pageId: string; title?: string; icon?: string; indent?: number }
   | { id: string; type: "divider" }
   | { id: string; type: "image"; src: string; caption?: string }
   | { id: string; type: "table"; rows: string[][] };
@@ -43,6 +44,17 @@ export interface EditorConfig {
   slashMenu?: boolean;
 }
 
+/* the page-workspace seam — passed by PageWorkspace so the editor can render sub-page blocks
+   + [[page:]] links, open/create pages, and autocomplete page links, while staying
+   entity-agnostic (it only calls these callbacks; without them, page refs degrade to a
+   static chip and "/page" hides). */
+export interface PageContext {
+  resolve: (pageId: string) => { title: string; icon?: string } | null;
+  search: (query: string) => { id: string; title: string; icon?: string }[];
+  onOpenPage: (pageId: string) => void;
+  onCreateSubPage: (title: string) => string; // host creates the page, returns its id
+}
+
 let _seq = 0;
 export const bid = () => `b${Date.now().toString(36)}${(_seq++).toString(36)}`;
 
@@ -52,7 +64,7 @@ const TEXTLIKE = new Set(["p", "h1", "h2", "h3", "quote", "ul", "ol", "todo", "t
 /* blocks whose text lives in `.text` (everything except the three structural blocks) */
 const TEXT_BEARING = new Set(["p", "h1", "h2", "h3", "quote", "ul", "ol", "todo", "toggle", "callout", "code"]);
 /* blocks that accept an indent level (nested lists + nested toggles/todos + paragraphs) */
-const INDENTABLE = new Set(["p", "h1", "h2", "h3", "quote", "ul", "ol", "todo", "toggle", "callout"]);
+const INDENTABLE = new Set(["p", "h1", "h2", "h3", "quote", "ul", "ol", "todo", "toggle", "callout", "page"]);
 const MAX_INDENT = 5;
 const CALLOUT_EMOJIS = ["💡", "📌", "⚠️", "✅", "🔥", "📝", "❗", "ℹ️", "🎯", "🚀"];
 const CODE_LANGS = ["plain", "ts", "js", "tsx", "json", "python", "bash", "sql", "html", "css", "go", "rust", "md"];
@@ -87,6 +99,7 @@ export function textToBlocks(text: string): Block[] {
    their inner text for markdown export; `== highlight ==` is kept (widely supported). */
 function mdInlineDegrade(t: string): string {
   return t
+    .replace(/\[\[page:([^\]|]+)(?:\|([^\]]*))?\]\]/g, (_m, id, title) => `[${title || "page"}](#page-${id})`)
     .replace(/\[\[h:[a-z]+\|([^\]]*)\]\]/g, "==$1==")
     .replace(/\[\[c:[a-z]+\|([^\]]*)\]\]/g, "$1")
     .replace(/\+\+([^+]+)\+\+/g, "$1");
@@ -100,6 +113,7 @@ export function blocksToMarkdown(blocks: Block[]): string {
     if (b.type === "image") { parts.push(`![${b.caption || ""}](${b.src.slice(0, 60)}${b.src.length > 60 ? "…" : ""})`); continue; }
     if (b.type === "table") { parts.push(b.rows.map((r) => `| ${r.join(" | ")} |`).join("\n").replace(/^(.*)\n/, (m, h) => `${h}\n| ${b.rows[0].map(() => "---").join(" | ")} |\n`)); continue; }
     if (b.type === "code") { parts.push("```" + (b.lang && b.lang !== "plain" ? b.lang : "") + "\n" + b.text + "\n```"); continue; }
+    if (b.type === "page") { parts.push(`${ind}- ${b.icon ? b.icon + " " : "📄 "}[${b.title || "Sub-page"}](#page-${b.pageId})`); continue; }
     const text = mdInlineDegrade(b.text);
     if (b.type === "h1") parts.push(`# ${text}`);
     else if (b.type === "h2") parts.push(`## ${text}`);
@@ -281,6 +295,7 @@ const COMMANDS: Cmd[] = [
   { key: "h3", label: "Heading 3", hint: "Small heading", icon: <Heading3 size={15} />, kw: "h3 heading" },
   { key: "ul", label: "Bulleted list", hint: "• item", icon: <List size={15} />, kw: "bullet list unordered ul" },
   { key: "ol", label: "Numbered list", hint: "1. item", icon: <ListOrdered size={15} />, kw: "number ordered list ol" },
+  { key: "page", label: "Sub-page", hint: "New page inside this one", icon: <FileText size={15} />, kw: "page subpage child document link new" },
   { key: "todo", label: "To-do list", hint: "☐ checkable item", icon: <CheckSquare size={15} />, kw: "todo task checkbox check checklist" },
   { key: "toggle", label: "Toggle list", hint: "▸ collapsible section", icon: <ChevronRight size={15} />, kw: "toggle collapse expand fold details" },
   { key: "quote", label: "Quote", hint: "Blockquote", icon: <Quote size={15} />, kw: "quote blockquote citation" },
@@ -338,6 +353,7 @@ function inlineMd(escaped: string): string {
   const keep = (html: string) => { stash.push(html); return `\u0000${stash.length - 1}\u0000`; };
   let s = escaped
     .replace(/`([^`]+)`/g, (_m, c) => keep(`<code data-md="c">${c}</code>`))
+    .replace(/\[\[page:([^\]|]+)(?:\|([^\]]*))?\]\]/g, (_m, id, title) => keep(`<span class="ne-pagelink" data-page="${id}" contenteditable="false">${title || "Untitled"}</span>`))
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, t, u) => keep(`<a href="${u}" class="ne-a" data-md="link" target="_blank" rel="noopener">${t}</a>`));
   s = s
     .replace(/\[\[c:([a-z]+)\|([^\]]*)\]\]/g, '<span class="ne-color" data-c="$1">$2</span>')
@@ -378,6 +394,8 @@ function serializeBlock(el: HTMLElement, chs: InlineChange[]): string {
     if (tag === "BR") return "\n";
     const inner = Array.from(e.childNodes).map(walk).join("");
     const st = e.style || ({} as CSSStyleDeclaration);
+    const dp = e.getAttribute("data-page");
+    if (dp) return `[[page:${dp}|${inner}]]`;
     const dc = e.getAttribute("data-c"); const dh = e.getAttribute("data-h");
     // color / highlight — both our own data-attr spans AND pasted style spans
     if (dc) return `[[c:${dc}|${inner}]]`;
@@ -399,16 +417,17 @@ function serializeBlock(el: HTMLElement, chs: InlineChange[]): string {
   return Array.from(el.childNodes).map(walk).join("").replace(/^\n/, "").replace(/ /g, " ");
 }
 
-export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChange, onHoverChange, config }: {
+export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChange, onHoverChange, config, pageContext }: {
   blocks: Block[]; onChange: (b: Block[]) => void; readOnly?: boolean;
   changes?: InlineChange[]; hoveredChange?: string | null; onHoverChange?: (id: string | null) => void;
   config?: EditorConfig;
+  pageContext?: PageContext;
 }) {
   const cfg = config || {};
   const slashOn = cfg.slashMenu !== false && !readOnly;
   const mdOn = cfg.markdownShortcuts !== false && !readOnly;
   const toolbarOn = cfg.toolbar !== false && !readOnly;
-  const cmds = React.useMemo(() => (cfg.blocks ? COMMANDS.filter((c) => cfg.blocks!.includes(c.key)) : COMMANDS), [cfg.blocks]);
+  const cmds = React.useMemo(() => COMMANDS.filter((c) => (cfg.blocks ? cfg.blocks.includes(c.key) : true) && (c.key !== "page" || !!pageContext)), [cfg.blocks, pageContext]);
 
   const [drag, setDrag] = React.useState<{ id: string; overId: string | null; pos: "before" | "after" } | null>(null);
   const [grabId, setGrabId] = React.useState<string | null>(null);
@@ -427,6 +446,9 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
   }, [hoveredChange, blocks, changes]);
   const [menu, setMenu] = React.useState<{ blockId: string; query: string; sel: number; x: number; y: number; above: boolean } | null>(null);
   const menuRef = React.useRef<HTMLDivElement | null>(null);
+  // "[[" / "@" page-link autocomplete (only with a pageContext)
+  const [pageMenu, setPageMenu] = React.useState<{ blockId: string; query: string; sel: number; x: number; y: number; above: boolean; stripLen: number } | null>(null);
+  const pageMenuRef = React.useRef<HTMLDivElement | null>(null);
   // dismiss the slash menu on an outside click or a scroll (it would otherwise detach)
   const menuOpen = !!menu;
   React.useEffect(() => {
@@ -438,12 +460,23 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
     window.addEventListener("scroll", scroll, true);
     return () => { document.removeEventListener("mousedown", down); window.removeEventListener("scroll", scroll, true); };
   }, [menuOpen]);
+  // dismiss the page-link menu on an outside click / scroll
+  const pageMenuOpen = !!pageMenu;
+  React.useEffect(() => {
+    if (!pageMenuOpen) return;
+    const down = (e: MouseEvent) => { if (!pageMenuRef.current?.contains(e.target as Node)) setPageMenu(null); };
+    const scroll = (e: Event) => { if (!pageMenuRef.current?.contains(e.target as Node)) setPageMenu(null); };
+    document.addEventListener("mousedown", down);
+    window.addEventListener("scroll", scroll, true);
+    return () => { document.removeEventListener("mousedown", down); window.removeEventListener("scroll", scroll, true); };
+  }, [pageMenuOpen]);
   const [dragOver, setDragOver] = React.useState(false);
   const elRefs = React.useRef<Record<string, HTMLElement | null>>({});
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const imgTargetRef = React.useRef<string | null>(null); // block id whose "/image" opened the picker
 
   const filtered = menu ? cmds.filter((c) => { const q = menu.query.trim().toLowerCase(); return !q || c.kw.includes(q) || c.label.toLowerCase().includes(q); }) : [];
+  const pageResults = React.useMemo(() => (pageMenu && pageContext ? pageContext.search(pageMenu.query).slice(0, 6) : []), [pageMenu, pageContext, blocks]);
 
   const update = (next: Block[]) => onChange(next);
   const patchBlock = (blockId: string, patch: Partial<Block>) =>
@@ -573,6 +606,27 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
       return { blockId, query, sel: 0, ...a };
     });
   }
+  function openPageMenu(blockId: string, query: string, stripLen: number) {
+    setPageMenu((m) => (m && m.blockId === blockId ? { ...m, query, stripLen, sel: 0 } : { blockId, query, stripLen, sel: 0, ...caretAnchor(blockId) }));
+  }
+  // replace the `[[query` / `@query` trigger before the caret with a page-link token (or
+  // create a new page from the query when "New page" is chosen)
+  function insertPageLink(blockId: string, pageId: string, title: string) {
+    const pm = pageMenu; setPageMenu(null);
+    const el = elRefs.current[blockId]; const cur = blocks.find((b) => b.id === blockId);
+    if (!el || !cur || !("text" in cur) || !pm) return;
+    const { before, after } = caretText(el);
+    const head = before.slice(0, Math.max(0, before.length - pm.stripLen));
+    const newText = `${head}[[page:${pageId}|${title}]]${after}`;
+    el.innerHTML = buildBlockHtml(newText, changesFor(cur));
+    patchBlock(blockId, { text: newText } as Partial<Block>);
+    requestAnimationFrame(() => focusBlock(blockId, true));
+  }
+  function chooseFromPageMenu(blockId: string, choice: { id: string; title: string; icon?: string } | "new") {
+    if (!pageContext) { setPageMenu(null); return; }
+    if (choice === "new") { const title = (pageMenu?.query || "").trim() || "Untitled"; const id = pageContext.onCreateSubPage(title); insertPageLink(blockId, id, pageContext.resolve(id)?.title || title); }
+    else insertPageLink(blockId, choice.id, choice.title);
+  }
 
   function applyCommand(blockId: string, cmd: Cmd) {
     setMenu(null);
@@ -595,6 +649,19 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
       const nb: Block = { id: bid(), type: "table", rows: [["", "", ""], ["", "", ""], ["", "", ""]] };
       const after: Block = { id: bid(), type: "p", text: "" };
       const next = [...blocks]; next.splice(idx, 1, nb, after); update(next);
+      focusBlock(after.id); return;
+    }
+    if (cmd.key === "page") {
+      if (!pageContext) return;
+      // "turn into a page": the line's text (minus the /query) becomes the new page's title
+      const cur = blocks[idx];
+      const curText = (cur && "text" in cur ? cur.text : "").replace(/(^|\s)\/[^\s/]*$/, "$1").trim();
+      const newId = pageContext.onCreateSubPage(curText || "Untitled");
+      const info = pageContext.resolve(newId);
+      const pb: Block = { id: bid(), type: "page", pageId: newId, title: info?.title ?? (curText || "Untitled"), icon: info?.icon };
+      const after: Block = { id: bid(), type: "p", text: "" };
+      if (elRefs.current[blockId]) elRefs.current[blockId]!.textContent = "";
+      const next = [...blocks]; next.splice(idx, 1, pb, after); update(next);
       focusBlock(after.id); return;
     }
     // text-like transform: strip the "/query" token the menu was triggered by, keep the rest
@@ -622,12 +689,21 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
       }
     }
     patchBlock(b.id, { text } as Partial<Block>);
-    if (!slashOn) return;
-    // "/" opens the menu at the start of a line or right after a space (Notion-style)
     const before = caretText(el).before;
-    const m = before.match(/(?:^|\s)\/([^\s/]*)$/);
-    if (m) openMenuFor(b.id, m[1]);
-    else if (menu?.blockId === b.id) setMenu(null);
+    // "/" opens the slash menu at line start or right after a space (Notion-style)
+    if (slashOn) {
+      const m = before.match(/(?:^|\s)\/([^\s/]*)$/);
+      if (m) openMenuFor(b.id, m[1]);
+      else if (menu?.blockId === b.id) setMenu(null);
+    }
+    // "[[query" or "@query" opens the page-link autocomplete (only with a pageContext)
+    if (pageContext && b.type !== "code") {
+      const mm = before.match(/\[\[([^[\]\n]*)$/);
+      const at = mm ? null : before.match(/(?:^|\s)@([^\s@]{0,40})$/);
+      if (mm) openPageMenu(b.id, mm[1], mm[1].length + 2);
+      else if (at) openPageMenu(b.id, at[1], at[1].length + 1);
+      else if (pageMenu?.blockId === b.id) setPageMenu(null);
+    }
   }
 
   function onTextKeyDown(e: React.KeyboardEvent, b: Block) {
@@ -637,6 +713,13 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
       if (e.key === "ArrowUp") { e.preventDefault(); setMenu({ ...menu, sel: Math.max(menu.sel - 1, 0) }); return; }
       if (e.key === "Enter") { e.preventDefault(); if (filtered[menu.sel]) applyCommand(b.id, filtered[menu.sel]); return; }
       if (e.key === "Escape") { e.preventDefault(); setMenu(null); return; }
+    }
+    if (pageMenu && pageMenu.blockId === b.id) {
+      const total = pageResults.length + 1; // + the "New page" row
+      if (e.key === "ArrowDown") { e.preventDefault(); setPageMenu({ ...pageMenu, sel: Math.min(pageMenu.sel + 1, total - 1) }); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setPageMenu({ ...pageMenu, sel: Math.max(pageMenu.sel - 1, 0) }); return; }
+      if (e.key === "Enter") { e.preventDefault(); chooseFromPageMenu(b.id, pageMenu.sel < pageResults.length ? pageResults[pageMenu.sel] : "new"); return; }
+      if (e.key === "Escape") { e.preventDefault(); setPageMenu(null); return; }
     }
     const idx = blocks.findIndex((x) => x.id === b.id);
     const curIndent = (("indent" in b && b.indent) || 0) as number;
@@ -696,7 +779,7 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
       if (curIndent > 0) { e.preventDefault(); patchBlock(b.id, { indent: curIndent - 1 } as Partial<Block>); return; }
       const prev = blocks[idx - 1];
       if (idx === 0) return;
-      if (prev && (prev.type === "divider" || prev.type === "image" || prev.type === "table")) {
+      if (prev && (prev.type === "divider" || prev.type === "image" || prev.type === "table" || prev.type === "page")) {
         // delete the non-text block above
         e.preventDefault();
         const next = blocks.filter((x) => x.id !== prev.id); update(next); focusBlock(b.id, false); return;
@@ -824,7 +907,7 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
 
   /* pending changes whose original text lives in THIS block (drives inline tracked changes) */
   function changesFor(b: Block): InlineChange[] {
-    if (b.type === "divider" || b.type === "image" || b.type === "table") return [];
+    if (b.type === "divider" || b.type === "image" || b.type === "table" || b.type === "page") return [];
     const t = (b as Extract<Block, { text: string }>).text;
     return pendingChanges.filter((c) => t.includes(c.original));
   }
@@ -913,6 +996,7 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
       ref={rootRef}
       className={`ne-root${dragOver ? " is-filedrag" : ""}${readOnly ? " is-ro" : ""}`}
       onMouseDown={onCanvasMouseDown}
+      onClick={(e) => { const pl = (e.target as HTMLElement).closest?.("[data-page]"); if (pl && pageContext) { e.preventDefault(); pageContext.onOpenPage(pl.getAttribute("data-page")!); } }}
       onDragOver={(e) => { if (readOnly || !isFileDrag(e)) return; e.preventDefault(); setDragOver(true); }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false); }}
       onDrop={(e) => { if (readOnly || !isFileDrag(e)) return; e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) void insertImages(e.dataTransfer.files, blockIdAtY(e.clientY)); }}
@@ -1048,6 +1132,22 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
             </div>
           </div>
         );
+        if (b.type === "page") {
+          const info = pageContext?.resolve(b.pageId);
+          const title = info?.title || b.title || "Untitled";
+          const icon = info?.icon || b.icon || "📄";
+          return (
+            <div key={b.id} className={rowCls(" ne-page-row")} {...rowProps}>
+              {handle}
+              <button className="ne-page-block" data-testid={`pageblock-${b.pageId}`} disabled={!pageContext}
+                onClick={() => pageContext?.onOpenPage(b.pageId)} title={`Open ${title}`}>
+                <span className="ne-page-ic">{icon}</span>
+                <span className="ne-page-title">{title}</span>
+                <PageArrow size={15} className="ne-page-arrow" />
+              </button>
+            </div>
+          );
+        }
         // paragraph / heading / quote / list — the shared editable text element
         const marker = (
           <>
@@ -1076,6 +1176,27 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
               <span className="ne-menu-tx"><b>{c.label}</b><i>{c.hint}</i></span>
             </button>
           ))}
+        </div>
+      )}
+
+      {pageMenu && (
+        <div ref={pageMenuRef} className={`ne-menu${pageMenu.above ? " ne-menu-above" : ""}`} style={{ left: pageMenu.x, top: pageMenu.y }} data-testid="page-menu">
+          <div className="ne-menu-h">Link to page</div>
+          {pageResults.map((r, i) => (
+            <button key={r.id} className={`ne-menu-i${i === pageMenu.sel ? " is-sel" : ""}`} data-testid={`page-opt-${r.id}`}
+              ref={i === pageMenu.sel ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
+              onMouseEnter={() => setPageMenu({ ...pageMenu, sel: i })}
+              onMouseDown={(e) => { e.preventDefault(); chooseFromPageMenu(pageMenu.blockId, r); }}>
+              <span className="ne-menu-ic">{r.icon || "📄"}</span>
+              <span className="ne-menu-tx"><b>{r.title || "Untitled"}</b></span>
+            </button>
+          ))}
+          <button className={`ne-menu-i${pageMenu.sel === pageResults.length ? " is-sel" : ""}`} data-testid="page-opt-new"
+            onMouseEnter={() => setPageMenu({ ...pageMenu, sel: pageResults.length })}
+            onMouseDown={(e) => { e.preventDefault(); chooseFromPageMenu(pageMenu.blockId, "new"); }}>
+            <span className="ne-menu-ic"><Plus size={15} /></span>
+            <span className="ne-menu-tx"><b>New page{pageMenu.query ? ` “${pageMenu.query}”` : ""}</b><i>Create + link</i></span>
+          </button>
         </div>
       )}
 
@@ -1272,4 +1393,16 @@ const NE_CSS = `
   .ne-toolbar{max-width:94vw;flex-wrap:wrap;justify-content:center}
   .ne-swatches{flex-wrap:wrap;max-width:100%}
 }
+/* ==== sub-page block + inline page link ==== */
+.ne-page-block{flex:1;display:flex;align-items:center;gap:9px;width:100%;border:0;background:none;cursor:pointer;padding:6px 8px;margin:1px 0;border-radius:var(--nx-radius-s);color:var(--nx-fg);font-family:var(--nx-font-sans);font-size:17px;text-align:left;transition:background var(--nx-t-fast) var(--nx-ease)}
+.ne-page-block:hover{background:var(--nx-bg-sunken)}
+.ne-page-block:disabled{cursor:default}
+.ne-page-ic{flex:none;font-size:18px;line-height:1}
+.ne-page-title{flex:1;font-weight:500;border-bottom:1px solid var(--nx-border);padding-bottom:1px}
+.ne-page-block:hover .ne-page-title{border-bottom-color:var(--nx-border-strong)}
+.ne-page-arrow{flex:none;color:var(--nx-fg-faint);opacity:0;transition:opacity var(--nx-t-fast)}
+.ne-page-block:hover .ne-page-arrow{opacity:1}
+.ne-pagelink{color:var(--nx-accent);font-weight:500;cursor:pointer;border-radius:3px;padding:0 3px 0 1px;text-decoration:underline;text-decoration-color:color-mix(in oklab,var(--nx-accent) 40%,transparent);text-underline-offset:2px;white-space:nowrap}
+.ne-pagelink::before{content:"📄";font-size:.82em;margin-right:2px}
+.ne-pagelink:hover{background:var(--nx-accent-soft)}
 ` + NE_COLOR_CSS;

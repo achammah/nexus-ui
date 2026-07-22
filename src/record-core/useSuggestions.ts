@@ -20,7 +20,7 @@ export interface Suggestion extends InlineChange {
 }
 
 const isTextBlock = (b: Block): b is Extract<Block, { text: string }> =>
-  b.type !== "divider" && b.type !== "image" && b.type !== "table";
+  b.type !== "divider" && b.type !== "image" && b.type !== "table" && b.type !== "page";
 
 /* fold a change's original → replacement into the FIRST text block that carries the
    original (first occurrence only), leaving every other block untouched */

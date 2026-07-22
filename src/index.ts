@@ -24,7 +24,7 @@ export { DataTable } from "./record-core/DataTable";
 export { KanbanBoard } from "./record-core/KanbanBoard";
 export { RecordPage } from "./record-core/RecordPage";
 export { NotionEditor, textToBlocks, blocksToMarkdown, markdownToBlocks, htmlToBlocks, highlightCode, bid } from "./record-core/NotionEditor";
-export type { Block, BlockType, InlineChange, EditorConfig, CalloutTone } from "./record-core/NotionEditor";
+export type { Block, BlockType, InlineChange, EditorConfig, CalloutTone, PageContext } from "./record-core/NotionEditor";
 export { DocumentOutline, outlineFromBlocks } from "./record-core/DocumentOutline";
 export type { OutlineHeading } from "./record-core/DocumentOutline";
 export { blocksToHtml, inlineToHtml, exportMarkdown, exportHtml, exportPdf, exportDocx, docxBlob, importFile, downloadBlob, downloadText, IMPORT_ACCEPT } from "./record-core/editor-io";
