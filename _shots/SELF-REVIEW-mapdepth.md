@@ -80,7 +80,7 @@ User ask: "change orientation to have a full FLY VIEW like in Maps, so not alway
 | B | Light basemap reverts to Terrain | ✅ fixed (root cause was NOT the source) | 12 consecutive switches × 6 styles, all load + stay, 0 404s |
 | C | Area measurement prominence + units | ✅ fixed | `33` live mid-draw, `34` on-shape label |
 | D | Itinerary on All Sites | ✅ exposed | `35` — labelled Directions pill, 2-stop 347.7 km route |
-| E | Fully mobile responsive | ⚠ **partial — not done** | `36`/`37` — no overflow, panel fits, controls reachable; bottom-sheet treatment NOT built |
+| E | Fully mobile responsive | ✅ fixed (was partial when first written — see below) | `40`–`50` — directions + layers sheets, collapsible legend, touch tilt/rotate, 44px targets, at 390 AND 430 |
 
 **A — 3D visibility.** Two causes. (1) Toggling a 3D layer off→on *removed and re-added* its layer, racing the style-load handler that re-applies augments on every `styledata`, so re-enabling could leave no layer at all. Buildings + raster hillshade now toggle layout `visibility` (add once, show/hide). (2) From top-down the layers are invisible by construction, so enabling either now eases the camera into the pose where it reads — pitch 60, and for buildings z16.2. **Honest data limitation:** OpenMapTiles `render_height` for these footprints is 0–3 m, so nearly every building falls to the ~8 m floor; that only reads as real mass from ~z16 — hence the zoom in the reveal. Building height also now reaches full value by z15 (was z16).
 
@@ -88,7 +88,17 @@ User ask: "change orientation to have a full FLY VIEW like in Maps, so not alway
 
 **D — routing config flag:** `route` in the map view config (`resolveMapOptions` → `tools.route`), **defaults to `true`** — routing was never disabled, just undiscoverable as an unlabeled rail icon. Now a labelled "Directions" pill (collapses to icon under 640px).
 
-**E — mobile: PARTIAL, flagged not finished.** Verified at 390×844: no horizontal overflow (`docW == winW == 390`), the basemap/projection panel fits inside the viewport (x28 w272), tool rail reachable. NOT done: bottom-sheet treatment for the Layers/basemap picker and directions panel, a collapsible legend (it currently eats a large share of a phone screen), and touch-gesture tilt verification. Treat mobile as unfinished.
+**E — mobile: COMPLETE.** *(This row read "partial — not done" for one round, before the focused mobile pass. It is recorded as done here because the code is at HEAD; the earlier state is kept only as history, not as a limit.)*
+
+Built and verified:
+- **Directions is a real bottom sheet** — drag handle, three snap points (PEEK = duration · distance · arrival → HALF → FULL scrollable turn-by-turn), map interactive above at every snap, from/to as search fields, mode chips touch-sized. Snap heights resolve against the **map container**, not the viewport: `dvh`-sized snaps overflowed above the map and pushed the drag handle off-screen.
+- **Layers / basemap + projection is also a bottom sheet** — full-width, bottom-anchored, drag grip, scrollable; swatches in a 3-up touch grid; Flat/Globe/Earth and the 3D toggles as full-width rows. Verified full-width + bottom-anchored at 390 (390×387 @y457) and 430 (430×387 @y545).
+- **Legend collapses to a chip** that expands on tap (46px → 244px), so it no longer eats the phone screen. Desktop keeps it always-expanded.
+- **Touch gestures verified with real CDP touch points**, not assumed from a registered handler: two-finger drag **tilts** (pitch 0 → 70) and a two-finger **twist rotates** (bearing 0 → −79), at both widths. A parallel two-finger sideways drag *pans* — that is correct maplibre behaviour, and measuring it as "rotation" is the mistake that made my first rotation test look like a pass.
+- **Touch targets** — maplibre's own controls ship at 29–32px; those, the top control row, and the marker popup's actions (which shipped at **20px**) are now 44px. 0 sub-44px targets in shipped code.
+- **Also verified at both widths:** projection control switches to globe, 3D buildings + terrain toggles both fire, geolocate reachable, cluster tap expands (z5 → z10), marker popup opens and fits (226×96), mobile-drawn area label reads correctly, no horizontal overflow, 0 page errors.
+
+**Honest residual:** the mobile sheet treatment is gated at the 768px breakpoint, so **landscape phones (844×390) render the desktop popover**, not the sheet. That was verified to fit inside the 390px height (panel 232×244 @y136) with no overflow — it is a deliberate breakpoint choice, not an oversight, but it is not the sheet UI.
 
 ## Route alternatives
 
