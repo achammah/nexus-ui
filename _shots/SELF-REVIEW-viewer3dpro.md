@@ -107,3 +107,67 @@ is a decent placeholder, clearly secondary.
 `pro-car-side2.png` / `pro-car-iso.png` / `pro-car-dark.png` (rebuilt sedan) ·
 `pro-toycar.png` (CC0 GLB via config URL) · `pro-import.png` (user file import) ·
 `pro-mobile-plan.png` (390 px).
+
+---
+
+# Addendum — TRUE-CAD pass (apron · editability · transitions)
+
+User verdict driving this pass: "not editable on each view … just flat, still feel
+like a toy … no animation between views … nothing NEXT to the floor plan, no
+technical info … would have needed to be like a TRUE CAD software."
+
+## Shipped (all exercised live at HEAD, DOM/state-asserted)
+
+1. **Technical APRON** (`Apron.tsx`) — persistent CAD dock beside the drawing, in
+   EVERY view: selected element's editable spec (room name/type/finish/ceiling +
+   area/volume/perimeter; opening width/sill/head + door swing flip; wall length/
+   thickness/face/bounding-rooms/openings), layer toggles (dims/labels/openings/
+   markers), clickable level tree, editable sheet/title-block metadata, and the
+   room schedule as a docked pane whose rows select in the plan. Bottom sheet on
+   mobile. Verified: rename "Living room"→"Salon" propagated to plan label,
+   schedule row AND the persisted snapshot; ceiling/type/finish/north all commit.
+2. **Editable plan** (`plan-edit.ts` + Plan2D direct manipulation) — click-select
+   rooms/walls/openings; DRAG A WALL and everything follows (verified: partition
+   x 5.2→6.0: living 22.9→26.4 m², kitchen 10.9→8.3 m², chain dims 6000/2600, the
+   door ON the wall moved with it, snapshot persisted, and the 3D model rebuilt
+   with the partition at the new position); drag a door along its wall (slide
+   verified, 0.9 m width preserved), resize by width (1.20 m verified), flip
+   swing; A–A section marker on the plan drags the 3D cut plane; facade triangles
+   jump to that elevation (verified: east marker → elevation view, East pressed).
+   All edits snap 5 cm with min-room (0.6 m) / min-opening clamps, and flow
+   through the SAME functions as the apron's typed fields.
+3. **View transitions** — eased camera moves instead of hard cuts (verified by
+   sampling engine state mid-flight): 3D→elevation dolly-zooms (fov 42→5 while
+   pulling out, then the true ortho camera swaps in — fov read 34.8 mid-anim),
+   elevation→section orbits the ortho camera while the clip plane SWEEPS in from
+   outside the building (constant 4.26→0.0 observed), section→3D returns to
+   fov 42 with clipping cleared. The SVG plan cross-fades against the canvas.
+   `prefers-reduced-motion` snaps (same guard as all prior motion).
+
+## Honest limits (new)
+
+- Wall drag covers AXIS-ALIGNED walls (the overwhelming case for room-polygon
+  plans); a skewed wall selects and reads its spec but does not drag.
+- Colinear wall runs that meet at a T (living's full edge over kitchen+hall
+  edges) are separate deduped segments; dragging the full-height segment moves
+  all colinear vertices in its span (correct), but the plan renders the overlap
+  at the thicker weight — a CAD purist would split walls at junctions.
+- No room-polygon vertex editing or room creation/deletion yet — the editable
+  unit is walls/openings/attributes, not topology.
+- Live wall drag persists per pointermove (host onChange fires often); fine for
+  app_state, hosts with expensive persistence should debounce.
+- Transition edge case: changing the A–A position DURING a view fly is applied
+  after the fly completes (the anim owns the clip constant until done).
+
+## Bundle after the CAD pass
+
+Lazy chunk 751.6 kB min / 200.0 kB gzip (base viewer 665.4/174.0; import+drawing
+set 732.4/194.2) → the apron + editing + transitions cost ~19 kB min / ~6 kB gzip.
+
+## New evidence (committed)
+
+`cad-apron-plan.png` — edited plan (Salon 6.00 m, slid front door, kitchen
+selected + tinted) with dims recomputed, A–A marker, facade markers, and the
+apron showing the kitchen's editable spec + docked schedule.
+`cad-transition-mid.png` — axon view with the apron docked (the CAD screen:
+drawing + technical panel in every view).
