@@ -4,7 +4,6 @@ import {
   Background,
   BackgroundVariant,
   ConnectionMode,
-  Controls,
   MarkerType,
   MiniMap,
   Panel,
@@ -71,6 +70,7 @@ import {
   type FlowNode,
 } from "./nodes";
 import { optionMeta } from "../../options";
+import FlowControls from "./FlowControls";
 import NodeDetailPanel from "./NodeDetailPanel";
 
 /* FlowView — an object's records as a full-fidelity node graph. Builds ON the v1
@@ -157,6 +157,11 @@ function FlowCanvas({ object, rows, readOnly, viewConfig, viewState, onViewState
   const activeField = object.fields.find((f) => f.key === relationKey);
   const selfRelation = !!activeField && (activeField.relation === object.key);
   const connectable = configEdgeDraw(viewConfig) && !readOnly && selfRelation;
+
+  /* layout lock (the zoom cluster's toggle): pan/zoom/open stay live, moving
+     nodes + drawing edges pause — rendered only when it governs something */
+  const [locked, setLocked] = React.useState(false);
+  const lockable = (!readOnly && !grouped) || connectable;
 
   const secondaryKey = typeof viewConfig.secondaryRelationField === "string" ? viewConfig.secondaryRelationField : "";
   // skip the overlay when it names the ACTIVE relation (else the same links draw twice)
@@ -540,8 +545,8 @@ function FlowCanvas({ object, rows, readOnly, viewConfig, viewState, onViewState
           onNodeDragStop={onNodeDragStop}
           onConnect={onConnect}
           connectionMode={ConnectionMode.Loose}
-          nodesDraggable={!readOnly && !grouped}
-          nodesConnectable={connectable}
+          nodesDraggable={!readOnly && !grouped && !locked}
+          nodesConnectable={connectable && !locked}
           elementsSelectable
           selectNodesOnDrag={false}
           multiSelectionKeyCode="Shift"
@@ -641,9 +646,7 @@ function FlowCanvas({ object, rows, readOnly, viewConfig, viewState, onViewState
             </Panel>
           )}
 
-          <div style={{ display: "contents" }} data-testid="flow-controls">
-            <Controls showInteractive={false} orientation="horizontal" />
-          </div>
+          <FlowControls fitOpts={fitOpts} lockable={lockable} locked={locked} onToggleLock={() => setLocked((v) => !v)} />
           <div style={{ display: "contents" }} data-testid="flow-minimap">
             <MiniMap
               pannable
