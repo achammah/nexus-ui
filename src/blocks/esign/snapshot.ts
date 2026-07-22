@@ -144,6 +144,10 @@ export interface ESignConfig {
   onSend?: (req: EsignSendRequest) => Promise<void> | void;
   /** signing-link template for the review surface, e.g. "https://app.example.com/sign/{envelopeId}/{signerId}" */
   signingUrlTemplate?: string;
+  /** show the demo-state switcher (draft / partially signed / completed).
+   *  Default true — it is how a visitor reaches the post-send states without
+   *  being stranded in a locked envelope. Set false in a real deployment. */
+  demoStates?: boolean;
 }
 
 /* -------------------------------------------------------------------- guards */
@@ -253,12 +257,99 @@ export function appendEvent(
 
 import { SEED_CONTRACT_NAME, SEED_CONTRACT_PDF_BASE64 } from "./seed-pdf";
 
+/** The demo states a seeded envelope can be opened in. `draft` is the default:
+ *  a sent envelope correctly locks fields and signers, so seeding one leaves a
+ *  first-time visitor staring at a greyed-out palette with nothing to do. */
+export type EsignSeedState = "draft" | "sent" | "completed";
+
+export const ESIGN_SEED_STATES: Array<{ id: EsignSeedState; label: string; hint: string }> = [
+  { id: "draft", label: "Draft", hint: "Editable — place fields, edit signers, send" },
+  { id: "sent", label: "Partially signed", hint: "Provider signed; the client's turn" },
+  { id: "completed", label: "Completed", hint: "Both signed, certificate issued" },
+];
+
 /** seedEnvelope — the flagship demo AND deterministic journey fixture: a real
  *  2-page MSA (embedded PDF), two signers with color-coded fields on page 2
  *  (signature + date + initials each, one shared PO text field + a checkbox),
- *  SENT state with the Provider signer ALREADY SIGNED (typed signature), so the
- *  partially-signed status, the audit trail, and "whose turn" all show on load. */
-export function seedEnvelope(): EsignEnvelope {
+ *  plus a saved template.
+ *
+ *  DEFAULT = `draft`, so the surface is immediately workable: the field palette
+ *  is live, fields drag, signers edit, and Send is available. Pass "sent" or
+ *  "completed" for the downstream states (the surface's demo-state switcher and
+ *  the journey use these). */
+export function seedEnvelope(state: EsignSeedState = "draft"): EsignEnvelope {
+  if (state === "sent") return seedSentEnvelope();
+  if (state === "completed") return seedCompletedEnvelope();
+  return seedDraftEnvelope();
+}
+
+/** DRAFT — everything unlocked, nothing signed yet. */
+export function seedDraftEnvelope(): EsignEnvelope {
+  const base = seedSentEnvelope();
+  const t0 = "2026-07-20T09:12:00.000Z";
+  return {
+    ...base,
+    id: "env-msa-2026-0142-draft",
+    status: "draft",
+    sentAt: undefined,
+    signers: base.signers.map((s) => ({
+      ...s,
+      status: "pending" as EsignSignerStatus,
+      viewedAt: undefined,
+      signedAt: undefined,
+    })),
+    // fields keep their placement but carry no values — the demo starts clean
+    fields: base.fields.map(({ value, ...f }) => f),
+    events: [
+      { id: "ev1", at: t0, type: "created", actor: "Owner", detail: "Envelope created" },
+      { id: "ev2", at: t0, type: "document_loaded", actor: "Owner", detail: SEED_CONTRACT_NAME + " (2 pages)" },
+    ],
+  };
+}
+
+/** COMPLETED — both parties signed, certificate issued. */
+export function seedCompletedEnvelope(): EsignEnvelope {
+  const base = seedSentEnvelope();
+  const t4 = "2026-07-21T14:22:00.000Z";
+  const t5 = "2026-07-21T14:26:00.000Z";
+  const client = base.signers[1];
+  return {
+    ...base,
+    id: "env-msa-2026-0142-done",
+    status: "completed",
+    completedAt: t5,
+    certificateId: "9f2c41a7be05d3186c4a",
+    signers: base.signers.map((s) =>
+      s.id === client.id ? { ...s, status: "signed" as EsignSignerStatus, viewedAt: t4, signedAt: t5 } : s,
+    ),
+    fields: base.fields.map((f) =>
+      f.signerId !== client.id || f.value
+        ? f
+        : f.type === "signature"
+          ? { ...f, value: { type: "signature", signature: { kind: "drawn", dataUrl: CLIENT_SIGNATURE_PNG, at: t5 } } as EsignFieldValue }
+          : f.type === "initials"
+            ? { ...f, value: { type: "initials", signature: { kind: "typed", text: "JdV", font: "cursive-1", at: t5 } } as EsignFieldValue }
+            : f.type === "date"
+              ? { ...f, value: { type: "date", text: "2026-07-21" } as EsignFieldValue }
+              : f.type === "checkbox"
+                ? { ...f, value: { type: "checkbox", checked: true } as EsignFieldValue }
+                : { ...f, value: { type: "text", text: "PO-88412" } as EsignFieldValue },
+    ),
+    events: [
+      ...base.events,
+      { id: "ev6", at: t4, type: "viewed", actor: "jonas.devries@northwind-retail.example", detail: "Opened the document" },
+      { id: "ev7", at: t5, type: "signed", actor: "jonas.devries@northwind-retail.example", detail: "Signed 5 fields (drawn signature)" },
+      { id: "ev8", at: t5, type: "completed", actor: "System", detail: "All recipients signed — certificate 9f2c41a7be05d3186c4a issued" },
+    ],
+  };
+}
+
+/** A small drawn-signature PNG so the completed demo shows real ink. */
+const CLIENT_SIGNATURE_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABkCAYAAADDhn8LAAAAAXNSR0IArs4c6QAABGtJREFUeF7t3EFy2zAQBED7/4/2A1Kli2ITwOxeXTOAsD0EJTuf7/f7/eM/AgS+FfgIxJ0hwG8BgbgbBP4QEIjbg4BA3AME+gS8g/S5WVUiIJCSopvZJyAQd4RAn4BA+tysKhEQSEnRzewTEEifm1UlAgIpKbqZfQIC6XOzqkRAICVFN7NPQCB9blaVCAikpOhm9gkIpM/NqhIBgZQU3cw+AYH0uVlVIiCQkqKb2ScgkD43q0oEBFJSdDP7BATS52ZViYBASopuZp+AQPrcrCoREEhJ0c3sExBIn5tVJQICKSm6mX0CAulzs6pEQCAlRTezT0AgfW5WlQgIpKToZvYJCKTPzaoSAYGUFN3MPgGB9LlZVSIgkJKim9knIJA+N6tKBARSUnQz+wQE0udmVYmAQEqKbmafgED63KwqERBISdHN7BMQSJ+bVSUCAikpupl9AgLpc7OqREAgJUU3s09AIH1uVpUICKSk6Gb2CQikz82qEgGBlBTdzD4BgfS5WVUiIJCSopvZJyCQPjerSgQEUlJ0M/sEBNLnZlWJgEBKim5mn4BA+tysKhEQSEnRzewTEEifm1UlAgIpKbqZfQIC6XOzqkRAICVFN7NPQCB9blaVCAikpOhm9gkIpM/NqhIBgZQU3cw+AYH0uVlVIiCQkqKb2ScgkD43q0oEBFJSdDP7BATS52ZViYBASopuZp+AQPrcrCoREEhJ0c3sExBIn5tVJQICKSm6mX0CAulzs6pEQCAlRTezT0AgfW5WlQgIpKToZvYJCKTPzaoSAYGUFN3MPgGB9LlZVSIgkJKim9knIJA+N6tKBARSUnQz+wQE0udmVYmAQEqKbmafgED63KwqERBISdHN7BMQSJ+bVSUCAikpupl9AgLpc7OqREAgJUU3s09AIH1uVpUICKSk6Gb2CQikz82qEgGBlBTdzD4BgfS5WVUiIJCSopvZJyCQPjerSgQEUlJ0M/sEBNLnZlWJgEBKim5mn4BA+tysKhEQSEnRzewTEEifm1UlAgIpKbqZfQIC6XOzqkRAICVFN7NPQCB9blaVCAikpOhm9gkIpM/NqhIBgZQU3cw+AYH0uVlVIiCQkqKb2ScgkD43q0oEBFJSdDP7BATS52ZViYBASopuZp+AQPrcrCoREEhJ0c3sExBIn5tVJQICKSm6mX0CAulzs6pEQCAlRTezT0AgfW5WlQgIpKToZvYJCKTPzaoSAYGUFN3MPgGB9LlZVSIgkJKim9knIJA+N6tKBARSUnQz+wQE0udmVYmAQEqKbmafgED63KwqERBISdHN7BMQSJ+bVSUCAikpupl9AgLpc7OqREAgJUU3s09AIH1uVpUICKSk6Gb2CQikz82qEgGBlBTdzD4BgfS5WVUiIJCSopvZJyCQPjerSgQEUlJ0M/sEBNLnZlWJgEBKim5mn4BA+tysKhEQSEnRzewTEEifm1UlAgIpKbqZfQIC6XOzqkRAICVFN7NPQCB9blaVCAikpOhm9gkIpM/NqhIBgZQU3cw+AYH0uVlVIvALTd0Cbcm3sJoAAAAASUVORK5CYII=";
+
+/** SENT / partially signed — the Provider has signed, the Client's turn. */
+export function seedSentEnvelope(): EsignEnvelope {
   const t0 = "2026-07-20T09:12:00.000Z";
   const t1 = "2026-07-20T09:31:00.000Z";
   const t2 = "2026-07-21T08:05:00.000Z";

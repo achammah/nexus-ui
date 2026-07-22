@@ -111,6 +111,27 @@
 .nxEsNotice.isInfo { border-color: color-mix(in srgb, var(--nx-accent) 35%, transparent); background: var(--nx-accent-soft); }
 .nxEsNotice.isError { border-color: color-mix(in srgb, var(--nx-danger) 45%, transparent); background: var(--nx-danger-soft); }
 
+/* demo-state switcher — a segmented control in the header */
+.nxEsDemoStates {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px; border: 1px solid var(--nx-border); border-radius: var(--nx-radius-s);
+  background: var(--nx-bg-sunken);
+}
+.nxEsDemoLabel {
+  font-size: var(--nx-text-micro, 11px); color: var(--nx-fg-faint);
+  text-transform: var(--nx-label-transform, uppercase); letter-spacing: var(--nx-label-tracking, 0.06em);
+  padding: 0 6px 0 4px;
+}
+.nxEsSegBtn {
+  font: inherit; font-size: var(--nx-text-meta); white-space: nowrap;
+  padding: 3px 10px; border: 0; border-radius: calc(var(--nx-radius-s) - 1px);
+  background: transparent; color: var(--nx-fg-muted); cursor: pointer;
+  transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease);
+}
+.nxEsSegBtn:hover { color: var(--nx-fg); background: var(--nx-bg-raised); }
+.nxEsSegBtn.isActive { background: var(--nx-bg-raised); color: var(--nx-fg); box-shadow: var(--nx-shadow-1, 0 1px 2px rgb(0 0 0 / 0.06)); }
+.nxEsSegBtn:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; }
+
 /* ------------------------------------------------------------------ body */
 
 .nxEsBody { display: flex; flex: 1; min-height: 0; }
@@ -455,6 +476,12 @@
   .nxEsHeader { gap: var(--nx-gap-2); }
   .nxEsTabsNav { order: 3; width: 100%; }
   .nxEsTabBtn { flex: 1; }
+  /* the header must never push the page wider than the phone */
+  .nxEsHeadLeft, .nxEsHeadRight { min-width: 0; }
+  .nxEsHeadRight { flex-wrap: wrap; justify-content: flex-end; }
+  .nxEsDemoStates { order: 4; }
+  .nxEsDemoLabel { display: none; }
+  .nxEsTitleInput { min-width: 0; }
   .nxEsAuditPane { order: 2; }
   /* larger touch targets when signing on a phone */
   .nxEsIconBtn { width: 32px; height: 32px; }

@@ -9,9 +9,9 @@ import "./esign.css";
 import {
   activeSignerIds, appendEvent, computeCertificateId, envelopeStatusAfterSign,
   esignId, fieldDefaultSize, FIELD_TYPE_LABEL, isEsignSnapshot, isFieldFilled,
-  seedEnvelope, SIGNER_COLOR_COUNT,
+  seedEnvelope, SIGNER_COLOR_COUNT, ESIGN_SEED_STATES,
   type ESignConfig, type EsignEnvelope, type EsignField, type EsignFieldType,
-  type EsignFieldValue, type EsignSendRequest, type EsignSigner,
+  type EsignFieldValue, type EsignSeedState, type EsignSendRequest, type EsignSigner,
 } from "./snapshot";
 import { downloadBytes, fileToEsignDocument, flattenEnvelope, openDocument, type PdfDocHandle, type PdfPageHandle } from "./pdf";
 import { initialsOf, SignatureDialog, signatureFontCss } from "./SignatureDialog";
@@ -31,6 +31,14 @@ export interface ESignSurfaceProps {
 }
 
 type Tab = "prepare" | "sign" | "audit";
+
+/** which demo state the current envelope reads as (the switcher's active seg) */
+function envMatchesSeed(env: EsignEnvelope, state: EsignSeedState): boolean {
+  if (state === "draft") return env.status === "draft";
+  if (state === "completed") return env.status === "completed";
+  return env.status === "sent" || env.status === "partially_signed";
+}
+
 /* the manual zoom range and the fit-width floor are the SAME range, so fitting a
    narrow pane can never park the control at a disabled bound with a clipped page */
 const ZOOM_MIN = 0.4;
@@ -137,6 +145,19 @@ export default function ESignSurface({
 
   const editable = env.status === "draft";
   const fieldTypes = config?.fieldTypes ?? ALL_FIELD_TYPES;
+  const showDemoStates = config?.demoStates ?? true;
+
+  /** Swap the whole envelope for a seeded demo state. A sent envelope locks
+   *  fields and signers by design, so the surface must always offer a way back
+   *  to an editable one. */
+  const loadSeedState = (state: EsignSeedState) => {
+    const next = seedEnvelope(state);
+    setEnv(next);
+    setSelectedId(null);
+    setSigningAs(null);
+    setTab(next.status === "draft" ? "prepare" : next.status === "completed" ? "audit" : "sign");
+    onChangeRef.current?.(next);
+  };
   const activeIds = activeSignerIds(env);
   const signer = env.signers.find((s) => s.id === signingAs) ?? null;
   const selected = env.fields.find((f) => f.id === selectedId) ?? null;
@@ -412,6 +433,22 @@ export default function ESignSurface({
               Download signed PDF
             </button>
           )}
+          {showDemoStates && (
+            <div className="nxEsDemoStates" role="group" aria-label="Demo state">
+              <span className="nxEsDemoLabel">Demo</span>
+              {ESIGN_SEED_STATES.map((s) => (
+                <button
+                  key={s.id} type="button" title={s.hint}
+                  className={"nxEsSegBtn" + (envMatchesSeed(env, s.id) ? " isActive" : "")}
+                  aria-pressed={envMatchesSeed(env, s.id)}
+                  onClick={() => loadSeedState(s.id)}
+                  data-testid={`esign-demo-${s.id}`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
           {actions}
         </div>
       </header>
@@ -424,7 +461,16 @@ export default function ESignSurface({
       )}
       {!editable && tab === "prepare" && (
         <div className="nxEsNotice isInfo" role="status">
-          This envelope was sent — fields and signers are locked. The Activity tab has the audit trail.
+          <span>
+            This envelope was sent — fields and signers are locked, the way a real envelope
+            behaves once recipients hold it. The Activity tab has the audit trail.
+          </span>
+          <button
+            type="button" className="nxEsBtn isSm" data-testid="esign-back-to-draft"
+            onClick={() => loadSeedState("draft")}
+          >
+            Start a new draft
+          </button>
         </div>
       )}
 
