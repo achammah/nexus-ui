@@ -64,11 +64,13 @@ export const cardHeight = (opts: {
   colWidth: number;
   hasCover: boolean;
   coverConfigured: boolean;
-  hasMeta: boolean;
+  /* number of configured card fields that carry a value for this row — each is
+     one compact no-wrap line (cover fit never changes height; the aspect holds) */
+  fieldRows: number;
 }): number => {
   const cover = opts.coverConfigured ? Math.round(opts.colWidth * (opts.hasCover ? 0.75 : 0.42)) : 0;
   const pad = 10;
   const title = 38; // two-line box at the card title's fixed line height
-  const meta = opts.hasMeta ? 26 : 0;
-  return cover + pad + title + meta + pad;
+  const fields = Math.max(0, opts.fieldRows) * 22; // one line per shown card field
+  return cover + pad + title + fields + pad;
 };
