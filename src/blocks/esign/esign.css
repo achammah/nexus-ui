@@ -547,3 +547,8 @@
   .nxEsIconBtn { width: 32px; height: 32px; }
   .nxEsFillBtn { font-size: 13px; }
 }
+
+/* field property actions + invalid input */
+.nxEsPropActions { display: flex; gap: var(--nx-gap-1); }
+.nxEsPropActions .nxEsBtn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; }
+.nxEsFillInput.isInvalid { outline: 2px solid var(--nx-danger); outline-offset: -1px; background: var(--nx-danger-soft); }

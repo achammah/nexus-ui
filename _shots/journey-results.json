@@ -87,7 +87,7 @@
   {
     "name": "flattened pdf downloads",
     "pass": true,
-    "detail": "31034 bytes"
+    "detail": "31032 bytes"
   },
   {
     "name": "flattened pdf has cert page (3 pages)",
@@ -188,6 +188,41 @@
     "name": "mobile: no page-level horizontal scroll",
     "pass": true,
     "detail": "overflow 0px"
+  },
+  {
+    "name": "text field exposes placeholder + format",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "duplicate adds a copy",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "apply-to-all-pages places on the other page",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "apply-to-all-pages is idempotent",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "invalid input is flagged on the field",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "finish is blocked while a field fails validation",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "valid input clears the error",
+    "pass": true,
+    "detail": ""
   },
   {
     "name": "decline records a reason in the audit trail",

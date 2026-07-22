@@ -50,7 +50,43 @@ export interface EsignField {
   required: boolean;
   label?: string;
   options?: string[]; // dropdown
+  /** shown inside an empty text field while signing */
+  placeholder?: string;
+  /** input validation for text fields — enforced at fill time */
+  format?: EsignFieldFormat;
+  /** position in the signer's tab order; unset = reading order (page, then y) */
+  tabIndex?: number;
   value?: EsignFieldValue;
+}
+
+/** Validation applied to a text field's value. */
+export type EsignFieldFormat = "any" | "email" | "number" | "phone" | "date";
+
+export const FIELD_FORMAT_LABEL: Record<EsignFieldFormat, string> = {
+  any: "Any text",
+  email: "Email address",
+  number: "Number",
+  phone: "Phone number",
+  date: "Date (YYYY-MM-DD)",
+};
+
+const FORMAT_RULE: Record<EsignFieldFormat, { test: (v: string) => boolean; hint: string }> = {
+  any: { test: () => true, hint: "" },
+  email: { test: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v), hint: "Enter an email address like name@company.com" },
+  number: { test: (v) => /^-?\d+(\.\d+)?$/.test(v), hint: "Enter a number" },
+  phone: { test: (v) => /^\+?[\d\s().-]{6,}$/.test(v), hint: "Enter a phone number" },
+  date: { test: (v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)), hint: "Enter a date as YYYY-MM-DD" },
+};
+
+/** Validate a field's current text against its format. Empty is not an error
+ *  here — "required" is a separate concern handled by the completion gate. */
+export function fieldFormatError(f: EsignField): string | null {
+  if (f.type !== "text") return null;
+  const fmt = f.format ?? "any";
+  if (fmt === "any") return null;
+  const text = f.value?.type === "text" ? f.value.text.trim() : "";
+  if (!text) return null;
+  return FORMAT_RULE[fmt].test(text) ? null : FORMAT_RULE[fmt].hint;
 }
 
 export interface EsignSigner {

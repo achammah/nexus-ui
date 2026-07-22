@@ -7,16 +7,17 @@
 import * as React from "react";
 import {
   Baseline, Calendar, CheckSquare, ChevronDownSquare, Signature, Type,
-  Check, ChevronLeft, ChevronRight, GripVertical, LayoutTemplate, Minus, Plus, Trash2, X,
+  Check, ChevronLeft, ChevronRight, Copy, CopyPlus, GripVertical, LayoutTemplate, Minus, Plus, Trash2, X,
   type LucideIcon,
 } from "lucide-react";
 import "./esign.css";
 import {
   activeSignerIds, appendEvent, computeCertificateId, envelopeStatusAfterSign,
-  esignId, fieldDefaultSize, FIELD_TYPE_LABEL, isEsignSnapshot, isFieldFilled,
+  esignId, fieldDefaultSize, FIELD_TYPE_LABEL, FIELD_FORMAT_LABEL, fieldFormatError,
+  isEsignSnapshot, isFieldFilled,
   seedEnvelope, SIGNER_COLOR_COUNT, ESIGN_SEED_STATES,
   type ESignConfig, type EsignEnvelope, type EsignField, type EsignFieldType,
-  type EsignFieldValue, type EsignSeedState, type EsignSendRequest, type EsignSignatureValue, type EsignSigner,
+  type EsignFieldFormat, type EsignFieldValue, type EsignSeedState, type EsignSendRequest, type EsignSignatureValue, type EsignSigner,
 } from "./snapshot";
 import { downloadBytes, fileToEsignDocument, flattenEnvelope, openDocument, type PdfDocHandle, type PdfPageHandle } from "./pdf";
 import { initialsOf, SignatureDialog, signatureFontCss } from "./SignatureDialog";
@@ -213,6 +214,51 @@ export default function ESignSurface({
   const patchField = (id: string, patch: Partial<EsignField>) =>
     commit((cur) => ({ ...cur, fields: cur.fields.map((f) => (f.id === id ? { ...f, ...patch } : f)) }));
 
+  /** Copy a field just below the original — the fastest way to build a column
+   *  of fields without re-dragging each one from the palette. */
+  const duplicateField = (id: string) => {
+    const src = envRef.current.fields.find((f) => f.id === id);
+    if (!src) return;
+    const copy: EsignField = {
+      ...src,
+      id: esignId(),
+      value: undefined,
+      y: clamp(src.y + src.h + 0.012, 0, 1 - src.h),
+    };
+    commit((cur) => appendEvent(
+      { ...cur, fields: [...cur.fields, copy] },
+      "field_added", "Owner", `${FIELD_TYPE_LABEL[src.type]} duplicated on page ${src.page + 1}`,
+    ));
+    setSelectedId(copy.id);
+  };
+
+  /** Bulk placement — the same field at the same spot on every page (initials
+   *  on each page is the standard case). Pages that already carry an identical
+   *  field for this signer are skipped, so it stays idempotent. */
+  const applyFieldToAllPages = (id: string) => {
+    const src = envRef.current.fields.find((f) => f.id === id);
+    if (!src) return;
+    const same = (f: EsignField, page: number) =>
+      f.page === page && f.signerId === src.signerId && f.type === src.type &&
+      Math.abs(f.x - src.x) < 0.005 && Math.abs(f.y - src.y) < 0.005;
+    const added: EsignField[] = [];
+    for (let p = 0; p < pages.length; p++) {
+      if (p === src.page) continue;
+      if (envRef.current.fields.some((f) => same(f, p))) continue;
+      added.push({ ...src, id: esignId(), page: p, value: undefined });
+    }
+    if (!added.length) {
+      setNotice("Every page already has this field.");
+      return;
+    }
+    commit((cur) => appendEvent(
+      { ...cur, fields: [...cur.fields, ...added] },
+      "field_added", "Owner",
+      `${FIELD_TYPE_LABEL[src.type]} placed on ${added.length} more page${added.length === 1 ? "" : "s"}`,
+    ));
+    setNotice(`Added to ${added.length} more page${added.length === 1 ? "" : "s"}.`);
+  };
+
   const removeField = (id: string) => {
     const f = env.fields.find((x) => x.id === id);
     commit((cur) => appendEvent(
@@ -329,12 +375,22 @@ export default function ESignSurface({
 
   const myFields = signer ? env.fields.filter((f) => f.signerId === signer.id) : [];
   const missingRequired = myFields.filter((f) => f.required && !isFieldFilled(f));
+  /** a filled field can still be WRONG — an email field holding "abc" must not
+      let the signer finish */
+  const invalidFields = myFields.filter((f) => fieldFormatError(f) !== null);
   const myDone = myFields.filter(isFieldFilled).length;
   const myProgress = myFields.length ? Math.round((myDone / myFields.length) * 100) : 0;
 
   /** reading order — the order a signer is walked through their fields */
   const inReadingOrder = (list: EsignField[]) =>
-    [...list].sort((a, b) => a.page - b.page || a.y - b.y || a.x - b.x);
+    [...list].sort((a, b) => {
+      // an explicit tab order wins; unnumbered fields keep page/top-down order
+      // and always follow the numbered ones
+      const ta = a.tabIndex ?? Infinity;
+      const tb = b.tabIndex ?? Infinity;
+      if (ta !== tb) return ta - tb;
+      return a.page - b.page || a.y - b.y || a.x - b.x;
+    });
 
   /** Bring a field into view and focus its control. The guided flow is what
    *  makes a multi-page envelope signable without hunting for pale boxes. */
@@ -392,7 +448,7 @@ export default function ESignSurface({
   };
 
   const finishSigning = async () => {
-    if (!signer || missingRequired.length > 0) return;
+    if (!signer || missingRequired.length > 0 || invalidFields.length > 0) return;
     const now = new Date().toISOString();
     let next: EsignEnvelope = {
       ...envRef.current,
@@ -599,6 +655,7 @@ export default function ESignSurface({
                       key={o} type="button" role="radio" aria-checked={env.signingOrder === o}
                       className={env.signingOrder === o ? "nxEsMiniTab isActive" : "nxEsMiniTab"}
                       disabled={!editable}
+                      data-testid={`esign-order-${o}`}
                       onClick={() => commit((cur) => ({ ...cur, signingOrder: o }))}
                     >
                       {o === "sequential" ? "In order" : "Any order"}
@@ -744,12 +801,14 @@ export default function ESignSurface({
                 </ul>
                 <button
                   type="button" className="nxEsBtn isPrimary isBlock" data-testid="esign-finish"
-                  disabled={missingRequired.length > 0}
+                  disabled={missingRequired.length > 0 || invalidFields.length > 0}
                   onClick={() => void finishSigning()}
                 >
                   {missingRequired.length > 0
                     ? `${missingRequired.length} required field${missingRequired.length === 1 ? "" : "s"} left`
-                    : "Finish signing"}
+                    : invalidFields.length > 0
+                      ? `${invalidFields.length} field${invalidFields.length === 1 ? "" : "s"} need fixing`
+                      : "Finish signing"}
                 </button>
                 <button
                   type="button" className="nxEsBtn isDanger isBlock" data-testid="esign-decline"
@@ -895,6 +954,27 @@ export default function ESignSurface({
               />
               Required
             </label>
+            {selected.type === "text" && (
+              <>
+                <label className="nxEsFieldLabel" htmlFor="es-prop-placeholder">Placeholder</label>
+                <input
+                  id="es-prop-placeholder" className="nxEsInput" value={selected.placeholder ?? ""}
+                  placeholder="Shown while the field is empty"
+                  data-testid="esign-prop-placeholder"
+                  onChange={(e) => patchField(selected.id, { placeholder: e.target.value })}
+                />
+                <label className="nxEsFieldLabel" htmlFor="es-prop-format">Accepts</label>
+                <select
+                  id="es-prop-format" className="nxEsInput" value={selected.format ?? "any"}
+                  data-testid="esign-prop-format"
+                  onChange={(e) => patchField(selected.id, { format: e.target.value as EsignFieldFormat })}
+                >
+                  {(Object.keys(FIELD_FORMAT_LABEL) as EsignFieldFormat[]).map((k) => (
+                    <option key={k} value={k}>{FIELD_FORMAT_LABEL[k]}</option>
+                  ))}
+                </select>
+              </>
+            )}
             {selected.type === "dropdown" && (
               <>
                 <label className="nxEsFieldLabel" htmlFor="es-prop-options">Options (one per line)</label>
@@ -905,7 +985,39 @@ export default function ESignSurface({
                 />
               </>
             )}
-            <button type="button" className="nxEsBtn isDanger isBlock" onClick={() => removeField(selected.id)}>Delete field</button>
+
+            <label className="nxEsFieldLabel" htmlFor="es-prop-taborder">Tab order</label>
+            <input
+              id="es-prop-taborder" className="nxEsInput" type="number" min={1}
+              placeholder="Reading order"
+              data-testid="esign-prop-taborder"
+              value={selected.tabIndex ?? ""}
+              onChange={(e) => patchField(selected.id, {
+                tabIndex: e.target.value ? Number(e.target.value) : undefined,
+              })}
+            />
+            <p className="nxEsHint">Blank follows the page order, top to bottom.</p>
+
+            <div className="nxEsPropActions">
+              <button
+                type="button" className="nxEsBtn" data-testid="esign-duplicate-field"
+                onClick={() => duplicateField(selected.id)}
+              >
+                <Copy size={13} /> Duplicate
+              </button>
+              {pages.length > 1 && (
+                <button
+                  type="button" className="nxEsBtn" data-testid="esign-apply-all-pages"
+                  title="Place a copy of this field at the same spot on every page"
+                  onClick={() => applyFieldToAllPages(selected.id)}
+                >
+                  <CopyPlus size={13} /> All pages
+                </button>
+              )}
+            </div>
+            <button type="button" className="nxEsBtn isDanger isBlock" onClick={() => removeField(selected.id)}>
+              <Trash2 size={13} /> Delete field
+            </button>
           </aside>
         )}
 
@@ -1150,6 +1262,7 @@ function FieldBox({ field: f, env, mode, selected, onSelect, onPatch, onRemove, 
 
   const filled = isFieldFilled(f);
   const label = f.label || FIELD_TYPE_LABEL[f.type];
+  const formatError = fieldFormatError(f);
 
   const fillControl = () => {
     if (mode !== "fill") return null;
@@ -1188,7 +1301,12 @@ function FieldBox({ field: f, env, mode, selected, onSelect, onPatch, onRemove, 
       case "text":
         return (
           <input
-            type="text" className="nxEsFillInput" aria-label={label} placeholder={label} data-testid={`esign-fill-${f.id}`}
+            type="text"
+            className={formatError ? "nxEsFillInput isInvalid" : "nxEsFillInput"}
+            aria-label={label} aria-invalid={!!formatError || undefined}
+            title={formatError ?? undefined}
+            placeholder={f.placeholder || label}
+            data-testid={`esign-fill-${f.id}`}
             value={f.value?.type === "text" ? f.value.text : ""}
             onChange={(e) => onFill(e.target.value ? { type: "text", text: e.target.value } : undefined)}
           />
