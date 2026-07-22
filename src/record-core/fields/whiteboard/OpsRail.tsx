@@ -142,7 +142,16 @@ export default function OpsRail({ api, config, selection, compact, templates, pe
 
   const insertTemplate = (t: ResolvedTemplate) => {
     setOpen(null);
-    const created = convertToExcalidrawElements(t.skeletons as never) as unknown as WbElement[];
+    // convertToExcalidrawElements measures free text NARROWER than excalidraw renders
+    // the hand-drawn font, so a header clips its tail ("To do" → "To dc"). Widen every
+    // free (unbound) text box to comfortably clear the render; bound labels are fine.
+    const created = (convertToExcalidrawElements(t.skeletons as never) as unknown as WbElement[]).map((e) => {
+      if (e.type !== "text" || (e as { containerId?: unknown }).containerId) return e;
+      const chars = String((e as { text?: unknown }).text ?? "").length;
+      const fs = Number((e as { fontSize?: unknown }).fontSize) || 20;
+      const w = Math.max(Number(e.width) || 0, chars * fs * 0.68 + 8);
+      return { ...e, width: w, autoResize: false };
+    });
     const b = bounds(created);
     const as = api.getAppState();
     const z = as.zoom?.value || 1;

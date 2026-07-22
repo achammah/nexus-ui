@@ -42,7 +42,16 @@ const heading = (x: number, y: number, text: string, fontSize = 28): Skeleton =>
   y,
   text,
   fontSize,
+  // explicit width — without one, convertToExcalidrawElements sizes free text too
+  // narrow for the wide hand-drawn font and clips the tail ("To do" → "To dc")
+  width: Math.max(20, text.length * fontSize * 0.62),
   strokeColor: "#1e1e1e",
+});
+
+/* free (unbound) label — an explicit width keeps the wide hand-drawn font from
+   clipping the tail (same reason as heading) */
+const freeText = (x: number, y: number, text: string, fontSize: number, color = "#1e1e1e"): Skeleton => ({
+  type: "text", x, y, text, fontSize, strokeColor: color, width: Math.max(20, text.length * fontSize * 0.62),
 });
 
 const hArrow = (x: number, y: number, w: number): Skeleton => ({
@@ -80,10 +89,10 @@ function matrix2x2(): Skeleton[] {
     { type: "line", x: 0, y: S / 2, width: S, height: 0, strokeColor: "#adb5bd", strokeWidth: 2 },
     { type: "line", x: S / 2, y: 0, width: 0, height: S, strokeColor: "#adb5bd", strokeWidth: 2 },
     heading(-4, -34, "Impact / Effort", 22),
-    { type: "text", x: 30, y: 12, text: "Quick wins", fontSize: 16, strokeColor: "#2f9e44" },
-    { type: "text", x: S / 2 + 30, y: 12, text: "Big bets", fontSize: 16, strokeColor: "#1971c2" },
-    { type: "text", x: 30, y: S - 28, text: "Fill-ins", fontSize: 16, strokeColor: "#868e96" },
-    { type: "text", x: S / 2 + 30, y: S - 28, text: "Time sinks", fontSize: 16, strokeColor: "#e03131" },
+    freeText(30, 12, "Quick wins", 16, "#2f9e44"),
+    freeText(S / 2 + 30, 12, "Big bets", 16, "#1971c2"),
+    freeText(30, S - 28, "Fill-ins", 16, "#868e96"),
+    freeText(S / 2 + 30, S - 28, "Time sinks", 16, "#e03131"),
     note(60, 70, "Idea A", BG.green, 120, 64),
     note(S / 2 + 60, 70, "Idea B", BG.blue, 120, 64),
   ];
@@ -107,7 +116,7 @@ function timeline(): Skeleton[] {
   marks.forEach((m, i) => {
     const x = 40 + i * 190;
     out.push({ type: "ellipse", x: x - 8, y: 52, width: 16, height: 16, backgroundColor: "#1971c2", fillStyle: "solid", strokeColor: "#1971c2" });
-    out.push({ type: "text", x: x - 30, y: i % 2 ? 82 : 20, text: m, fontSize: 15, strokeColor: "#1e1e1e" });
+    out.push(freeText(x - 30, i % 2 ? 82 : 20, m, 15));
   });
   return out;
 }
