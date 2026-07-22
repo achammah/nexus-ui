@@ -51,3 +51,6 @@ export * from "./blocks/mobile";
 
 /* blocks — full spreadsheet workbook (Univer) as a standalone surface (lazy engine) */
 export * from "./blocks/workbook";
+
+/* blocks — 3D object / floor-plan viewer (three.js) as a standalone surface (lazy engine) */
+export * from "./blocks/viewer3d";
