@@ -1,7 +1,7 @@
 # Presentation block (deck editor + papermark layer) — self-review
 
 **Reference products (the bar):** Google Slides / Pitch / bolt-slides for the editor; Papermark/DocSend for share + tracking.
-**Verification:** isolated chromium, `reducedMotion: "no-preference"` (real motion — J6b asserts a RUNNING animation on slide entry), 35/35 journeys green (`dev/journeys.mjs`, local harness — not committed). tsc `--noEmit` clean for the block; `vite build` clean.
+**Verification:** isolated chromium, `reducedMotion: "no-preference"` (real motion — J6b asserts a RUNNING animation on slide entry), 42/42 journeys green (`dev/journeys.mjs`, local harness — not committed). tsc `--noEmit` clean for the block; `vite build` clean.
 
 ## Per-feature verdicts (each backed by a journey + shot)
 
@@ -25,6 +25,7 @@
 | Analytics panel (time bars, reach, session list) | works | J11, `pres-analytics.png` |
 | Data rooms (group this deck + host-resolved refs) | works | J12, `pres-rooms.png` |
 | Mobile 390px (horizontal filmstrip rail, 16:9 boxes measured, no h-scroll) | works | J15, `pres-mobile-*.png` |
+| Undo / redo (document history, coalescing; ⌘Z / ⌘⇧Z / ⌘Y + toolbar) | works | J17a-g, `pres-undo-toolbar.png` — delete-slide and delete-link both restore by id |
 | a11y: roles (listbox/option, tablist, toolbar, textbox regions), labels, focus-visible ring, keyboard end-to-end | works | J16 + keyboard journeys |
 
 ## Honest gaps / seams / mocks
@@ -35,14 +36,30 @@
 4. **Rich text is deliberately small**: B/I/U/lists via `document.execCommand` (deprecated-but-universal). No font pickers, colors, or arbitrary text boxes — layouts carry the design. PPTX flattens inline runs per `<li>`.
 5. **PPTX fidelity**: text/images/notes carry over on a 13.33x7.5" layout; theme backgrounds/accent bars do not (documented in RECIPES).
 6. **PDF export needs popups allowed**; throws a clear error otherwise.
-7. **No undo stack** beyond the browser's native contentEditable undo inside a region. Structural ops (delete slide) have no undo — mitigated by host snapshot persistence (reset/reload seam) but a real gap vs Google Slides.
+7. **Undo granularity.** The document history covers structural ops and coalesces continuous edits (700ms window, depth 60); caret-level text history inside a focused region is still the browser's native contentEditable undo, so ⌘Z behaves slightly differently in-region vs out. Documented in RECIPES.
 8. **Presenter view** is a side panel in the same window, not a second-window presenter display.
 
 ## "Does this still feel like a toy?" (brutal pass)
 
 - The seeded deck reads like a real board deck, every layout is exercised by it, and the editor loop (select → type → bold → reorder → present) feels direct; the papermark layer has the DocSend core loop (link → gate → per-slide time → completion) actually measured, not stubbed.
-- Where it would betray itself vs Pitch: no undo for structural ops, no text boxes/free placement, no image cropping, transitions are entry-only. I judge it "credible v1 product surface, not a toy" — but per the brief, that verdict belongs to the lead + blind reviewer, not me.
+- Where it would betray itself vs Pitch: no text boxes/free placement, no image cropping, transitions are entry-only. I judge it "credible v1 product surface, not a toy" — but per the brief, that verdict belongs to the lead + blind reviewer, not me.
 
 ## Not fixed / pre-existing
 
 - `tsc` on this branch errors on `src/blocks/workbook/*` (`@univerjs/*` not in package.json) — pre-existing on main, untouched here.
+
+## Build-pass addenda (Opus pass)
+
+- **Present-mode chrome is now token-routed.** The stage stays theatre-dark in both app themes by
+  design (Slides/Pitch do the same), but every stage surface reads
+  `--nx-pres-stage-*-override` instead of a baked hex, so a host can re-skin it. Previously the only
+  chrome in the block that a consumer could not re-point.
+- **`isPresentationSnapshot`** exported as an alias of `isDeckSnapshot`, matching `isWorkbookSnapshot`
+  so host wiring reads the same across blocks.
+- **Undo/redo added** — see the row above. This closed the one true data-loss path (delete slide /
+  delete share link had no way back).
+- **Measured bundle:** eager harness bundle 182.4 kB raw / 59.3 kB gz; pptxgenjs isolated in its own
+  on-click chunk at 372.5 kB raw / 126.3 kB gz. RECIPES previously misstated the chunk as "≈400 kB gz";
+  corrected.
+- Verified this pass by me, not inherited: tsc clean (block), harness build clean, 42/42 journeys run
+  live, shots re-captured.
