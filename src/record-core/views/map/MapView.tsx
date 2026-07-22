@@ -63,7 +63,7 @@ import {
 } from "./geomath";
 import { makeGeocodeProvider, makeReverseGeocoder, type GeocodeResult } from "./geocode";
 import { makeRouter, moveStop, stopLabel, type Profile, type RouteResult } from "./routing";
-import { applyAugments, flyToPoint, viewportRing, zoomAroundPoint } from "./camera";
+import { applyAugments, applySky, flyToPoint, viewportRing, zoomAroundPoint } from "./camera";
 import { spiderfyLayout, type SpiderOffset } from "./spiderfy";
 import { DrawTools, LayersPanel, Legend, MapSearch, MapTypeMenu, ReadoutChips, type SearchHit } from "./overlays";
 import { MapContextMenu, type ContextItem } from "./ContextMenu";
@@ -88,6 +88,7 @@ const SOURCE_ID = "map-records";
 const HEAT_ID = "map-heat";
 const DRAW_ID = "map-draw";
 const DOM_MARKER_CAP = 400; // above this, un-clustered points render on the GPU
+const DECLUTTER_ZOOM = 9; // below this zoom, a dense un-clustered set also goes GPU (no teardrop wall)
 const CLUSTER_MAX_ZOOM = 14;
 
 type Shape =
@@ -136,8 +137,17 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   const mode = renderMode(opts, viewState, visibleLocated.length);
   const clusRadius = clusterRadius(opts, viewState);
   const clusterRender = mode.clusters;
-  const domRender = mode.points && !clusterRender && visibleLocated.length <= DOM_MARKER_CAP;
-  const glPointRender = mode.points && !clusterRender && visibleLocated.length > DOM_MARKER_CAP;
+  /* declutter guard: even with clustering toggled off, a dense set on a wide
+     (zoomed-out) frame renders as compact GPU dots — DOM teardrops only when
+     the count is modest or the camera is close enough for pins to separate */
+  const [zoomAttr, setZoomAttr] = React.useState<string>("");
+  const [pitchAttr, setPitchAttr] = React.useState(0);
+  const zoomNow = zoomAttr ? Number.parseFloat(zoomAttr) : NaN;
+  const denseWide =
+    visibleLocated.length > DOM_MARKER_CAP ||
+    (visibleLocated.length > opts.clustering.threshold && !(zoomNow >= DECLUTTER_ZOOM));
+  const domRender = mode.points && !clusterRender && !denseWide;
+  const glPointRender = mode.points && !clusterRender && denseWide;
   const dataMode = clusterRender ? "cluster" : domRender ? "markers" : glPointRender ? "points" : mode.heatmap ? "heatmap" : "hidden";
 
   /* ── GL paint literals — token-resolved, live on theme/skin flips ── */
@@ -292,6 +302,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     } catch {
       /* projection unsupported on this build — stays mercator */
     }
+    applySky(m, projection === "globe", darkBasemap);
   };
   const applyAll = React.useCallback(() => {
     const map = mapRef.current?.getMap();
@@ -309,28 +320,36 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       } catch {
         /* ignore */
       }
+      applySky(map, projection === "globe", darkBasemap);
     }
-  }, [projection, ready]);
+  }, [projection, ready, darkBasemap]);
 
-  /* projection presets: flat mercator · globe · earth (globe + satellite imagery + tilt) */
-  const earthBase: BasemapId = opts.basemaps.includes("satellite") ? "satellite" : opts.basemaps.includes("hybrid") ? "hybrid" : basemap;
-  const projectionMode: "flat" | "globe" | "earth" =
-    projection === "flat" ? "flat" : basemap === "satellite" || basemap === "hybrid" ? "earth" : "globe";
-  const setProjectionMode = React.useCallback(
-    (mode: "flat" | "globe" | "earth") => {
-      if (mode === "flat") {
-        onViewState({ mapProjection: "flat" });
-      } else if (mode === "globe") {
-        onViewState({ mapProjection: "globe" });
-      } else {
-        setTileWarn(null);
-        if (!reduceMotion && basemap !== earthBase) setSwitching(true);
-        onViewState({ mapProjection: "globe", mapBasemap: earthBase });
-        mapRef.current?.getMap().easeTo({ pitch: 55, duration: reduceMotion ? 0 : 800, essential: true });
-      }
-    },
-    [onViewState, reduceMotion, basemap, earthBase],
+  /* ── projection ⟂ basemap: two orthogonal axes on ONE merged map view ──
+     Projection (flat|globe) is a live toggle that changes ONLY the projection —
+     viewport, markers, route, filters and the chosen style all carry across, so
+     it never reads as navigating to a different feature. Any of the 6 styles
+     renders under either projection. "Earth" is a named PRESET over these axes,
+     not a third mode. */
+  const setProjection = React.useCallback(
+    (mode: "flat" | "globe") => onViewState({ mapProjection: mode }),
+    [onViewState],
   );
+  const earthBase: BasemapId = opts.basemaps.includes("satellite") ? "satellite" : opts.basemaps.includes("hybrid") ? "hybrid" : basemap;
+  // the preset reads as "on" when the live state already matches it (globe + an
+  // imagery base + a meaningful tilt) — so it lights up whether reached via the
+  // chip or by composing the axes by hand
+  const earthActive = projection === "globe" && (basemap === "satellite" || basemap === "hybrid") && pitchAttr > 20;
+  const applyEarthPreset = React.useCallback(() => {
+    setTileWarn(null);
+    if (!reduceMotion && basemap !== earthBase) setSwitching(true);
+    // compose the axes: globe projection + imagery style, viewport preserved
+    onViewState({ mapProjection: "globe", mapBasemap: earthBase });
+    // one coherent move: pull back so the curvature + atmosphere read, tilt toward
+    // the horizon — the Google-Earth entry pose (camera only; markers/route stay)
+    const m = mapRef.current?.getMap();
+    if (m) m.easeTo({ zoom: Math.min(m.getZoom(), 4.6), pitch: 55, duration: reduceMotion ? 0 : 1100, essential: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onViewState, reduceMotion, basemap, earthBase]);
 
   /* ── basemap crossfade — a soft blur + opacity dip on the canvas while the new
      style loads (switching state declared above), so a switch morphs, not flips ── */
@@ -417,8 +436,6 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
 
   /* ── GL state mirrored onto data-attrs (canvas isn't DOM) ── */
   const [clusterCount, setClusterCount] = React.useState(0);
-  const [zoomAttr, setZoomAttr] = React.useState<string>("");
-  const [pitchAttr, setPitchAttr] = React.useState(0);
   const [bearingAttr, setBearingAttr] = React.useState(0);
   const [overview, setOverview] = React.useState<{ center: { lng: number; lat: number }; zoom: number; ring: LngLat[] } | null>(null);
   const syncGlState = React.useCallback((map: MaplibreMap) => {
@@ -1158,8 +1175,10 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
             buildings3d={buildings3d}
             hillshade={hillshade}
             vectorActive={vectorActive}
-            projectionMode={projectionMode}
-            onProjection={setProjectionMode}
+            projection={projection}
+            onProjection={setProjection}
+            earthActive={earthActive}
+            onEarthPreset={applyEarthPreset}
             onToggleBuildings={(on) => onViewState({ mapBuildings3d: on })}
             onToggleHillshade={(on) => onViewState({ mapHillshade: on })}
           />

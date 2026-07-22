@@ -114,6 +114,30 @@ export function applyAugments(map: MaplibreMap, a: Augments): void {
   applyRelief(map, a);
 }
 
+/* atmosphere halo for the globe projections — the sky/space gradient + the thin
+   atmosphere rim are what make Globe and Earth read as one planetary mode instead
+   of a flat style with curvature bolted on. Idempotent; a no-op sky when flat. */
+export function applySky(map: MaplibreMap, globe: boolean, dark: boolean): void {
+  try {
+    if (!globe) {
+      map.setSky({ "atmosphere-blend": 0 });
+      return;
+    }
+    map.setSky({
+      "sky-color": dark ? "#0b1026" : "#7fb8e6",
+      "horizon-color": dark ? "#1c2b4a" : "#d9ecfa",
+      "fog-color": dark ? "#10182e" : "#f2f8fd",
+      "sky-horizon-blend": 0.6,
+      "horizon-fog-blend": 0.6,
+      "fog-ground-blend": 0.85,
+      // full halo when the planet is in frame, fading out as the camera closes in
+      "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 1, 6, 1, 9, 0.1] as unknown as number,
+    });
+  } catch {
+    /* sky unsupported on this build — globe still renders, just without the halo */
+  }
+}
+
 function apply3dBuildings(map: MaplibreMap, on: boolean, color: string): void {
   const has = !!map.getLayer(BUILDINGS_LAYER);
   const src = on ? buildingSource(map) : null;

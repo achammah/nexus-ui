@@ -39,8 +39,10 @@ export function MapTypeMenu({
   buildings3d,
   hillshade,
   vectorActive,
-  projectionMode,
+  projection,
   onProjection,
+  earthActive,
+  onEarthPreset,
   onToggleBuildings,
   onToggleHillshade,
 }: {
@@ -52,8 +54,10 @@ export function MapTypeMenu({
   buildings3d: boolean;
   hillshade: boolean;
   vectorActive: boolean;
-  projectionMode: "flat" | "globe" | "earth";
-  onProjection: (mode: "flat" | "globe" | "earth") => void;
+  projection: "flat" | "globe";
+  onProjection: (mode: "flat" | "globe") => void;
+  earthActive: boolean;
+  onEarthPreset: () => void;
   onToggleBuildings: (on: boolean) => void;
   onToggleHillshade: (on: boolean) => void;
 }) {
@@ -89,26 +93,43 @@ export function MapTypeMenu({
           data-testid="map-type-panel"
           onKeyDown={(e) => e.key === "Escape" && onOpenChange(false)}
         >
-          <div className="nxMapProjRow" role="tablist" aria-label="Projection">
-            {([
-              ["flat", "Flat", <MapIcon key="f" size={13} />],
-              ["globe", "Globe", <Globe key="g" size={13} />],
-              ["earth", "Earth", <Globe2 key="e" size={13} />],
-            ] as const).map(([m, label, icon]) => (
-              <button
-                key={m}
-                type="button"
-                role="tab"
-                aria-selected={projectionMode === m}
-                className="nxMapProjBtn"
-                data-active={projectionMode === m || undefined}
-                data-testid={`map-proj-${m}`}
-                onClick={() => onProjection(m)}
-              >
-                {icon}
-                <span>{label}</span>
-              </button>
-            ))}
+          {/* Projection (flat|globe) and basemap STYLE are orthogonal axes: any
+             style renders under either projection. "Earth" is a named PRESET over
+             those axes (globe + satellite + tilt), offered as a one-tap chip — not
+             a third exclusive projection. */}
+          <div className="nxMapProjRow">
+            <div className="nxMapProjTabs" role="tablist" aria-label="Projection">
+              {([
+                ["flat", "Flat", <MapIcon key="f" size={13} />],
+                ["globe", "Globe", <Globe key="g" size={13} />],
+              ] as const).map(([m, label, icon]) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="tab"
+                  aria-selected={projection === m}
+                  className="nxMapProjBtn"
+                  data-active={projection === m || undefined}
+                  data-testid={`map-proj-${m}`}
+                  onClick={() => onProjection(m)}
+                >
+                  {icon}
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="nxMapProjBtn nxMapProjPreset"
+              aria-pressed={earthActive}
+              data-active={earthActive || undefined}
+              data-testid="map-proj-earth"
+              onClick={onEarthPreset}
+              title="Earth preset — globe view with satellite imagery and tilt"
+            >
+              <Globe2 size={13} />
+              <span>Earth</span>
+            </button>
           </div>
           <div className="nxMapTypeGrid">
             {offered.map((id) => (
