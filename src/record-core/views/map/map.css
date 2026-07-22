@@ -1018,3 +1018,15 @@
 .nxMapRouteOption[data-active] strong { color: var(--nx-accent); }
 .nxMapRouteOptionTag { text-transform: uppercase; letter-spacing: 0.04em; color: var(--nx-fg-faint); }
 @media (max-width: 768px) { .nxMapRouteOption { min-height: 44px; } }
+
+@media (max-width: 768px) {
+  /* Route options must be reachable one-handed at the PEEK and HALF snaps, so
+     they are pinned into the always-visible region right under the peek bar
+     (flex `order` reshuffles them above the header without touching desktop,
+     where the grip and peek bar are display:none). */
+  .nxMapSheetGrip { order: -3; }
+  .nxMapSheetPeek { order: -2; }
+  .nxMapRouteOptions { order: -1; flex: none; }
+  /* peek grows just enough to hold the options when the engine offered some */
+  .nxMapItinerary[data-snap="peek"][data-hasalts] { height: 196px; }
+}

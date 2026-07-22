@@ -267,7 +267,7 @@ export function ItineraryPanel({
   const cycleSnap = () => setSnap((c) => ORDER[(ORDER.indexOf(c) + 1) % ORDER.length]);
 
   return (
-    <div className="nxMapItinerary" role="region" aria-label="Directions" data-testid="map-itinerary" data-snap={snap}>
+    <div className="nxMapItinerary" role="region" aria-label="Directions" data-testid="map-itinerary" data-snap={snap} data-hasalts={options.length > 1 || undefined}>
       <div
         className="nxMapSheetGrip"
         data-testid="map-sheet-grip"

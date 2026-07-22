@@ -896,6 +896,15 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       }
       // feature click (cluster expand/spiderfy · point → popup or route stop)
       const feature = e.features?.[0];
+      // tapping a dimmed alternative on the map selects it
+      const altHit = e.features?.find((f) => String(f.layer?.id ?? "").startsWith("map-route-alt-line-"));
+      if (altHit) {
+        const i = Number(String(altHit.layer.id).replace("map-route-alt-line-", ""));
+        if (Number.isFinite(i)) {
+          setRouteChoice(i);
+          return;
+        }
+      }
       if (!feature) {
         if (pickingStop) {
           addStop(stopFromCoord(pt[0], pt[1]), "end");
@@ -1059,7 +1068,14 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       ? "Click the map to place a new record"
       : undefined;
 
-  const interactiveLayerIds = clusterRender ? ["map-clusters", "map-point"] : glPointRender ? ["map-point-plain"] : undefined;
+  /* the dimmed alternative routes are clickable on the MAP too, not only in the
+     panel — tapping a greyed line switches to it, as Google does */
+  const altLayerIds = React.useMemo(
+    () => routeOptions.map((_, i) => `map-route-alt-line-${i}`).filter((_, i) => i !== routeChoice),
+    [routeOptions, routeChoice],
+  );
+  const baseInteractive = clusterRender ? ["map-clusters", "map-point"] : glPointRender ? ["map-point-plain"] : [];
+  const interactiveLayerIds = [...baseInteractive, ...altLayerIds];
 
   /* context-menu placement: flip toward the interior near an edge */
   const ctxStyle = React.useMemo<React.CSSProperties>(() => {
