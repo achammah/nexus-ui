@@ -3,8 +3,16 @@
 /* Frame continuity: the workspace paints NO surface of its own — it inherits the host's
    background so an embedded mount reads as one continuous page, not a bordered widget
    sitting inside the app shell. Standalone hosts sit on --nx-bg, so this is identical there. */
-.nxWs { display: flex; height: 100%; min-height: 0; background: transparent; color: var(--nx-fg); font-family: var(--nx-font-sans); }
-.nxWs-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+/* SELF-BOUND to the viewport. height:100% only bounds a scroll container when the PARENT is
+   height-bounded — but a host's content area often grows to content (unbounded), so height:100%
+   resolves to content height and NOTHING scrolls (the outline then moves nothing). max-height
+   establishes a bound that does NOT depend on the parent: the surface is at most one viewport
+   tall, so .nxDoc-main always forms a real scroll container. A host with chrome above the mount
+   (a topbar) sets --nx-doc-inset to its height for an exact fit; default 0 self-bounds to the
+   full viewport. In a already-bounded parent (a flex harness), height:100% wins and max-height
+   is a harmless ceiling. */
+.nxWs { display: flex; height: 100%; min-height: 0; max-height: calc(100dvh - var(--nx-doc-inset, 0px)); background: transparent; color: var(--nx-fg); font-family: var(--nx-font-sans); }
+.nxWs-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .nxWs-blank { margin: auto; text-align: center; color: var(--nx-fg-muted); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .nxWs-blank button { border: 1px solid var(--nx-border); background: var(--nx-bg); color: var(--nx-fg); border-radius: var(--nx-radius-s); padding: 7px 14px; cursor: pointer; font: var(--nx-text-body); }
 

@@ -2,7 +2,10 @@
    carries its own styles (NotionEditor's inline <style>); this dresses the page shell. */
 
 /* transparent so an embedded mount inherits the host surface — see page-workspace.css */
-.nxDoc { display: flex; flex-direction: column; height: 100%; min-height: 0; background: transparent; color: var(--nx-fg); font-family: var(--nx-font-sans); }
+/* self-bound to the viewport so a scroll container forms even when the host's content area is
+   NOT height-bounded (see page-workspace.css .nxWs) — a standalone DocumentSurface mount roots
+   here; --nx-doc-inset (default 0) lets a host with a topbar tune the exact fit. */
+.nxDoc { display: flex; flex-direction: column; height: 100%; min-height: 0; max-height: calc(100dvh - var(--nx-doc-inset, 0px)); background: transparent; color: var(--nx-fg); font-family: var(--nx-font-sans); }
 
 /* the ONE header row: host breadcrumbs (or the doc title) left, controls right */
 .nxDoc-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--nx-gap-3); padding: 6px 14px; border-bottom: 1px solid var(--nx-border); background: var(--nx-bg); position: sticky; top: 0; z-index: 20; min-height: 42px; }
@@ -43,7 +46,7 @@
 
 /* body */
 .nxDoc-body { display: flex; flex: 1; min-height: 0; }
-.nxDoc-main { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; }
+.nxDoc-main { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 /* the trailing runway lets the LAST heading still scroll to the fold line — without it an
    outline click on a late section cannot land (the container is already at its scroll end)
    and the jump reads as "stuck". */
