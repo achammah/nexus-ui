@@ -159,3 +159,37 @@ overlay; drawer starts closed below 820px). Delete leaves the in-flow touch hand
 
 **Not started:** P1/P2 (equation, columns, media, bookmark, embed, TOC block, templates,
 print) — awaiting the explicit go.
+
+---
+
+## Polish pass — Phase 1 (resumed session, per-item status)
+
+Verdicts are my own read; a blind reviewer + the lead decide. Everything below exercised live in the vite harness (desktop 1440 light/dark, mobile 390/430) with `reducedMotion: no-preference`.
+
+### 1. Outline scroll — RE-VERIFIED FIXED (was flagged as a possible real clip bug)
+Empirically settled the lead's open question with the long-doc harness (8 sections × 6 paragraphs):
+- A real scroll container **forms**: `.nxDoc-main` scrollHeight 6155 > clientHeight 774. The page itself does **not** overflow (`documentElement.scrollHeight === innerHeight === 900`) — that is the *correct* signature (the inner element scrolls, not the document), not the clip the earlier short-seed measurement suggested.
+- Clicking the last outline item (Section 8) drove `.nxDoc-main.scrollTop` to 4553; the heading landed at exactly `FOLD=24px` from the container top; the active highlight tracked to it; trailing runway (maxScroll 5381) lets late headings reach the fold.
+- `scrollParentOf()` resolves the real scrollable ancestor from the live DOM at use time; the active-section listener is a single capture-phase document listener (hears whichever element scrolls). So it holds when embedded in a host that owns the scroll. Verdict: ✅ genuinely fixed, not a short-seed artifact.
+
+### 4. Emoji / cover picker per page — DONE
+Searchable emoji grid (categories, recents, random, remove) + **custom image upload as icon**, CSP-safe (bundled/generated/uploaded, no external host). Native `--nx-*` styling; touch renders as a sheet. `IconPicker`/`CoverPicker`/`PageIcon` + `emoji-data`. Shots 12-15.
+
+### 5. Full mobile docs — DONE
+Tree → drawer with scrim, touch editor/toolbar/slash, outline as a bottom sheet, sub-page nav + breadcrumb-back, touch pickers, no h-scroll. Verified 390 **and** 430 portrait, both themes. Shots `mobile-390-*`, `mobile-430-*`.
+
+### 6. Composability — DONE
+`WorkspaceConfig` makes every structural element a toggle + four named presets (wiki / single-doc / library / review); explicit flags override the preset; surface degrades coherently. `tree:"table"` = a record-table library view (`PageTable`) reusing the DataTable idiom — a pure config swap. Documented in `docs/RECIPES.md`. Verified live per preset (structure probes below) + light/dark shots 16-18.
+
+| Preset | tree | table | crumbs | ⌘K | backlinks | outline | cover |
+|---|---|---|---|---|---|---|---|
+| wiki | ✓ | — | ✓ | ✓ | ✓ | ✓ | ✓ |
+| single-doc | — | — | — | — | — | ✓ | ✓ |
+| library | — | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| review | ✓ | — | ✓ | ✓ | ✓ | ✓ | — |
+
+Explicit `outline:false` / `backlinks:false` overrides confirmed to win over the preset.
+
+**Not in this pass:** items 2-3 (Notion controls, embedded chrome) were completed + committed in the prior session (commit 39a8c2d, sections above). `suggestions`/`comments` toggles are deferred to Phase 2 when those features exist (no dead knobs shipped).
+
+**tsc:** my lane (`blocks/document`, `record-core`) is clean. Pre-existing `blocks/workbook` errors are missing `@univerjs/*` deps — a different lane's concern, untouched by me.
