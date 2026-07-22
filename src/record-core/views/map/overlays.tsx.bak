@@ -13,7 +13,6 @@ import {
   Mountain,
   Globe,
   Globe2,
-  ChevronDown,
 } from "lucide-react";
 import { Button } from "../../../primitives/Button";
 import { Checkbox, Input } from "../../../primitives/fields";

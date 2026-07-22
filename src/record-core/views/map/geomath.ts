@@ -101,12 +101,26 @@ export function formatDistance(m: number): string {
   return `${nf(m / 1000, 1)} km`;
 }
 
-/* human area: m² under 0.1 km², km² above (2 decimals) */
+/* human area, auto-scaled to the unit a surveyor would use at that magnitude:
+   m² up to a hectare-ish parcel, HECTARES up to a square kilometre, km² above. */
 export function formatArea(m2: number): string {
   if (!Number.isFinite(m2)) return "—";
-  if (m2 < 100_000) return `${nf(Math.round(m2))} m²`;
+  if (m2 < 10_000) return `${nf(Math.round(m2))} m²`;
+  if (m2 < 1_000_000) return `${nf(m2 / 10_000, 2)} ha`;
   return `${nf(m2 / 1_000_000, 2)} km²`;
 }
+
+/* the raw square metres, for a secondary "(N m²)" reading beside the scaled unit */
+export function formatAreaRaw(m2: number): string {
+  return Number.isFinite(m2) ? `${nf(Math.round(m2))} m²` : "—";
+}
+
+/* perimeter of a closed ring, metres (the ring auto-closes) */
+export function ringPerimeter(ring: LngLat[]): number {
+  if (ring.length < 2) return 0;
+  return pathLength([...ring, ring[0]]);
+}
+
 
 /* human duration from seconds: "12 min" / "1 h 20 min" */
 export function formatDuration(s: number): string {
