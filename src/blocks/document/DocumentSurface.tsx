@@ -8,7 +8,7 @@ import { seedDocument, coverBackground, isPresetCover, type DocumentSnapshot } f
 import { PageIcon } from "../../record-core/PageIcon";
 import { IconPicker } from "./IconPicker";
 import { CoverPicker } from "./CoverPicker";
-import { PanelRight, Search, Download, Upload, FileText, FileCode, FileType, Image as ImageIcon, ChevronDown, X, Maximize2, Minimize2, Replace, ListTree, Check, PenLine, MessageSquareText } from "lucide-react";
+import { PanelRight, Search, Download, Upload, FileText, FileCode, FileType, Image as ImageIcon, ChevronDown, X, Maximize2, Minimize2, Replace, ListTree, Check, PenLine, MessageSquareText, SmilePlus } from "lucide-react";
 import "./document.css";
 
 /* DocumentSurface — a Notion×Google-Docs document as a standalone surface. Free-surface:
@@ -390,7 +390,9 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
                     <button className="nxDoc-icon" data-testid="doc-icon" disabled={readOnly}
                       onClick={() => { if (!readOnly) setIconOpen((v) => !v); }}
                       title={snap.icon ? "Change icon" : "Add an icon"}>
-                      {snap.icon ? <PageIcon icon={snap.icon} size={46} /> : "＋"}
+                      {/* the empty state is a real icon from the app's set, not a "＋" glyph —
+                          a text character as a UI control renders differently per platform */}
+                      {snap.icon ? <PageIcon icon={snap.icon} size={46} /> : <SmilePlus size={26} />}
                     </button>
                     {iconOpen && !readOnly && (
                       <IconPicker value={snap.icon} sheet={touch}

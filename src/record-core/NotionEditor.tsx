@@ -1,6 +1,6 @@
 import * as React from "react";
 import { PageIcon } from "./PageIcon";
-import { GripVertical, Plus, Trash2, ArrowUp, ArrowDown, ImagePlus, Table as TableIcon, Type, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Minus, X, CheckSquare, Check, ChevronRight, Code2, Lightbulb, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code as CodeInline, Link2, Highlighter, Baseline, Copy, FileText, ChevronRight as PageArrow } from "lucide-react";
+import { GripVertical, Plus, Trash2, ArrowUp, ArrowDown, ImagePlus, Table as TableIcon, Type, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Minus, X, CheckSquare, Check, ChevronRight, ChevronDown, Code2, Lightbulb, Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code as CodeInline, Link2, Highlighter, Baseline, Copy, FileText, ChevronRight as PageArrow } from "lucide-react";
 
 /* record-core — a Notion-grade block editor, the `richText` field type's editor.
    Blocks are contenteditable; "/" opens a command menu (text, headings, lists,
@@ -452,6 +452,10 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
   const [grabId, setGrabId] = React.useState<string | null>(null);
   // the touch block-actions menu (there is no hover on touch to reveal the handle rail)
   const [blockMenu, setBlockMenu] = React.useState<string | null>(null);
+  /* the code block's language picker — a first-party popover, never a native <select>.
+     Positioned FIXED from the trigger's rect (like the slash menu): the code block sets
+     overflow:hidden to clip its rounded body, which would otherwise cut the menu off. */
+  const [langMenu, setLangMenu] = React.useState<{ id: string; x: number; y: number } | null>(null);
   const pendingChanges = React.useMemo(() => (changes || []).filter((c) => c.status === "pending"), [changes]);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const dragRef = React.useRef(drag); dragRef.current = drag; // latest drag for window pointer listeners (touch)
@@ -777,6 +781,14 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
 
   // leaving the block ends the tracked edit; the change already lives in the model
   React.useEffect(() => { if (!suggesting) sEdit.current = null; }, [suggesting]);
+
+  // the language popover closes on any outside interaction, like the editor's other menus
+  React.useEffect(() => {
+    if (!langMenu) return;
+    const close = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest?.(".ne-code-langwrap")) setLangMenu(null); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [langMenu]);
 
   // anchor the slash menu to the caret (the "/"), and keep it inside the viewport
   function caretAnchor(blockId: string) {
@@ -1314,10 +1326,48 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
             {handle}
             <div className="ne-code">
               <div className="ne-code-head" contentEditable={false}>
-                <select className="ne-code-lang" value={b.lang || "plain"} disabled={readOnly} aria-label="Code language"
-                  onChange={(e) => setCodeLang(b.id, e.target.value)}>
-                  {CODE_LANGS.map((l) => <option key={l} value={l}>{l}</option>)}
-                </select>
+                {/* language picker — the editor's own popover grammar (same as the slash menu),
+                    not a native <select>: an OS dropdown is the one control that reads as a
+                    bolted-on browser widget instead of part of the product. */}
+                <div className="ne-code-langwrap">
+                  <button className="ne-code-lang" disabled={readOnly} data-testid={`code-lang-${b.id}`}
+                    aria-haspopup="listbox" aria-expanded={langMenu?.id === b.id} aria-label={`Code language: ${b.lang || "plain"}`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      if (readOnly) return;
+                      if (langMenu?.id === b.id) { setLangMenu(null); return; }
+                      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      // flip above when there is no room below (the menu is ~260px tall at most)
+                      const below = window.innerHeight - r.bottom;
+                      setLangMenu({ id: b.id, x: r.left, y: below < 240 ? r.top - Math.min(240, CODE_LANGS.length * 27 + 30) - 5 : r.bottom + 5 });
+                    }}>
+                    {b.lang || "plain"}<ChevronDown size={11} />
+                  </button>
+                  {langMenu?.id === b.id && !readOnly && (
+                    <div className="ne-langmenu" role="listbox" data-testid="code-lang-menu" tabIndex={-1}
+                      style={{ left: langMenu.x, top: langMenu.y }}
+                      onKeyDown={(e) => {
+                        const items = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("[role=option]"));
+                        const at = items.indexOf(document.activeElement as HTMLButtonElement);
+                        if (e.key === "Escape") { e.preventDefault(); setLangMenu(null); elRefs.current[b.id]?.focus?.(); }
+                        else if (e.key === "ArrowDown") { e.preventDefault(); items[Math.min(at + 1, items.length - 1)]?.focus(); }
+                        else if (e.key === "ArrowUp") { e.preventDefault(); items[Math.max(at - 1, 0)]?.focus(); }
+                      }}>
+                      <div className="ne-menu-h">Language</div>
+                      {CODE_LANGS.map((l) => {
+                        const on = (b.lang || "plain") === l;
+                        return (
+                          <button key={l} role="option" aria-selected={on} data-testid={`code-lang-opt-${l}`}
+                            className={`ne-langmenu-i${on ? " is-sel" : ""}`}
+                            ref={on ? (el) => el?.focus() : undefined}
+                            onClick={() => { setCodeLang(b.id, l); setLangMenu(null); }}>
+                            <span className="ne-langmenu-tick">{on && <Check size={12} />}</span>{l}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
                 {!readOnly && <button className="ne-code-copy" title="Copy code" onMouseDown={(e) => { e.preventDefault(); try { navigator.clipboard?.writeText(b.text); } catch { /* noop */ } }}><Copy size={12.5} /></button>}
               </div>
               <pre className="ne-code-body" contentEditable={!readOnly} suppressContentEditableWarning spellCheck={false}
@@ -1364,13 +1414,15 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
         if (b.type === "page") {
           const info = pageContext?.resolve(b.pageId);
           const title = info?.title || b.title || "Untitled";
-          const icon = info?.icon || b.icon || "📄";
+          // no raw-emoji fallback: a page without an icon falls back to the app's own icon set
+          // (the same PageIcon + FileText pairing the tree, switcher and backlinks already use)
+          const icon = info?.icon || b.icon;
           return (
             <div key={b.id} className={rowCls(" ne-page-row")} {...rowProps}>
               {handle}
               <button className="ne-page-block" data-testid={`pageblock-${b.pageId}`} disabled={!pageContext}
                 onClick={() => pageContext?.onOpenPage(b.pageId)} title={`Open ${title}`}>
-                <span className="ne-page-ic"><PageIcon icon={icon} size={17} /></span>
+                <span className="ne-page-ic"><PageIcon icon={icon} size={17} fallback={<FileText size={15} />} /></span>
                 <span className="ne-page-title">{title}</span>
                 <PageArrow size={15} className="ne-page-arrow" />
               </button>
@@ -1416,7 +1468,7 @@ export function NotionEditor({ blocks, onChange, readOnly, changes, hoveredChang
               ref={i === pageMenu.sel ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
               onMouseEnter={() => setPageMenu({ ...pageMenu, sel: i })}
               onMouseDown={(e) => { e.preventDefault(); chooseFromPageMenu(pageMenu.blockId, r); }}>
-              <span className="ne-menu-ic">{r.icon || "📄"}</span>
+              <span className="ne-menu-ic"><PageIcon icon={r.icon} size={17} fallback={<FileText size={15} />} /></span>
               <span className="ne-menu-tx"><b>{r.title || "Untitled"}</b></span>
             </button>
           ))}
@@ -1611,7 +1663,23 @@ const NE_CSS = `
 /* ==== code block ==== */
 .ne-code{flex:1;margin:8px 0;border:1px solid var(--nx-border);border-radius:var(--nx-radius-m);overflow:hidden;background:var(--nx-bg-sunken)}
 .ne-code-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 7px 5px 9px;border-bottom:1px solid var(--nx-border);background:var(--nx-bg)}
-.ne-code-lang{font-family:var(--nx-font-mono);font-size:11px;color:var(--nx-fg-muted);background:var(--nx-bg);border:1px solid var(--nx-border);border-radius:5px;padding:2px 6px;cursor:pointer}
+/* language picker: a first-party trigger + popover (never a native <select>, whose OS chrome
+   is the one thing in the editor that reads as an embedded browser widget) */
+.ne-code-langwrap{position:relative;flex:none}
+.ne-code-lang{display:inline-flex;align-items:center;gap:4px;font-family:var(--nx-font-mono);font-size:11px;color:var(--nx-fg-muted);background:var(--nx-bg);border:1px solid var(--nx-border);border-radius:5px;padding:2px 5px 2px 7px;cursor:pointer;transition:background var(--nx-t-fast) var(--nx-ease),color var(--nx-t-fast) var(--nx-ease),border-color var(--nx-t-fast) var(--nx-ease)}
+.ne-code-lang:hover:not(:disabled){background:var(--nx-bg-sunken);color:var(--nx-fg);border-color:var(--nx-border-strong,var(--nx-border))}
+.ne-code-lang[aria-expanded="true"]{background:var(--nx-accent-soft);color:var(--nx-accent);border-color:var(--nx-accent)}
+.ne-code-lang:disabled{cursor:default;opacity:.6}
+.ne-code-lang svg{opacity:.7}
+.ne-langmenu{position:fixed;z-index:50;min-width:150px;max-height:260px;overflow-y:auto;padding:4px;
+  background:var(--nx-bg);border:1px solid var(--nx-border);border-radius:var(--nx-radius-m);box-shadow:var(--nx-shadow-2);
+  animation:neMenuIn var(--nx-t-fast) var(--nx-ease-settle)}
+.ne-langmenu-i{display:flex;align-items:center;gap:7px;width:100%;border:0;background:none;padding:6px 8px;border-radius:6px;cursor:pointer;text-align:left;
+  font-family:var(--nx-font-mono);font-size:12px;color:var(--nx-fg);transition:background var(--nx-t-fast) var(--nx-ease)}
+.ne-langmenu-i:hover,.ne-langmenu-i:focus-visible{background:var(--nx-bg-sunken);outline:none}
+.ne-langmenu-i.is-sel{color:var(--nx-accent);font-weight:600}
+.ne-langmenu-i.is-sel:hover,.ne-langmenu-i.is-sel:focus-visible{background:var(--nx-accent-soft)}
+.ne-langmenu-tick{display:grid;place-items:center;width:13px;flex:none;color:var(--nx-accent)}
 .ne-code-copy{flex:none;display:grid;place-items:center;width:24px;height:22px;border:0;background:none;color:var(--nx-fg-faint);cursor:pointer;border-radius:5px;transition:background var(--nx-t-fast),color var(--nx-t-fast)}
 .ne-code-copy:hover{background:var(--nx-bg-sunken);color:var(--nx-fg)}
 .ne-code-body{margin:0;padding:12px 15px;font-family:var(--nx-font-mono);font-size:13px;line-height:1.62;white-space:pre;overflow-x:auto;outline:none;color:var(--nx-fg);tab-size:2;-moz-tab-size:2}
