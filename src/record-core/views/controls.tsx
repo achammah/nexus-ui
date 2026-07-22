@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowDownUp } from "lucide-react";
+import { ArrowDownUp, Rows3 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -34,7 +34,7 @@ export function GroupByMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="sm" variant="ghost" data-testid="group-by">
+        <Button size="sm" variant="secondary" icon={<Rows3 size={13} />} data-testid="group-by">
           {active ? `by ${activeDef?.label ?? active}` : "Group"}
         </Button>
       </DropdownMenuTrigger>
@@ -73,7 +73,7 @@ export function SortMenu({ object, viewConfig, viewState, onViewState }: Pick<Vi
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button size="sm" variant="ghost" icon={<ArrowDownUp size={13} />} data-testid="sort-by">
+        <Button size="sm" variant="secondary" icon={<ArrowDownUp size={13} />} data-testid="sort-by">
           {active ? `${active.label} ${dir === "asc" ? "↑" : "↓"}` : "Sort"}
         </Button>
       </DropdownMenuTrigger>

@@ -54,9 +54,6 @@ export const galleryConfigOf = (object: ObjectConfig, viewConfig: Record<string,
   return { coverField, coverFit, titleField, cardFields, minCol: MIN_COL[size], cardClick, cardFieldLabels };
 };
 
-const initialsOf = (title: string): string =>
-  title.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "?";
-
 const shownCardFields = (row: RecordRow, cardFields: FieldDef[]) =>
   cardFields
     .map((f) => ({ f, v: row[f.key] }))
@@ -123,8 +120,15 @@ function GalleryCard({
             onError={() => setBroken(true)}
           />
         ) : (
+          /* no cover → a quiet neutral surface with a muted media glyph (never
+             title initials — an avatar in a photo grid reads as a toy) */
           <span className="nxGCard-ph" style={{ height: coverH }} aria-hidden data-testid={`gcard-${row.id}-ph`}>
-            {initialsOf(title)}
+            <svg className="nxGCard-phIcon" width="26" height="26" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="9" r="1.6" />
+              <path d="m21 15-4.5-4.5L6 21" />
+            </svg>
           </span>
         ))}
       <span className={`nxGCard-body${cardFieldLabels ? "" : " nxGCard-body--dense"}`}>
@@ -154,6 +158,9 @@ export default function GalleryView({
   const { coverField, coverFit, titleField, cardFields, minCol, cardClick, cardFieldLabels } = galleryConfigOf(object, viewConfig);
   const groupKey = resolveOptionalGroupBy(object, viewConfig, viewState);
   const groupField = groupKey ? object.fields.find((f) => f.key === groupKey) : undefined;
+  // grouped → the group field is redundant on each card (every card in the section
+  // already carries that value); hide it, matching Airtable's grouped gallery
+  const effectiveCardFields = groupField ? cardFields.filter((f) => f.key !== groupField.key) : cardFields;
   const { key: sortKey, dir: sortDir } = resolveSort(object, viewConfig, viewState);
   const sortField = sortKey ? activeFields(object.fields).find((f) => f.key === sortKey) : undefined;
   const collapsed = React.useMemo(
@@ -198,7 +205,7 @@ export default function GalleryView({
           colWidth,
           coverConfigured: !!coverField,
           hasCover: !!coverUrlOf(row, coverField),
-          fieldRows: shownCardFields(row, cardFields).length,
+          fieldRows: shownCardFields(row, effectiveCardFields).length,
         }),
       );
       const layout = packColumns(heights, count, GAP);
@@ -211,7 +218,7 @@ export default function GalleryView({
       return { ...g, heights, layout, isCollapsed, yHeader, yCards, cardsH };
     });
     return { sections: secs, totalHeight: y };
-  }, [rows, sortField, sortDir, groupField, users, colWidth, count, coverField, cardFields, collapsed]);
+  }, [rows, sortField, sortDir, groupField, users, colWidth, count, coverField, effectiveCardFields, collapsed]);
 
   const toggleCollapse = (value: string) => {
     const next = new Set(collapsed);
@@ -245,7 +252,10 @@ export default function GalleryView({
               <button
                 type="button"
                 className="nxGSection"
-                style={{ translate: `0 ${s.yHeader}px`, width: "100%" }}
+                style={{
+                  translate: `0 ${s.yHeader}px`, width: "100%",
+                  ...(s.color ? ({ "--group-accent": `var(--nx-opt-${s.color})` } as React.CSSProperties) : {}),
+                }}
                 data-testid={`gsection-${s.value || "empty"}`}
                 aria-expanded={!s.isCollapsed}
                 onClick={() => toggleCollapse(s.value)}
@@ -268,7 +278,7 @@ export default function GalleryView({
                     object={object}
                     row={row}
                     titleField={titleField}
-                    cardFields={cardFields}
+                    cardFields={effectiveCardFields}
                     cardFieldLabels={cardFieldLabels}
                     coverField={coverField}
                     coverFit={coverFit}
@@ -297,7 +307,8 @@ const GALLERY_CSS = `
 .nxGWrap{position:relative;overflow-y:auto;max-height:74vh;border-radius:var(--nx-radius-m)}
 .nxGCanvas{position:relative}
 .nxGSection{position:absolute;left:0;top:0;display:flex;align-items:center;gap:8px;height:${SECTION_HEADER_H - 8}px;
-  padding:0 4px;background:none;border:0;cursor:pointer;color:var(--nx-fg);font:inherit;text-align:left}
+  padding:0 10px;background:var(--nx-bg-sunken);border:0;border-left:3px solid var(--group-accent,transparent);
+  border-radius:var(--nx-radius-s);cursor:pointer;color:var(--nx-fg);font:inherit;text-align:left}
 .nxGSection-chev{font-size:11px;color:var(--nx-fg-muted);transition:transform var(--nx-t-fast) var(--nx-ease)}
 .nxGSection-chev[data-collapsed]{transform:rotate(-90deg)}
 .nxGSection-label{font:600 13px/1 var(--nx-font-sans)}
@@ -315,9 +326,8 @@ const GALLERY_CSS = `
   font-size:12px;line-height:1;cursor:pointer;opacity:0;transition:opacity var(--nx-t-fast) var(--nx-ease)}
 .nxGCard:hover .nxGCard-sel,.nxGCard--sel .nxGCard-sel,.nxGCard-sel:focus-visible{opacity:1}
 .nxGCard-cover{width:100%;object-fit:cover;display:block;background:var(--nx-bg-sunken);flex:none}
-.nxGCard-ph{display:grid;place-items:center;flex:none;
-  background:linear-gradient(135deg,var(--nx-accent-soft),var(--nx-bg-sunken));
-  color:var(--nx-accent);font:700 22px/1 var(--nx-font-sans);letter-spacing:.04em}
+.nxGCard-ph{display:grid;place-items:center;flex:none;background:var(--nx-bg-sunken)}
+.nxGCard-phIcon{color:var(--nx-fg-faint);opacity:.5}
 .nxGCard-body{display:flex;flex-direction:column;gap:5px;padding:10px 12px;min-height:0}
 .nxGCard-body--dense{gap:6px}
 .nxGCard-title{font:600 13.5px/19px var(--nx-font-sans);letter-spacing:-.01em;color:var(--nx-fg);
