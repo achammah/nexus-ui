@@ -21,7 +21,7 @@ export type { DocumentSurfaceProps, DocumentConfig } from "./DocumentSurface";
 /* the page workspace — the linked page system (tree + nested pages + links + backlinks +
    Cmd-K) that the Pages host mounts for a kind:"document" page. value = the whole PageStore. */
 export { PageWorkspace, resolveWorkspaceConfig } from "./PageWorkspace";
-export type { PageWorkspaceProps, WorkspaceConfig, WorkspaceLayout, TreeMode } from "./PageWorkspace";
+export type { PageWorkspaceProps, WorkspaceConfig, WorkspaceLayout, TreeMode, PageIndexEntry } from "./PageWorkspace";
 export { PageTree } from "./PageTree";
 export type { PageTreeProps } from "./PageTree";
 export {

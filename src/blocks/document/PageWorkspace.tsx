@@ -20,21 +20,31 @@ import "./page-workspace.css";
    pageContext seam so sub-page blocks and [[page:]] links resolve/open/create against the
    store. This is what a Pages host mounts for a kind:"document" page. */
 
-/* Composability — a workspace configures "for any company": every structural element is a
-   toggle, and named LAYOUT PRESETS bundle them into the four shapes a Pages product ships
-   (wiki / single-doc / library / review). Explicit flags override the preset; anything left
-   undefined inherits the preset. The whole surface degrades coherently: turn the tree off and
-   the sidebar collapse control vanishes with it, drop breadcrumbs and Cmd-K moves to the tree
-   head, etc. Full surface + recipes → docs/RECIPES.md. */
+/* Composability — ONE document surface, dialable across a SPECTRUM from a simple Word-like doc
+   (with track-changes) all the way to a full Notion workspace. Every structural element is an
+   independent toggle; named LAYOUT PRESETS mark points along the range. `suggestions`
+   (track-changes) is ORTHOGONAL — available at every level, so "simple doc + suggestions" and
+   "full notion + suggestions" are both one flag away. Explicit flags override the preset;
+   anything left undefined inherits it. The surface degrades coherently (drop the tree and its
+   collapse control goes; drop breadcrumbs and ⌘K moves to the tree head). Spectrum + worked
+   examples → docs/RECIPES.md.
+
+   The preset range, minimal → maximal:
+     doc        — a single focused document. No nav chrome. (a Word-like doc)
+     review     — a single document tuned for review: fixed reading width, no cover.
+     wiki       — nested pages + tree + backlinks + ⌘K. (a knowledge base)
+     workspace  — the full Notion: everything on.
+   Plus two shape variants: library (pages as a table) and single-doc (alias of doc). */
 export type TreeMode = "sidebar" | "off" | "table";
-export type WorkspaceLayout = "wiki" | "single-doc" | "library" | "review";
+export type WorkspaceLayout = "doc" | "review" | "wiki" | "workspace" | "library" | "single-doc";
 
 export interface WorkspaceConfig {
-  preset?: WorkspaceLayout;          // named starting point (default "wiki")
+  preset?: WorkspaceLayout;          // a point on the simple→full spectrum (default "wiki")
   tree?: TreeMode;                   // page navigation: nested sidebar | none | a library table
   breadcrumbs?: boolean;             // the workspace trail
   backlinks?: boolean;               // "linked references" panel
   cmdK?: boolean;                    // ⌘K quick-switcher + its search entries
+  suggestions?: boolean;             // track-changes / suggesting mode — ORTHOGONAL, any level
   outline?: boolean;                 // per-page outline rail/sheet
   cover?: boolean;                   // per-page cover image
   icons?: boolean;                   // per-page icon/emoji
@@ -46,10 +56,13 @@ export interface WorkspaceConfig {
 
 type WsFlags = Required<Omit<WorkspaceConfig, "preset">>;
 const WORKSPACE_PRESETS: Record<WorkspaceLayout, WsFlags> = {
-  wiki:         { tree: "sidebar", breadcrumbs: true,  backlinks: true,  cmdK: true,  outline: true, cover: true,  icons: true, export: true, wordCount: true, pageWidth: true,  findReplace: true },
-  "single-doc": { tree: "off",     breadcrumbs: false, backlinks: false, cmdK: false, outline: true, cover: true,  icons: true, export: true, wordCount: true, pageWidth: true,  findReplace: true },
-  library:      { tree: "table",   breadcrumbs: true,  backlinks: true,  cmdK: true,  outline: true, cover: true,  icons: true, export: true, wordCount: true, pageWidth: true,  findReplace: true },
-  review:       { tree: "sidebar", breadcrumbs: true,  backlinks: true,  cmdK: true,  outline: true, cover: false, icons: true, export: true, wordCount: true, pageWidth: false, findReplace: true },
+  // minimal → maximal. suggestions is ON across the whole range (a company turns it off explicitly).
+  doc:          { tree: "off",     breadcrumbs: false, backlinks: false, cmdK: false, suggestions: true, outline: true, cover: true,  icons: true, export: true, wordCount: true, pageWidth: true,  findReplace: true },
+  review:       { tree: "off",     breadcrumbs: false, backlinks: false, cmdK: false, suggestions: true, outline: true, cover: false, icons: true, export: true, wordCount: true, pageWidth: false, findReplace: true },
+  wiki:         { tree: "sidebar", breadcrumbs: true,  backlinks: true,  cmdK: true,  suggestions: true, outline: true, cover: true,  icons: true, export: true, wordCount: true, pageWidth: true,  findReplace: true },
+  workspace:    { tree: "sidebar", breadcrumbs: true,  backlinks: true,  cmdK: true,  suggestions: true, outline: true, cover: true,  icons: true, export: true, wordCount: true, pageWidth: true,  findReplace: true },
+  library:      { tree: "table",   breadcrumbs: true,  backlinks: true,  cmdK: true,  suggestions: true, outline: true, cover: true,  icons: true, export: true, wordCount: true, pageWidth: true,  findReplace: true },
+  "single-doc": { tree: "off",     breadcrumbs: false, backlinks: false, cmdK: false, suggestions: true, outline: true, cover: true,  icons: true, export: true, wordCount: true, pageWidth: true,  findReplace: true },
 };
 
 interface ResolvedWs { tree: TreeMode; breadcrumbs: boolean; backlinks: boolean; cmdK: boolean; doc: DocumentConfig }
@@ -66,6 +79,7 @@ export function resolveWorkspaceConfig(cfg: WorkspaceConfig | undefined, docCfg:
     // precedence: explicit WorkspaceConfig flag > explicit documentConfig flag > preset default
     doc: {
       ...docCfg,
+      suggestions: cfg?.suggestions ?? docCfg?.suggestions ?? base.suggestions,
       outline: cfg?.outline ?? docCfg?.outline ?? base.outline,
       cover: cfg?.cover ?? docCfg?.cover ?? base.cover,
       icon: cfg?.icons ?? docCfg?.icon ?? base.icons,
@@ -77,6 +91,12 @@ export function resolveWorkspaceConfig(cfg: WorkspaceConfig | undefined, docCfg:
   };
 }
 
+/* One entry per page, for a HOST's unified search ("search everything") to surface handbook
+   pages alongside its own records — so a company can run a single ⌘K palette (set the
+   workspace's own cmdK off) without losing doc pages. `path` is the breadcrumb of ancestor
+   titles; `open(id)` is what the host calls to jump to a result. */
+export interface PageIndexEntry { id: string; title: string; path: string; icon?: string }
+
 export interface PageWorkspaceProps {
   value: PageStore | null;
   onChange?: (store: PageStore) => void;
@@ -85,6 +105,12 @@ export interface PageWorkspaceProps {
   readOnly?: boolean;
   documentConfig?: DocumentConfig;   // forwarded to the per-page DocumentSurface (editor/chrome)
   config?: WorkspaceConfig;          // composability — element toggles + a layout preset
+  author?: { name: string; color?: string };  // the reviewer, for suggesting-mode attribution
+  /* Emitted whenever the page set changes — hand this to the app's unified search so it can
+     index handbook pages. Pair with `config={{ cmdK: false }}` to let the app own the single
+     ⌘K palette. `onOpenPageRef` (optional) receives an opener the host calls to jump to a hit. */
+  onPageIndex?: (entries: PageIndexEntry[]) => void;
+  onOpenPageRef?: (open: (id: string) => void) => void;
   /* Set false when the HOST already renders a breadcrumb for this page — the workspace then
      renders no trail of its own, so the surface never stacks two of them. Overrides the
      config/preset when explicitly false. */
@@ -92,7 +118,7 @@ export interface PageWorkspaceProps {
   "data-testid"?: string;
 }
 
-export function PageWorkspace({ value, onChange, reloadNonce = 0, className, readOnly, documentConfig, config, breadcrumbs = true, ...rest }: PageWorkspaceProps) {
+export function PageWorkspace({ value, onChange, reloadNonce = 0, className, readOnly, documentConfig, config, author, onPageIndex, onOpenPageRef, breadcrumbs = true, ...rest }: PageWorkspaceProps) {
   const ws = React.useMemo(() => resolveWorkspaceConfig(config, documentConfig), [config, documentConfig]);
   // the host's explicit breadcrumbs=false (it owns the trail) wins over the preset
   const showCrumbs = breadcrumbs !== false && ws.breadcrumbs;
@@ -122,6 +148,21 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
     if (window.matchMedia("(pointer: coarse) and (max-width: 820px)").matches) setSidebar(false);
   }, [mutate]);
   const create = (parentId: string | null) => { const r = createPage(storeRef.current, { parentId, title: "" }); mutate(() => setActive(parentId ? setExpanded(r.store, parentId, true) : r.store, r.id)); };
+
+  // hand the host an opener once, so its unified search can jump to a page hit
+  React.useEffect(() => { onOpenPageRef?.(open); }, [onOpenPageRef, open]);
+  // emit the page index for the host's unified search whenever the page set changes (title,
+  // structure, or membership) — path is the breadcrumb of ancestor titles
+  React.useEffect(() => {
+    if (!onPageIndex) return;
+    const entries: PageIndexEntry[] = Object.values(store.pages).map((p) => ({
+      id: p.id,
+      title: p.title || "Untitled",
+      path: breadcrumb(store, p.id).slice(0, -1).map((c) => c.title || "Untitled").join(" / "),
+      icon: p.icon,
+    }));
+    onPageIndex(entries);
+  }, [store.pages, onPageIndex]);
 
   // the page-workspace seam handed to the editor
   const pageContext: PageContext = {
@@ -267,6 +308,7 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
           onChange={onDocChange}
           readOnly={readOnly}
           config={ws.doc}
+          author={author}
           pageContext={pageContext}
           topBar={topBar}
           footer={footer}
