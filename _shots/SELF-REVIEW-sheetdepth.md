@@ -166,27 +166,89 @@ a user who never exports never pays for it. The eager bundle is unchanged.
 
 ---
 
-## Brutal test: is this real Excel-grade?
+## Parity audit vs Excel / Google Sheets
 
-**For the common spreadsheet job, honestly yes.** A finance person can open it, write
-`VLOOKUP` and `SUMIF` across sheets, format currency and dates, freeze headers, filter
-a table by value with counts, sort, validate a status column against a list, find and
-replace, leave a note, and — the thing that actually decides whether a spreadsheet
-tool is usable — **get their file in and out as `.xlsx` with formulas and formatting
-intact**. That last one was the gap and it is closed and proven end to end.
+I am not going to certify this "Excel-grade". Here is the feature-by-feature table.
+"Exercised" means I drove it in a browser and looked at the result; "present" means it
+is wired and reachable but I did not put it through its paces.
 
-**Where it is not Excel:** no charts, no pivot tables, no conditional-formatting
-paint. For a financial analyst those three are not garnish — a model without a chart
-or a pivot is a model they finish somewhere else. So: Excel-grade for data entry,
-calculation, formatting and interchange; **not** yet for presentation and analysis.
+| Feature | Excel / Google Sheets | Ours | Verdict |
+|---|---|---|---|
+| Cell editing, multi-sheet, freeze, merge | full | full, cross-sheet refs exercised | ✅ **parity** |
+| Formula engine | ~500 fns, autocomplete | 400+ fns across 11 categories, autocomplete with descriptions (`sd-formula-autocomplete.png`) | ✅ **near parity** — see array-formula caveat |
+| Number formats | currency/date/percent/custom | same, pattern-based; currency+date+percent exercised | ✅ **near parity** |
+| Autofilter | by value / colour / condition, counts | all three modes + counts, exercised | ✅ **parity** |
+| Sort | single + multi-column | asc/desc/custom present; **multi-column not verified** | 🟡 **present, partly unverified** |
+| Data validation | list, number, date, text-length, custom formula, checkbox | same builder surface; **only the list dropdown exercised** | 🟡 **near parity, thinly verified** |
+| Find & replace | full | wired and reachable; **not exercised** | 🟡 **present, unverified** |
+| Named ranges | full manager | Name Box "Manager named" panel + facade (`insertDefinedName`); **not exercised end-to-end** | 🟡 **present, unverified** |
+| XLSX export | native | values, formulas, fonts, fills, formats, alignment, merges, widths, freeze — round-trip proven | ✅ **parity for data** |
+| XLSX import | native | same, **minus** charts, images, pivots, macros; rich text flattens | 🟡 **parity for data, not for objects** |
+| CSV import/export | full | full (RFC-4180) | ✅ **parity** |
+| Status-bar stats | Sum/Avg/Count/Min/Max | same (`sd-namebox.png`) | ✅ **parity** |
+| **Conditional formatting** | full, painted | rules register/persist/edit — **canvas never paints them** | ❌ **broken** |
+| **Charts** | extensive | **none** | ❌ **absent** |
+| **Pivot tables** | core analysis tool | **none** | ❌ **absent** |
+| **Cell comments** | *threaded*: replies, @mentions, resolve | **sticky notes only** (exercised, `sd-note-hover.png`) | ❌ **thin** |
+| **Track changes / version history** | full | **none** | ❌ **absent** |
+| **Real-time collaboration** (presence, co-edit) | full | **none** | ❌ **absent** |
+| Images / drawings in sheet | full | **none** | ❌ **absent** |
+| Hyperlinks | full | **none** (import flattens to text) | ❌ **absent** |
+| Structured tables (Excel Tables) | full | **none** | ❌ **absent** |
 
-Two smaller honesty notes: I did not test very large imports (the 10k scale seed
-exists but I did not push a large `.xlsx` through the converter, so import performance
-at scale is unmeasured), and rich text collapses to plain text on import.
+### The honest summary
+
+**What a real user can genuinely do today:** open a workbook, write `VLOOKUP`/`SUMIF`
+across sheets with working autocomplete, format currency and dates, freeze headers,
+filter a table by value with live counts, sort, constrain a column to a dropdown, leave
+a note, and get their file in and out as `.xlsx` with formulas and formatting intact.
+That is a real, useful spreadsheet, and interchange — the thing that decides whether
+anyone can adopt it at all — is closed and proven.
+
+**What they cannot do:** make a chart, build a pivot, see a conditional format, hold a
+comment thread with a colleague, or see who else is in the document. For a finance or
+ops user those are not garnish. A model you cannot chart and cannot pivot is a model
+you finish in Excel — which means this is currently a strong *data* surface and a weak
+*analysis and collaboration* surface.
+
+So: **parity for entry, calculation, formatting and interchange. Not parity for
+analysis (charts, pivot), presentation (conditional formatting), or collaboration
+(threaded comments, presence, history).**
+
+### Five free presets I did NOT wire — cheapest depth wins
+
+Verified available on npm at 0.25.1, no license, not in this PR:
+
+| Preset | Closes |
+|---|---|
+| `@univerjs/preset-sheets-thread-comment` | **threaded comments** with replies/resolve — the collaboration gap |
+| `@univerjs/preset-sheets-table` | Excel-style structured tables |
+| `@univerjs/preset-sheets-hyper-link` | hyperlinks (also fixes import flattening) |
+| `@univerjs/preset-sheets-drawing` | images / floating objects |
+| `@univerjs/preset-sheets-sort` (multi-column depth) | already wired; depth unverified |
+
+These are the cheapest parity gains available — each is wiring, not building, and each
+slots into the existing `WorkbookConfig` pattern. **I did not wire them because they
+were not in this lane's brief**, not because they are hard.
+
+Charts and pivot are the expensive ones: both live in Univer's **licensed**
+`preset-sheets-advanced`. A chart is reachable without it by reading the selected
+range and rendering with `recharts` (already a dependency); a pivot realistically is
+not, short of building one.
+
+### Unmeasured
+
+- Import performance on a large `.xlsx` (the 10k scale seed exists, but I never pushed
+  a big real file through the converter — no progress state either).
+- Array / dynamic-array formulas (spill ranges, `LAMBDA`) — untested.
+- Concurrent edits of the same snapshot (the surface is single-writer by design).
 
 ## What I'd do next, in order
 
-1. Charts from a range via `recharts` (no license needed; unblocks the biggest gap).
-2. Chase the conditional-formatting paint — a Univer issue with the repro above.
-3. Import performance on a large workbook, and a progress state if it needs one.
-4. Pivot tables, only if the licensed preset becomes an option.
+1. **Threaded comments** (`preset-sheets-thread-comment`) — closes the collaboration
+   gap for one preset's worth of wiring.
+2. **Charts from a range** via `recharts` — no license, unblocks the biggest analysis gap.
+3. Chase the **conditional-formatting paint** with the repro above (Univer-side).
+4. `table` + `hyper-link` + `drawing` presets — three more cheap parity wins.
+5. Import performance on a large workbook, with a progress state if needed.
+6. Pivot tables — only worth it if the licensed preset becomes an option.

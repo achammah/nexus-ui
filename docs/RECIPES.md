@@ -122,3 +122,24 @@ the shapes back out of `fWorkbook.save()`.
   not imported. Dates convert through Excel serials.
 - **CSV** is single-sheet by nature: export writes the active sheet's values (not
   formulas), and import produces a one-sheet workbook.
+- **Comments are notes, not threads.** The `notes` flag gives Excel-style sticky notes
+  (one body per cell). Threaded comments — replies, resolve — are a separate Univer
+  preset, not wired here (below).
+- **No collaboration layer.** No presence, co-editing, version history or track
+  changes. The surface is single-writer: the host owns one snapshot.
+
+### Free presets available but not wired
+
+These exist on npm at `0.25.1`, need no license, and each slots into the same
+`WorkbookConfig` pattern — the cheapest way to add parity:
+
+| Preset | Adds |
+|---|---|
+| `@univerjs/preset-sheets-thread-comment` | threaded comments (replies, resolve) |
+| `@univerjs/preset-sheets-table` | Excel-style structured tables |
+| `@univerjs/preset-sheets-hyper-link` | hyperlinks (also fixes import flattening) |
+| `@univerjs/preset-sheets-drawing` | images / floating objects |
+
+To wire one: add a flag to `WorkbookConfig`, import the preset + its `locales/en-US`
+and `lib/index.css`, and push it into `buildPresets()` in `WorkbookSurface.tsx` behind
+the flag. That is the whole pattern.
