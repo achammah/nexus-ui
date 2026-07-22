@@ -91,3 +91,5 @@ export * from "./blocks/viewer3d";
 /* blocks — Notion×Google-Docs document as a standalone surface (light editor + outline;
    docx/mammoth lazy-loaded only on export/import) */
 export * from "./blocks/document";
+/* blocks — e-signature surface (DocuSeal-class; lazy pdf engines) */
+export * from "./blocks/esign";

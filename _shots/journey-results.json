@@ -1,0 +1,257 @@
+[
+  {
+    "name": "demo lands in an EDITABLE draft",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "field palette is live on arrival",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "send is available on arrival",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "no lock banner on arrival",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "seed loads partially-signed",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "seed renders 2 pdf pages",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "pdf page painted real content",
+    "pass": true,
+    "detail": "65011 dark px"
+  },
+  {
+    "name": "seed audit shows 5 events",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "finish disabled while required fields empty",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "drawn signature lands in field",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "progress counts completed fields",
+    "pass": true,
+    "detail": "3 of 5 complete"
+  },
+  {
+    "name": "guided next-field selects an unfilled field",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "date auto-fills today on focus",
+    "pass": true,
+    "detail": "2026-07-22"
+  },
+  {
+    "name": "signature adoption persists for reuse",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "finish enabled once required filled",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "envelope completes",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "certificate id issued",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "flattened pdf downloads",
+    "pass": true,
+    "detail": "31033 bytes"
+  },
+  {
+    "name": "flattened pdf has cert page (3 pages)",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "snapshot persists across reload",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "document intake resets to draft",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "page nav works",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "armed-click places a field",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "palette drag-and-drop places a field",
+    "pass": true,
+    "detail": "10"
+  },
+  {
+    "name": "field drags to a new position",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "field resizes via grip",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "arrow key nudges field",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "props panel edits label",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "signer added",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "signer removed",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "template applies field layout",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "field delete works",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "review lists both recipients + fields",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "demo send is labeled (no silent fake)",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "send moves envelope to sent",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "sequential order: only first signer can sign",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "mobile: drawn signature adopted",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "mobile: no page-level horizontal scroll",
+    "pass": true,
+    "detail": "overflow 0px"
+  },
+  {
+    "name": "text field exposes placeholder + format",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "duplicate adds a copy",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "apply-to-all-pages places on the other page",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "apply-to-all-pages is idempotent",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "invalid input is flagged on the field",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "finish is blocked while a field fails validation",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "valid input clears the error",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "cc recipient can be added",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "review lists the copied-in recipient",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "delivery policy is recorded in the audit trail",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "decline records a reason in the audit trail",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "pdf renders upright under a fit-width re-render (no render race)",
+    "pass": true,
+    "detail": "top 6053 / bottom 667 ink of 152064px band"
+  },
+  {
+    "name": "no page errors across journey",
+    "pass": true,
+    "detail": ""
+  }
+]

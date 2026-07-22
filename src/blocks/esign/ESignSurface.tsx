@@ -1,0 +1,1874 @@
+// ESignSurface — a DocuSeal-class e-signature surface (reference product:
+// docusealco/docuseal): document intake -> field placement -> signers -> send
+// (review-gated) -> signing -> audit trail + completion certificate + flatten.
+// Free-surface contract (mirrors WorkbookSurface): host owns the snapshot via
+// value/onChange/reloadNonce; this component owns the flow. All chrome rides
+// --nx-* tokens (esign.css); pdf engines load lazily (pdf.ts).
+import * as React from "react";
+import {
+  Baseline, Calendar, CheckSquare, ChevronDownSquare, Signature, Type,
+  ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, Copy, CopyPlus, GripVertical,
+  Eraser, FilePenLine, LayoutTemplate, Lock, Mail, Minus, Plus, Snowflake, Trash2, X,
+  type LucideIcon,
+} from "lucide-react";
+import { DocumentSurface } from "../document/DocumentSurface";
+import type { DocumentSnapshot } from "../document/snapshot";
+import "./esign.css";
+import {
+  activeSignerIds, appendEvent, computeCertificateId, envelopeStatusAfterSign,
+  esignId, fieldDefaultSize, FIELD_TYPE_LABEL, FIELD_FORMAT_LABEL, fieldFormatError,
+  isEsignSnapshot, isFieldFilled,
+  seedEnvelope, SIGNER_COLOR_COUNT, ESIGN_SEED_STATES, DEFAULT_REMINDER_POLICY,
+  type ESignConfig, type EsignAnnotation, type EsignEnvelope, type EsignField, type EsignFieldType,
+  type EsignCcRecipient, type EsignFieldFormat, type EsignFieldValue, type EsignSeedState, type EsignSendRequest, type EsignSignatureValue, type EsignSigner, type EsignSource,
+} from "./snapshot";
+import { bakeAnnotations, blocksToPdfBytes, bytesToBase64, downloadBytes, fileToEsignDocument, flattenEnvelope, openDocument, type PdfDocHandle, type PdfPageHandle } from "./pdf";
+import { initialsOf, SignatureDialog, signatureFontCss } from "./SignatureDialog";
+
+export interface ESignSurfaceProps {
+  /** the envelope to load; null seeds the demo envelope */
+  value: EsignEnvelope | null;
+  /** fired on every persisted change — the host debounces */
+  onChange?: (snapshot: EsignEnvelope) => void;
+  /** bump to force a fresh mount from the current `value` */
+  reloadNonce?: number;
+  config?: ESignConfig;
+  className?: string;
+  /** host controls (save state, reset) — rendered into the header's right end */
+  actions?: React.ReactNode;
+  "data-testid"?: string;
+}
+
+type Tab = "draft" | "prepare" | "sign" | "audit";
+/** a placement tool: a signing field OR an owner amendment on the pdf */
+type ArmedTool = EsignFieldType | "ann-whiteout" | "ann-text";
+
+/** which demo state the current envelope reads as (the switcher's active seg) */
+function envMatchesSeed(env: EsignEnvelope, state: EsignSeedState): boolean {
+  if (state === "draft") return env.status === "draft";
+  if (state === "completed") return env.status === "completed";
+  return env.status === "sent" || env.status === "partially_signed";
+}
+
+/* the manual zoom range and the fit-width floor are the SAME range, so fitting a
+   narrow pane can never park the control at a disabled bound with a clipped page */
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 2;
+/** auto-fit stops here; the user can still zoom to ZOOM_MAX by hand */
+const ZOOM_FIT_MAX = 1.5;
+const ALL_FIELD_TYPES: EsignFieldType[] = ["signature", "initials", "date", "text", "checkbox", "dropdown"];
+const STATUS_LABEL: Record<EsignEnvelope["status"], string> = {
+  draft: "Draft", sent: "Sent", partially_signed: "Partially signed", completed: "Completed",
+};
+
+/* ------------------------------------------------------------------ surface */
+
+export default function ESignSurface({
+  value, onChange, reloadNonce = 0, config, className, actions, ...rest
+}: ESignSurfaceProps) {
+  const [env, setEnv] = React.useState<EsignEnvelope>(() =>
+    value && isEsignSnapshot(value) ? value : seedEnvelope(),
+  );
+  // remount from value on reload
+  React.useEffect(() => {
+    setEnv(value && isEsignSnapshot(value) ? value : seedEnvelope());
+    setSelectedId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadNonce]);
+
+  const envRef = React.useRef(env);
+  envRef.current = env;
+  const commit = React.useCallback((next: EsignEnvelope | ((cur: EsignEnvelope) => EsignEnvelope)) => {
+    setEnv((cur) => {
+      const resolved = typeof next === "function" ? next(cur) : next;
+      onChangeRef.current?.(resolved);
+      return resolved;
+    });
+  }, []);
+  const onChangeRef = React.useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const [tab, setTab] = React.useState<Tab>(env.status === "draft" ? "prepare" : "sign");
+  const [selectedAnnId, setSelectedAnnId] = React.useState<string | null>(null);
+  const [zoom, setZoom] = React.useState(1);
+  /* once the user works the zoom control we stop auto-fitting under them */
+  const zoomTouched = React.useRef(false);
+  const setZoomManual = React.useCallback((next: React.SetStateAction<number>) => {
+    zoomTouched.current = true;
+    setZoom(next);
+  }, []);
+  const [pageIndex, setPageIndex] = React.useState(0);
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [armedType, setArmedType] = React.useState<ArmedTool | null>(null);
+  const [sendOpen, setSendOpen] = React.useState(false);
+  const [tplOpen, setTplOpen] = React.useState(false);
+  const [signingAs, setSigningAs] = React.useState<string | null>(null);
+  const [sigDialog, setSigDialog] = React.useState<{ fieldId: string; kind: "signature" | "initials" } | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
+  const [docError, setDocError] = React.useState<string | null>(null);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  /* ---- document open + page handles */
+  const [pages, setPages] = React.useState<PdfPageHandle[]>([]);
+  const docKey = env.document ? `${env.document.name}:${env.document.dataBase64.length}` : "none";
+  React.useEffect(() => {
+    let dead = false;
+    let handle: PdfDocHandle | null = null;
+    setPages([]);
+    setDocError(null);
+    if (!env.document) return;
+    (async () => {
+      try {
+        handle = await openDocument(env.document!);
+        const ps: PdfPageHandle[] = [];
+        for (let i = 0; i < handle.pageCount; i++) ps.push(await handle.getPage(i));
+        if (!dead) setPages(ps);
+      } catch (err) {
+        if (!dead) setDocError(err instanceof Error ? err.message : "Could not open the document.");
+      }
+    })();
+    return () => { dead = true; handle?.destroy(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docKey, reloadNonce]);
+
+  // fit-width: a phone (or narrow pane) gets the whole page width on screen
+  // instead of a clipped 100% render. This re-runs on CONTAINER RESIZE (rotate,
+  // pane drag, responsive reflow) — fitting only at load time leaves a stale
+  // desktop zoom behind and the page clips. The user's own zoom wins from the
+  // moment they touch the control.
+  React.useEffect(() => {
+    const first = pages[0];
+    const box = scrollRef.current;
+    if (!first || !box) return;
+    const fit = () => {
+      if (zoomTouched.current) return;
+      // FIT WIDTH — the document is the subject of this surface, so it fills the
+      // stage rather than sitting as a small sheet in a field of grey. Scales UP
+      // as well as down (capped, so an ultrawide monitor does not blow the page
+      // up past readability). Slack covers the gutter plus the page's own
+      // border/shadow so the result never lands one pixel wide and clips.
+      const avail = box.clientWidth - 40;
+      const raw = avail / first.width;
+      const next = clamp(Math.floor(raw * 100) / 100, ZOOM_MIN, ZOOM_FIT_MAX);
+      setZoom((z) => (z === next ? z : next));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [pages]);
+
+  const editable = env.status === "draft";
+  const fieldTypes = config?.fieldTypes ?? ALL_FIELD_TYPES;
+  const showDemoStates = config?.demoStates ?? true;
+
+  /** Swap the whole envelope for a seeded demo state. A sent envelope locks
+   *  fields and signers by design, so the surface must always offer a way back
+   *  to an editable one. */
+  const loadSeedState = (state: EsignSeedState) => {
+    const next = seedEnvelope(state);
+    setEnv(next);
+    setSelectedId(null);
+    setSigningAs(null);
+    setTab(next.status === "draft" ? "prepare" : next.status === "completed" ? "audit" : "sign");
+    onChangeRef.current?.(next);
+  };
+  const activeIds = activeSignerIds(env);
+  const signer = env.signers.find((s) => s.id === signingAs) ?? null;
+  const selected = env.fields.find((f) => f.id === selectedId) ?? null;
+
+  /* ---- intake */
+  const loadFile = async (file: File) => {
+    try {
+      // a .docx routes to DRAFTING: import → edit in place → freeze → fields →
+      // send, with no round-trip through Word (the document block's mammoth
+      // import does the conversion; its editor owns the editing)
+      if (/\.docx$/i.test(file.name) || file.type.includes("wordprocessingml")) {
+        const { importFile } = await import("../../record-core/editor-io");
+        const res = await importFile(file);
+        const title = file.name.replace(/\.docx$/i, "");
+        const source: EsignSource = {
+          kind: "document",
+          snapshot: { id: esignId(), title, blocks: res.blocks, pageWidth: "narrow" },
+          dirtySinceFreeze: true,
+        };
+        commit((cur) => appendEvent(
+          { ...cur, source, status: "draft" },
+          "document_loaded", "Owner",
+          `${file.name} imported for editing${res.warnings.length ? ` (${res.warnings.length} import notes)` : ""}`,
+        ));
+        setTab("draft");
+        if (res.warnings.length) setNotice(`Imported with ${res.warnings.length} conversion note${res.warnings.length === 1 ? "" : "s"} — review the draft before freezing.`);
+        return;
+      }
+      const doc = await fileToEsignDocument(file);
+      // a new base document starts a fresh signing round: statuses, values and
+      // completion facts reset; layout (fields on surviving pages) is kept
+      commit((cur) => appendEvent(
+        {
+          ...cur, document: doc, status: "draft",
+          fields: cur.fields.filter((f) => f.page < doc.pageCount).map(({ value, ...f }) => f),
+          signers: cur.signers.map((s) => ({ ...s, status: "pending" as const, viewedAt: undefined, signedAt: undefined })),
+          sentAt: undefined, completedAt: undefined, certificateId: undefined,
+        },
+        "document_loaded", "Owner", `${doc.name} (${doc.pageCount} page${doc.pageCount === 1 ? "" : "s"})`,
+      ));
+      setPageIndex(0);
+    } catch (err) {
+      setDocError(err instanceof Error ? err.message : "Could not open the file.");
+    }
+  };
+
+  /* ---- drafting (the editable document behind the signing base) */
+  const [freezing, setFreezing] = React.useState(false);
+
+  const startDraft = () => {
+    const source: EsignSource = {
+      kind: "document",
+      snapshot: { id: esignId(), title: env.name || "Untitled agreement", blocks: [{ id: esignId(), type: "p", text: "" }], pageWidth: "narrow" },
+      dirtySinceFreeze: true,
+    };
+    commit((cur) => appendEvent({ ...cur, source }, "document_loaded", "Owner", "New draft started in the editor"));
+    setTab("draft");
+  };
+
+  const onDraftChange = (snapshot: DocumentSnapshot) =>
+    commit((cur) => (cur.source ? { ...cur, source: { ...cur.source, snapshot, dirtySinceFreeze: true } } : cur));
+
+  /** DRAFTING -> PREPARING: render the draft to real PDF bytes and make it the
+   *  signing base. Field layout survives (pages that fall away drop their
+   *  fields); values/statuses reset because the text changed under them. */
+  const freezeDraft = async () => {
+    const src = envRef.current.source;
+    if (!src || freezing) return;
+    const pending = src.snapshot.suggestions?.filter((s) => s.status === "pending").length ?? 0;
+    if (pending > 0) {
+      setNotice(`${pending} tracked change${pending === 1 ? "" : "s"} still pending — accept or reject them before freezing (the signing base must be settled text).`);
+      return;
+    }
+    setFreezing(true);
+    try {
+      const bytes = await blocksToPdfBytes(src.snapshot.blocks, src.snapshot.title);
+      const doc = {
+        name: `${src.snapshot.title || "Agreement"}.pdf`,
+        mime: "application/pdf",
+        dataBase64: bytesToBase64(bytes),
+        pageCount: 0, // set below from the opened handle
+      };
+      const handle = await openDocument(doc);
+      doc.pageCount = handle.pageCount;
+      handle.destroy();
+      commit((cur) => appendEvent(
+        {
+          ...cur,
+          document: doc,
+          source: cur.source ? { ...cur.source, dirtySinceFreeze: false } : cur.source,
+          status: "draft",
+          fields: cur.fields.filter((f) => f.page < doc.pageCount).map(({ value, ...f }) => f),
+          signers: cur.signers.map((s) => ({ ...s, status: "pending" as const, viewedAt: undefined, signedAt: undefined })),
+          annotations: [],
+          sentAt: undefined, completedAt: undefined, certificateId: undefined,
+        },
+        "document_frozen", "Owner", `Draft rendered to the signing base (${doc.pageCount} page${doc.pageCount === 1 ? "" : "s"})`,
+      ));
+      setTab("prepare");
+      setPageIndex(0);
+    } catch (err) {
+      setNotice(`Freeze failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setFreezing(false);
+    }
+  };
+
+  /* ---- pdf amendments (owner-only, PREPARING; baked at send) */
+  const placeAnnotation = (kind: EsignAnnotation["kind"], page: number, fx: number, fy: number) => {
+    const size = kind === "whiteout" ? { w: 0.22, h: 0.03 } : { w: 0.26, h: 0.032 };
+    const a: EsignAnnotation = {
+      id: esignId(), kind, page,
+      x: clamp(fx - size.w / 2, 0, 1 - size.w), y: clamp(fy - size.h / 2, 0, 1 - size.h),
+      w: size.w, h: size.h,
+      ...(kind === "text" ? { text: "" } : null),
+    };
+    commit((cur) => ({ ...cur, annotations: [...(cur.annotations ?? []), a] }));
+    setSelectedAnnId(a.id);
+    setSelectedId(null);
+    setArmedType(null);
+  };
+  const patchAnnotation = (id: string, patch: Partial<EsignAnnotation>) =>
+    commit((cur) => ({ ...cur, annotations: (cur.annotations ?? []).map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
+  const removeAnnotation = (id: string) => {
+    commit((cur) => ({ ...cur, annotations: (cur.annotations ?? []).filter((a) => a.id !== id) }));
+    if (selectedAnnId === id) setSelectedAnnId(null);
+  };
+
+  /* ---- field placement */
+  const placeField = (type: EsignFieldType, page: number, fx: number, fy: number) => {
+    const size = fieldDefaultSize(type);
+    const firstSigner = env.signers[0];
+    if (!firstSigner) { setNotice("Add a signer first — every field belongs to a signer."); return; }
+    const f: EsignField = {
+      id: esignId(), type, page,
+      x: clamp(fx - size.w / 2, 0, 1 - size.w), y: clamp(fy - size.h / 2, 0, 1 - size.h),
+      w: size.w, h: size.h,
+      signerId: selected?.signerId ?? firstSigner.id,
+      required: type !== "checkbox" && type !== "text",
+      ...(type === "dropdown" ? { options: ["Option A", "Option B"] } : null),
+    };
+    commit((cur) => appendEvent({ ...cur, fields: [...cur.fields, f] }, "field_added", "Owner", `${FIELD_TYPE_LABEL[type]} on page ${page + 1}`));
+    setSelectedId(f.id);
+    setArmedType(null);
+  };
+
+  const patchField = (id: string, patch: Partial<EsignField>) =>
+    commit((cur) => ({ ...cur, fields: cur.fields.map((f) => (f.id === id ? { ...f, ...patch } : f)) }));
+
+  /** Copy a field just below the original — the fastest way to build a column
+   *  of fields without re-dragging each one from the palette. */
+  const duplicateField = (id: string) => {
+    const src = envRef.current.fields.find((f) => f.id === id);
+    if (!src) return;
+    const copy: EsignField = {
+      ...src,
+      id: esignId(),
+      value: undefined,
+      y: clamp(src.y + src.h + 0.012, 0, 1 - src.h),
+    };
+    commit((cur) => appendEvent(
+      { ...cur, fields: [...cur.fields, copy] },
+      "field_added", "Owner", `${FIELD_TYPE_LABEL[src.type]} duplicated on page ${src.page + 1}`,
+    ));
+    setSelectedId(copy.id);
+  };
+
+  /** Bulk placement — the same field at the same spot on every page (initials
+   *  on each page is the standard case). Pages that already carry an identical
+   *  field for this signer are skipped, so it stays idempotent. */
+  const applyFieldToAllPages = (id: string) => {
+    const src = envRef.current.fields.find((f) => f.id === id);
+    if (!src) return;
+    const same = (f: EsignField, page: number) =>
+      f.page === page && f.signerId === src.signerId && f.type === src.type &&
+      Math.abs(f.x - src.x) < 0.005 && Math.abs(f.y - src.y) < 0.005;
+    const added: EsignField[] = [];
+    for (let p = 0; p < pages.length; p++) {
+      if (p === src.page) continue;
+      if (envRef.current.fields.some((f) => same(f, p))) continue;
+      added.push({ ...src, id: esignId(), page: p, value: undefined });
+    }
+    if (!added.length) {
+      setNotice("Every page already has this field.");
+      return;
+    }
+    commit((cur) => appendEvent(
+      { ...cur, fields: [...cur.fields, ...added] },
+      "field_added", "Owner",
+      `${FIELD_TYPE_LABEL[src.type]} placed on ${added.length} more page${added.length === 1 ? "" : "s"}`,
+    ));
+    setNotice(`Added to ${added.length} more page${added.length === 1 ? "" : "s"}.`);
+  };
+
+  /* ---- copied-in recipients */
+  const addCc = () => commit((cur) => ({
+    ...cur,
+    cc: [...(cur.cc ?? []), { id: esignId(), name: "", email: "" }],
+  }));
+  const patchCc = (id: string, patch: Partial<EsignCcRecipient>) => commit((cur) => ({
+    ...cur,
+    cc: (cur.cc ?? []).map((c) => (c.id === id ? { ...c, ...patch } : c)),
+  }));
+  const removeCc = (id: string) => commit((cur) => ({
+    ...cur,
+    cc: (cur.cc ?? []).filter((c) => c.id !== id),
+  }));
+
+  const removeField = (id: string) => {
+    const f = env.fields.find((x) => x.id === id);
+    commit((cur) => appendEvent(
+      { ...cur, fields: cur.fields.filter((x) => x.id !== id) },
+      "field_removed", "Owner", f ? `${FIELD_TYPE_LABEL[f.type]} removed from page ${f.page + 1}` : "Field removed",
+    ));
+    if (selectedId === id) setSelectedId(null);
+  };
+
+  /* keyboard: delete + nudge on the selected field */
+  const onSurfaceKeyDown = (e: React.KeyboardEvent) => {
+    if (!editable) return;
+    const target = e.target as HTMLElement;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+    if (!selected) {
+      if (selectedAnnId && (e.key === "Delete" || e.key === "Backspace")) { e.preventDefault(); removeAnnotation(selectedAnnId); }
+      return;
+    }
+    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeField(selected.id); }
+    const step = e.shiftKey ? 0.02 : 0.004;
+    if (e.key === "ArrowLeft") { e.preventDefault(); patchField(selected.id, { x: clamp(selected.x - step, 0, 1 - selected.w) }); }
+    if (e.key === "ArrowRight") { e.preventDefault(); patchField(selected.id, { x: clamp(selected.x + step, 0, 1 - selected.w) }); }
+    if (e.key === "ArrowUp") { e.preventDefault(); patchField(selected.id, { y: clamp(selected.y - step, 0, 1 - selected.h) }); }
+    if (e.key === "ArrowDown") { e.preventDefault(); patchField(selected.id, { y: clamp(selected.y + step, 0, 1 - selected.h) }); }
+  };
+
+  /* ---- signers */
+  const addSigner = () => {
+    const n = env.signers.length;
+    const s: EsignSigner = {
+      id: esignId(), name: "", email: "", role: `Signer ${n + 1}`,
+      order: n + 1, colorIndex: n % SIGNER_COLOR_COUNT, status: "pending",
+    };
+    commit((cur) => appendEvent({ ...cur, signers: [...cur.signers, s] }, "signer_added", "Owner", s.role));
+  };
+  const patchSigner = (id: string, patch: Partial<EsignSigner>) =>
+    commit((cur) => ({ ...cur, signers: cur.signers.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
+  const removeSigner = (id: string) => {
+    const s = env.signers.find((x) => x.id === id);
+    commit((cur) => appendEvent({
+      ...cur,
+      signers: cur.signers.filter((x) => x.id !== id).map((x, i) => ({ ...x, order: i + 1 })),
+      fields: cur.fields.filter((f) => f.signerId !== id),
+    }, "signer_removed", "Owner", s?.name || s?.role || "Signer"));
+  };
+  const moveSigner = (id: string, dir: -1 | 1) => {
+    commit((cur) => {
+      const ordered = [...cur.signers].sort((a, b) => a.order - b.order);
+      const i = ordered.findIndex((s) => s.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= ordered.length) return cur;
+      [ordered[i], ordered[j]] = [ordered[j], ordered[i]];
+      return { ...cur, signers: ordered.map((s, k) => ({ ...s, order: k + 1 })) };
+    });
+  };
+
+  /* ---- send (review-gated; seam or labeled demo) */
+  const sendProblems: string[] = [];
+  if (!env.document) sendProblems.push("No document loaded.");
+  if (env.source?.dirtySinceFreeze && env.document) sendProblems.push("The draft changed since the last freeze — re-freeze it (Edit tab) so recipients sign the current text.");
+  if (env.signers.length === 0) sendProblems.push("No signers.");
+  env.signers.forEach((s) => {
+    if (!s.name.trim() || !s.email.trim()) sendProblems.push(`${s.role || "A signer"} is missing a name or email.`);
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.email)) sendProblems.push(`${s.name}: "${s.email}" is not a valid email.`);
+    if (!env.fields.some((f) => f.signerId === s.id)) sendProblems.push(`${s.name || s.role} has no fields assigned.`);
+  });
+
+  const buildSendRequest = (): EsignSendRequest => ({
+    envelopeId: env.id,
+    documentName: env.document?.name ?? "",
+    signingOrder: env.signingOrder,
+    recipients: [...env.signers].sort((a, b) => a.order - b.order).map((s) => ({
+      signerId: s.id, name: s.name, email: s.email, role: s.role, order: s.order,
+      fieldCount: env.fields.filter((f) => f.signerId === s.id).length,
+      requiredFieldCount: env.fields.filter((f) => f.signerId === s.id && f.required).length,
+      signingUrl: (config?.signingUrlTemplate ?? "demo://sign/{envelopeId}/{signerId}")
+        .replace("{envelopeId}", env.id).replace("{signerId}", s.id),
+      message: s.message?.trim() || undefined,
+    })),
+    cc: env.cc ?? [],
+    reminders: env.reminders ?? DEFAULT_REMINDER_POLICY,
+    sentAt: new Date().toISOString(),
+  });
+
+  /** human-readable delivery policy, appended to the sent audit entry so the
+   *  choice is recorded rather than silently dropped */
+  const policySummary = (req: EsignSendRequest) => {
+    const bits: string[] = [];
+    bits.push(req.reminders.everyDays > 0 ? `reminders every ${req.reminders.everyDays}d` : "no reminders");
+    bits.push(req.reminders.expiresInDays > 0 ? `expires in ${req.reminders.expiresInDays}d` : "no expiry");
+    const cc = req.cc.filter((c) => c.email.trim());
+    if (cc.length) bits.push(`cc ${cc.map((c) => c.email).join(", ")}`);
+    return bits.join(" · ");
+  };
+
+  const confirmSend = async () => {
+    const req = buildSendRequest();
+    // bake owner amendments INTO the pdf bytes first — from SENT onward the
+    // signing base is immutable, so pending overlays must become real content
+    let baked: { document: NonNullable<EsignEnvelope["document"]>; count: number } | null = null;
+    const pendingAnns = envRef.current.annotations ?? [];
+    if (pendingAnns.length && envRef.current.document) {
+      try {
+        baked = { document: await bakeAnnotations(envRef.current.document, pendingAnns), count: pendingAnns.length };
+      } catch (err) {
+        setNotice(`Could not bake the document amendments: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+    }
+    let detail: string;
+    if (config?.onSend) {
+      try {
+        await config.onSend(req);
+        detail = `Sent to ${req.recipients.length} recipient${req.recipients.length === 1 ? "" : "s"} (${env.signingOrder}) via configured delivery`;
+      } catch (err) {
+        setNotice(`Delivery failed: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+    } else {
+      detail = `Sent to ${req.recipients.length} recipient${req.recipients.length === 1 ? "" : "s"} (${env.signingOrder}) — demo send, no email delivered`;
+    }
+    commit((cur) => {
+      let next: EsignEnvelope = { ...cur, status: "sent", sentAt: req.sentAt };
+      if (baked) {
+        next = { ...next, document: baked.document, annotations: [] };
+        next = appendEvent(next, "document_amended", "Owner",
+          `${baked.count} amendment${baked.count === 1 ? "" : "s"} (white-out / text correction) baked into the document before sending`);
+      }
+      return appendEvent(next, "sent", "Owner", `${detail} · ${policySummary(req)}`);
+    });
+    setSendOpen(false);
+    setTab("sign");
+    setSigningAs(null);
+    if (!config?.onSend) setNotice("Demo send: recipients were NOT emailed. Wire ESignConfig.onSend for real delivery (docs/RECIPES.md).");
+  };
+
+  /* ---- signing */
+  const startSigning = (id: string) => {
+    setSigningAs(id);
+    const s = env.signers.find((x) => x.id === id);
+    if (s && !s.viewedAt) {
+      commit((cur) => appendEvent({
+        ...cur,
+        signers: cur.signers.map((x) => (x.id === id ? { ...x, status: x.status === "pending" ? "viewed" : x.status, viewedAt: new Date().toISOString() } : x)),
+      }, "viewed", s.email || s.name, "Opened the document"));
+    }
+    const first = env.fields.filter((f) => f.signerId === id).sort((a, b) => a.page - b.page || a.y - b.y)[0];
+    if (first) setPageIndex(first.page);
+  };
+
+  const fillField = (fieldId: string, value: EsignFieldValue | undefined) =>
+    commit((cur) => ({ ...cur, fields: cur.fields.map((f) => (f.id === fieldId ? { ...f, value } : f)) }));
+
+  const myFields = signer ? env.fields.filter((f) => f.signerId === signer.id) : [];
+  const missingRequired = myFields.filter((f) => f.required && !isFieldFilled(f));
+  /** a filled field can still be WRONG — an email field holding "abc" must not
+      let the signer finish */
+  const invalidFields = myFields.filter((f) => fieldFormatError(f) !== null);
+  const myDone = myFields.filter(isFieldFilled).length;
+  const myProgress = myFields.length ? Math.round((myDone / myFields.length) * 100) : 0;
+
+  /** reading order — the order a signer is walked through their fields */
+  const inReadingOrder = (list: EsignField[]) =>
+    [...list].sort((a, b) => {
+      // an explicit tab order wins; unnumbered fields keep page/top-down order
+      // and always follow the numbered ones
+      const ta = a.tabIndex ?? Infinity;
+      const tb = b.tabIndex ?? Infinity;
+      if (ta !== tb) return ta - tb;
+      return a.page - b.page || a.y - b.y || a.x - b.x;
+    });
+
+  /** Bring a field into view and focus its control. The guided flow is what
+   *  makes a multi-page envelope signable without hunting for pale boxes. */
+  const goToField = (f: EsignField) => {
+    setPageIndex(f.page);
+    setSelectedId(f.id);
+    window.requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-testid="esign-field-${f.id}"]`);
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      const control = document.querySelector<HTMLElement>(`[data-testid="esign-fill-${f.id}"]`);
+      control?.focus({ preventScroll: true });
+    });
+  };
+
+  /** the next field this signer still owes, after the one just handled */
+  const nextUnfilled = (afterId?: string): EsignField | null => {
+    const ordered = inReadingOrder(myFields);
+    const start = afterId ? ordered.findIndex((f) => f.id === afterId) + 1 : 0;
+    const rest = [...ordered.slice(start), ...ordered.slice(0, start)];
+    return rest.find((f) => f.required && !isFieldFilled(f)) ?? rest.find((f) => !isFieldFilled(f)) ?? null;
+  };
+
+  const goToNextUnfilled = (afterId?: string) => {
+    const f = nextUnfilled(afterId);
+    if (f) goToField(f);
+  };
+
+  /* ---- adopted signature: drawn/typed once, reusable across fields, the way
+     every real signing product works (you do not re-draw per field) */
+  const [adopted, setAdopted] = React.useState<{ signature?: EsignSignatureValue; initials?: EsignSignatureValue }>({});
+
+  const applyAdopted = (kind: "signature" | "initials", fieldId: string) => {
+    const saved = adopted[kind];
+    if (!saved) return;
+    fillField(fieldId, { type: kind, signature: { ...saved, at: new Date().toISOString() } } as EsignFieldValue);
+    goToNextUnfilled(fieldId);
+  };
+
+  /* ---- decline to sign */
+  const [declineOpen, setDeclineOpen] = React.useState(false);
+  const [declineReason, setDeclineReason] = React.useState("");
+  const declineSigning = () => {
+    if (!signer) return;
+    commit((cur) => appendEvent(
+      { ...cur, status: "sent" },
+      "declined",
+      signer.email || signer.name,
+      declineReason.trim() ? `Declined to sign — "${declineReason.trim()}"` : "Declined to sign (no reason given)",
+    ));
+    setDeclineOpen(false);
+    setDeclineReason("");
+    setSigningAs(null);
+    setTab("audit");
+    setNotice(`${signer.name || signer.role} declined to sign. The envelope is on hold — see Activity.`);
+  };
+
+  const finishSigning = async () => {
+    if (!signer || missingRequired.length > 0 || invalidFields.length > 0) return;
+    const now = new Date().toISOString();
+    let next: EsignEnvelope = {
+      ...envRef.current,
+      signers: envRef.current.signers.map((s) => (s.id === signer.id ? { ...s, status: "signed" as const, signedAt: now } : s)),
+    };
+    next = appendEvent(next, "signed", signer.email || signer.name, `Signed ${myFields.filter(isFieldFilled).length} fields`);
+    const status = envelopeStatusAfterSign(next);
+    next = { ...next, status };
+    if (status === "completed") {
+      next = { ...next, completedAt: now };
+      next = { ...next, certificateId: await computeCertificateId(next) };
+      next = appendEvent(next, "completed", "System", `All ${next.signers.length} signers completed · certificate ${next.certificateId}`);
+    }
+    commit(next);
+    setSigningAs(null);
+    if (status === "completed") setTab("audit");
+  };
+
+  const downloadCompleted = async () => {
+    try {
+      const bytes = await flattenEnvelope(envRef.current);
+      downloadBytes(bytes, envRef.current.name.replace(/[^\w\- ]+/g, "") + " — completed.pdf");
+      commit((cur) => appendEvent(cur, "downloaded", "Owner", "Completed PDF downloaded (fields flattened + certificate page)"));
+    } catch (err) {
+      setNotice(`Download failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  /* ---- templates */
+  const [tplName, setTplName] = React.useState("");
+  const saveTemplate = () => {
+    const name = tplName.trim();
+    if (!name || env.fields.length === 0) return;
+    const roleOrder = [...env.signers].sort((a, b) => a.order - b.order);
+    commit((cur) => ({
+      ...cur,
+      templates: [...cur.templates, {
+        id: esignId(), name, createdAt: new Date().toISOString(),
+        roles: roleOrder.map((s) => s.role || s.name),
+        fields: cur.fields.map(({ signerId, value, ...restF }) => ({
+          ...restF, roleIndex: Math.max(0, roleOrder.findIndex((s) => s.id === signerId)),
+        })),
+      }],
+    }));
+    setTplName("");
+    setNotice(`Template "${name}" saved.`);
+  };
+  const applyTemplate = (tplId: string) => {
+    const tpl = env.templates.find((t) => t.id === tplId);
+    if (!tpl || !env.document) return;
+    const ordered = [...env.signers].sort((a, b) => a.order - b.order);
+    if (ordered.length < tpl.roles.length) {
+      setNotice(`Template needs ${tpl.roles.length} signers (${tpl.roles.join(", ")}); the envelope has ${ordered.length}. Add signers first.`);
+      return;
+    }
+    const pageCount = env.document.pageCount;
+    commit((cur) => appendEvent({
+      ...cur,
+      fields: tpl.fields.filter((f) => f.page < pageCount).map((f) => ({
+        ...f, id: esignId(), signerId: ordered[Math.min(f.roleIndex, ordered.length - 1)].id,
+      })),
+    }, "template_applied", "Owner", `"${tpl.name}" (${tpl.fields.length} fields)`));
+    setTplOpen(false);
+  };
+
+  /* ------------------------------------------------------------- rendering */
+  const title = config?.title ?? env.name;
+  return (
+    <div
+      className={"nxEsign" + (className ? ` ${className}` : "")}
+      onKeyDown={onSurfaceKeyDown}
+      {...rest}
+    >
+      <header className="nxEsHeader">
+        <div className="nxEsHeadLeft">
+          <input
+            className="nxEsTitleInput" value={title} aria-label="Envelope name"
+            readOnly={!editable}
+            onChange={(e) => commit((cur) => ({ ...cur, name: e.target.value }))}
+          />
+          <span className={`nxEsStatus is-${env.status}`} data-testid="esign-status">{STATUS_LABEL[env.status]}</span>
+          {signer && tab === "sign" && (
+            <span className="nxEsSigningAs">Signing as <strong>{signer.name}</strong></span>
+          )}
+        </div>
+        <nav className="nxEsTabsNav" role="tablist" aria-label="E-signature stages">
+          {([...(env.source ? ["draft"] : []), "prepare", "sign", "audit"] as Tab[]).map((t) => (
+            <button
+              key={t} type="button" role="tab" aria-selected={tab === t}
+              className={tab === t ? "nxEsTabBtn isActive" : "nxEsTabBtn"}
+              onClick={() => setTab(t)}
+              data-testid={`esign-tab-${t}`}
+            >
+              {t === "draft" ? (editable ? "Edit" : <span className="nxEsTabLock"><Lock size={11} aria-hidden /> Document</span>) : t === "prepare" ? "Prepare" : t === "sign" ? "Sign" : "Activity"}
+            </button>
+          ))}
+        </nav>
+        <div className="nxEsHeadRight">
+          {tab === "prepare" && editable && (
+            <button
+              type="button" className="nxEsBtn isPrimary" data-testid="esign-send"
+              disabled={sendProblems.length > 0}
+              title={sendProblems[0]}
+              onClick={() => setSendOpen(true)}
+            >
+              Send for signature
+            </button>
+          )}
+          {env.status === "completed" && (
+            <button type="button" className="nxEsBtn isPrimary" onClick={downloadCompleted} data-testid="esign-download">
+              Download signed PDF
+            </button>
+          )}
+          {showDemoStates && (
+            <div className="nxEsDemoStates" role="group" aria-label="Demo state">
+              <span className="nxEsDemoLabel">Demo</span>
+              {ESIGN_SEED_STATES.map((s) => (
+                <button
+                  key={s.id} type="button" title={s.hint}
+                  className={"nxEsSegBtn" + (envMatchesSeed(env, s.id) ? " isActive" : "")}
+                  aria-pressed={envMatchesSeed(env, s.id)}
+                  onClick={() => loadSeedState(s.id)}
+                  data-testid={`esign-demo-${s.id}`}
+                >
+                  <span className="nxEsSegFull">{s.label}</span>
+                  <span className="nxEsSegShort">{s.short}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {actions}
+        </div>
+      </header>
+
+      {notice && (
+        <div className="nxEsNotice" role="status">
+          <span>{notice}</span>
+          <button type="button" className="nxEsIconBtn" aria-label="Dismiss" onClick={() => setNotice(null)}><X size={14} /></button>
+        </div>
+      )}
+      {!editable && tab === "prepare" && (
+        <div className="nxEsNotice isInfo" role="status">
+          <span>
+            This envelope was sent — fields and signers are locked, the way a real envelope
+            behaves once recipients hold it. The Activity tab has the audit trail.
+          </span>
+          <button
+            type="button" className="nxEsBtn isSm" data-testid="esign-back-to-draft"
+            onClick={() => loadSeedState("draft")}
+          >
+            Start a new draft
+          </button>
+        </div>
+      )}
+
+      <div className={`nxEsBody mode-${tab}`}>
+        {/* DRAFTING — the editable document behind the signing base. Composes the
+            document block (Notion×Word editor: tracked changes, docx import/
+            export) rather than shipping a second editor. Read-only from SENT
+            onward: an editable "signed" contract would be worthless. */}
+        {tab === "draft" && env.source && (
+          <div className="nxEsDraftPane" data-testid="esign-draft-pane">
+            <div className="nxEsDraftBar">
+              <span className="nxEsHint">
+                {editable
+                  ? "Edit the contract text here — a fix never needs a round-trip through Word. Freezing renders it to the signing base (print-class layout, not Word-identical)."
+                  : "The envelope was sent — the document is frozen and read-only. Recipients sign exactly this text."}
+              </span>
+              {editable && (
+                <button
+                  type="button" className="nxEsBtn isPrimary" data-testid="esign-freeze"
+                  disabled={freezing}
+                  onClick={() => void freezeDraft()}
+                >
+                  <Snowflake size={13} /> {freezing ? "Rendering…" : env.document ? "Re-freeze & place fields" : "Freeze & place fields"}
+                </button>
+              )}
+            </div>
+            {editable && env.document && env.source.dirtySinceFreeze && (
+              <div className="nxEsNotice" role="status">
+                <span>The draft changed since the last freeze — recipients would sign the OLD render. Re-freeze before sending.</span>
+              </div>
+            )}
+            <DocumentSurface
+              value={env.source.snapshot}
+              onChange={editable ? onDraftChange : undefined}
+              readOnly={!editable}
+              author={{ name: "Owner" }}
+              config={{ cover: false, icon: false, pageWidthToggle: false }}
+              data-testid="esign-draft-editor"
+            />
+          </div>
+        )}
+
+        {/* left rail: palette (prepare) or signer picker (sign) */}
+        {tab === "prepare" && (
+          <aside className="nxEsRail" aria-label="Field palette and signers">
+            <section className="nxEsRailSec">
+              <h3 className="nxEsRailTitle">Document</h3>
+              {env.document ? (
+                <div className="nxEsDocCard">
+                  <div className="nxEsDocName" title={env.document.name}>{env.document.name}</div>
+                  <div className="nxEsDocMeta">{env.document.pageCount} page{env.document.pageCount === 1 ? "" : "s"} · {Math.round(env.document.dataBase64.length * 0.75 / 1024)} KB</div>
+                  <div className="nxEsBtnRow">
+                    {env.source ? (
+                      <button
+                        type="button" className="nxEsBtn" data-testid="esign-edit-document"
+                        onClick={() => setTab("draft")}
+                      >
+                        <FilePenLine size={13} /> {editable ? "Edit text" : "View text"}
+                      </button>
+                    ) : editable ? (
+                      <button
+                        type="button" className="nxEsBtn" title="Uploaded PDFs can be amended (white-out + text corrections) below; full text editing needs the source document (.docx or a new draft)."
+                        onClick={() => fileRef.current?.click()}
+                      >
+                        Replace…
+                      </button>
+                    ) : null}
+                    {editable && env.source && (
+                      <button type="button" className="nxEsBtn" onClick={() => fileRef.current?.click()}>Replace…</button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <button type="button" className="nxEsDropZone" onClick={() => fileRef.current?.click()}>
+                    Load a PDF, image or .docx…
+                  </button>
+                  {editable && (
+                    <button type="button" className="nxEsBtn isBlock" data-testid="esign-start-draft" onClick={startDraft}>
+                      <FilePenLine size={13} /> Draft a document in the editor
+                    </button>
+                  )}
+                </>
+              )}
+              <input
+                ref={fileRef} type="file"
+                accept="application/pdf,image/png,image/jpeg,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                hidden
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadFile(f); e.target.value = ""; }}
+              />
+            </section>
+
+            <section className="nxEsRailSec">
+              <h3 className="nxEsRailTitle">Fields</h3>
+              <p className="nxEsHint">Drag onto the page, or click then tap the page.</p>
+              <div className="nxEsPalette" role="listbox" aria-label="Field types">
+                {fieldTypes.map((t) => (
+                  <button
+                    key={t} type="button"
+                    className={armedType === t ? "nxEsPaletteItem isArmed" : "nxEsPaletteItem"}
+                    draggable={editable}
+                    aria-pressed={armedType === t}
+                    data-testid={`esign-palette-${t}`}
+                    disabled={!editable || !env.document}
+                    onClick={() => setArmedType((cur) => (cur === t ? null : t))}
+                    onDragStart={(e) => e.dataTransfer.setData("application/x-esign-field", t)}
+                  >
+                    <FieldGlyph type={t} /> {FIELD_TYPE_LABEL[t]}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {editable && env.document?.mime.includes("pdf") && !env.source && (
+              <section className="nxEsRailSec">
+                <h3 className="nxEsRailTitle">Amend document</h3>
+                <p className="nxEsHint">
+                  Fix the PDF before it goes out: white-out covers content, text writes a
+                  correction. Both are baked into the document when you send.
+                </p>
+                <div className="nxEsPalette">
+                  <button
+                    type="button"
+                    className={armedType === "ann-whiteout" ? "nxEsPaletteItem isArmed" : "nxEsPaletteItem"}
+                    aria-pressed={armedType === "ann-whiteout"}
+                    data-testid="esign-ann-whiteout"
+                    onClick={() => setArmedType((cur) => (cur === "ann-whiteout" ? null : "ann-whiteout"))}
+                  >
+                    <span className="nxEsGlyph" aria-hidden><Eraser size={14} /></span> White-out
+                  </button>
+                  <button
+                    type="button"
+                    className={armedType === "ann-text" ? "nxEsPaletteItem isArmed" : "nxEsPaletteItem"}
+                    aria-pressed={armedType === "ann-text"}
+                    data-testid="esign-ann-text"
+                    onClick={() => setArmedType((cur) => (cur === "ann-text" ? null : "ann-text"))}
+                  >
+                    <span className="nxEsGlyph" aria-hidden><FilePenLine size={14} /></span> Correction
+                  </button>
+                </div>
+                <p className="nxEsHint">
+                  Honest boundary: this amends and covers — it does not reflow the PDF's own
+                  text. Full rewording needs the source document (import the .docx or draft in
+                  the editor).
+                </p>
+              </section>
+            )}
+
+            <section className="nxEsRailSec">
+              <div className="nxEsRailTitleRow">
+                <h3 className="nxEsRailTitle">Signers</h3>
+                <div className="nxEsOrderToggle" role="radiogroup" aria-label="Signing order">
+                  {(["sequential", "parallel"] as const).map((o) => (
+                    <button
+                      key={o} type="button" role="radio" aria-checked={env.signingOrder === o}
+                      className={env.signingOrder === o ? "nxEsMiniTab isActive" : "nxEsMiniTab"}
+                      disabled={!editable}
+                      data-testid={`esign-order-${o}`}
+                      onClick={() => commit((cur) => ({ ...cur, signingOrder: o }))}
+                    >
+                      {o === "sequential" ? "In order" : "Any order"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <ol className="nxEsSignerList">
+                {[...env.signers].sort((a, b) => a.order - b.order).map((s, i, arr) => (
+                  <li key={s.id} className={`nxEsSignerCard sc-${s.colorIndex}`}>
+                    <div className="nxEsSignerTop">
+                      <span className="nxEsSignerDot" aria-hidden />
+                      <span className="nxEsSignerOrder">{env.signingOrder === "sequential" ? `${s.order}.` : "•"}</span>
+                      <input
+                        className="nxEsInlineInput" placeholder="Full name" value={s.name} readOnly={!editable}
+                        aria-label={`Signer ${s.order} name`}
+                        onChange={(e) => patchSigner(s.id, { name: e.target.value })}
+                      />
+                      {editable && (
+                        <span className="nxEsSignerBtns">
+                          <button type="button" className="nxEsIconBtn" aria-label="Move up" disabled={i === 0} onClick={() => moveSigner(s.id, -1)}><ArrowUp size={13} /></button>
+                          <button type="button" className="nxEsIconBtn" aria-label="Move down" disabled={i === arr.length - 1} onClick={() => moveSigner(s.id, 1)}><ArrowDown size={13} /></button>
+                          <button type="button" className="nxEsIconBtn" aria-label={`Remove ${s.name || s.role}`} onClick={() => removeSigner(s.id)}><X size={13} /></button>
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      className="nxEsInlineInput isSub" placeholder="email@company.com" value={s.email} readOnly={!editable}
+                      aria-label={`Signer ${s.order} email`} type="email"
+                      onChange={(e) => patchSigner(s.id, { email: e.target.value })}
+                    />
+                    <div className="nxEsSignerFoot">
+                      <input
+                        className="nxEsInlineInput isRole" placeholder="Role" value={s.role} readOnly={!editable}
+                        aria-label={`Signer ${s.order} role`}
+                        onChange={(e) => patchSigner(s.id, { role: e.target.value })}
+                      />
+                      <span className="nxEsSignerCount">{env.fields.filter((f) => f.signerId === s.id).length} fields</span>
+                    </div>
+                    {editable && (
+                      <textarea
+                        className="nxEsInlineInput isNote" rows={2}
+                        placeholder="Note for this recipient (optional)"
+                        aria-label={`Message for ${s.name || s.role}`}
+                        data-testid={`esign-signer-message-${s.id}`}
+                        value={s.message ?? ""}
+                        onChange={(e) => patchSigner(s.id, { message: e.target.value })}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ol>
+              {editable && (
+                <button type="button" className="nxEsBtn isBlock" onClick={addSigner} data-testid="esign-add-signer"><Plus size={14} /> Add signer</button>
+              )}
+              <p className="nxEsHint">
+                {env.signingOrder === "sequential"
+                  ? `Signs in order: ${[...env.signers].sort((a, b) => a.order - b.order).map((s) => s.name || s.role || "?").join(" → ")}`
+                  : "Everyone can sign at the same time."}
+              </p>
+            </section>
+
+            <section className="nxEsRailSec">
+              <h3 className="nxEsRailTitle">Copied in</h3>
+              <p className="nxEsHint">Receive the completed document. Nothing to sign.</p>
+              {(env.cc ?? []).map((c) => (
+                <div key={c.id} className="nxEsCcRow">
+                  <Mail size={13} aria-hidden />
+                  <input
+                    className="nxEsInlineInput" placeholder="email@company.com" type="email"
+                    aria-label="Copied-in recipient email" readOnly={!editable}
+                    data-testid={`esign-cc-${c.id}`}
+                    value={c.email}
+                    onChange={(e) => patchCc(c.id, { email: e.target.value })}
+                  />
+                  {editable && (
+                    <button
+                      type="button" className="nxEsIconBtn" aria-label="Remove copied-in recipient"
+                      onClick={() => removeCc(c.id)}
+                    ><X size={13} /></button>
+                  )}
+                </div>
+              ))}
+              {editable && (
+                <button type="button" className="nxEsBtn isBlock" onClick={addCc} data-testid="esign-add-cc">
+                  <Plus size={14} /> Add CC
+                </button>
+              )}
+            </section>
+
+            <section className="nxEsRailSec">
+              <h3 className="nxEsRailTitle">Templates</h3>
+              {env.templates.length > 0 && (
+                <button type="button" className="nxEsBtn isBlock" onClick={() => setTplOpen(true)}>
+                  <LayoutTemplate size={14} /> Apply a template ({env.templates.length})
+                </button>
+              )}
+              {editable && env.fields.length > 0 && (
+                <div className="nxEsTplSave">
+                  <input
+                    className="nxEsInput" placeholder="Template name" value={tplName}
+                    aria-label="Template name"
+                    onChange={(e) => setTplName(e.target.value)}
+                  />
+                  <button type="button" className="nxEsBtn" disabled={!tplName.trim()} onClick={saveTemplate}>Save layout</button>
+                </div>
+              )}
+            </section>
+          </aside>
+        )}
+
+        {tab === "sign" && (
+          <aside className="nxEsRail" aria-label="Signing">
+            <section className="nxEsRailSec">
+              <h3 className="nxEsRailTitle">Recipients</h3>
+              {env.status === "draft" && <p className="nxEsHint">Not sent yet — finish preparing, then send for signature.</p>}
+              <ol className="nxEsSignerList">
+                {[...env.signers].sort((a, b) => a.order - b.order).map((s) => {
+                  const isTurn = activeIds.includes(s.id);
+                  return (
+                    <li key={s.id} className={`nxEsSignerCard sc-${s.colorIndex}${signingAs === s.id ? " isSigningNow" : ""}`}>
+                      <div className="nxEsSignerTop">
+                        <span className="nxEsSignerDot" aria-hidden />
+                        <strong className="nxEsSignerName">{s.name || s.role}</strong>
+                        <span className={`nxEsSignerStatus is-${s.status}`}>{s.status}</span>
+                      </div>
+                      <div className="nxEsSignerFoot">
+                        <span className="nxEsSignerMail">{s.email}</span>
+                        {isTurn && s.id !== signingAs && (
+                          <button type="button" className="nxEsBtn isPrimary isSm" onClick={() => startSigning(s.id)} data-testid={`esign-sign-as-${s.id}`}>
+                            Sign now
+                          </button>
+                        )}
+                        {!isTurn && s.status !== "signed" && env.signingOrder === "sequential" && env.status !== "draft" && (
+                          <span className="nxEsHint">waiting for turn</span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+              <p className="nxEsHint isFoot">
+                Demo note: in production each recipient opens their own emailed signing link; here you act for them.
+              </p>
+            </section>
+            {signer && (
+              <section className="nxEsRailSec">
+                <h3 className="nxEsRailTitle">Your fields</h3>
+
+                {/* progress — a signer should always know how much is left */}
+                <div className="nxEsProgress" data-testid="esign-progress">
+                  <div className="nxEsProgressBar">
+                    <span className="nxEsProgressFill" style={{ width: `${myProgress}%` }} />
+                  </div>
+                  <span className="nxEsProgressText">{myDone} of {myFields.length} complete</span>
+                </div>
+
+                {/* guided navigation — the single control that walks a signer
+                    through a multi-page envelope instead of hunting for boxes */}
+                {(missingRequired.length > 0 || myDone < myFields.length) && (
+                  <button
+                    type="button" className="nxEsBtn isBlock" data-testid="esign-next-field"
+                    onClick={() => goToNextUnfilled(selectedId ?? undefined)}
+                  >
+                    Go to next {missingRequired.length > 0 ? "required " : ""}field
+                  </button>
+                )}
+
+                <ul className="nxEsTaskList">
+                  {inReadingOrder(myFields).map((f) => (
+                    <li key={f.id}>
+                      <button
+                        type="button"
+                        className={isFieldFilled(f) ? "nxEsTask isDone" : f.required ? "nxEsTask isRequired" : "nxEsTask"}
+                        onClick={() => goToField(f)}
+                        data-testid={`esign-task-${f.id}`}
+                      >
+                        <span className="nxEsTaskMark" aria-hidden>{isFieldFilled(f) && <Check size={12} />}</span>
+                        <FieldGlyph type={f.type} size={12} />
+                        <span className="nxEsTaskLabel">{f.label || FIELD_TYPE_LABEL[f.type]}</span>
+                        <span className="nxEsTaskPage">p.{f.page + 1}</span>
+                        {f.required && !isFieldFilled(f) && <em className="nxEsTaskReq">required</em>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button" className="nxEsBtn isPrimary isBlock" data-testid="esign-finish"
+                  disabled={missingRequired.length > 0 || invalidFields.length > 0}
+                  onClick={() => void finishSigning()}
+                >
+                  {missingRequired.length > 0
+                    ? `${missingRequired.length} required field${missingRequired.length === 1 ? "" : "s"} left`
+                    : invalidFields.length > 0
+                      ? `${invalidFields.length} field${invalidFields.length === 1 ? "" : "s"} need fixing`
+                      : "Finish signing"}
+                </button>
+                <button
+                  type="button" className="nxEsBtn isDanger isBlock" data-testid="esign-decline"
+                  onClick={() => setDeclineOpen(true)}
+                >
+                  Decline to sign
+                </button>
+              </section>
+            )}
+          </aside>
+        )}
+
+        {tab === "audit" && (
+          <aside className="nxEsRail" aria-label="Status">
+            <section className="nxEsRailSec">
+              <h3 className="nxEsRailTitle">Certificate</h3>
+              <div className="nxEsCert" data-testid="esign-certificate">
+                <div className="nxEsCertRow"><span>Status</span><strong>{STATUS_LABEL[env.status]}</strong></div>
+                <div className="nxEsCertRow"><span>Envelope</span><strong>{env.id}</strong></div>
+                <div className="nxEsCertRow"><span>Sent</span><strong>{fmtTime(env.sentAt)}</strong></div>
+                <div className="nxEsCertRow"><span>Completed</span><strong>{fmtTime(env.completedAt)}</strong></div>
+                <div className="nxEsCertRow"><span>Certificate</span><strong>{env.certificateId ?? "issued on completion"}</strong></div>
+              </div>
+              {env.status === "completed" && (
+                <button type="button" className="nxEsBtn isBlock" onClick={downloadCompleted}>Download signed PDF</button>
+              )}
+              <p className="nxEsHint isFoot">Demo surface — the certificate documents this demo flow, not legal compliance.</p>
+            </section>
+            <section className="nxEsRailSec">
+              <h3 className="nxEsRailTitle">Signers</h3>
+              <ol className="nxEsSignerList">
+                {[...env.signers].sort((a, b) => a.order - b.order).map((s) => (
+                  <li key={s.id} className={`nxEsSignerCard sc-${s.colorIndex}`}>
+                    <div className="nxEsSignerTop">
+                      <span className="nxEsSignerDot" aria-hidden />
+                      <strong className="nxEsSignerName">{s.name || s.role}</strong>
+                      <span className={`nxEsSignerStatus is-${s.status}`}>{s.status}</span>
+                    </div>
+                    <div className="nxEsSignerFoot">
+                      <span className="nxEsSignerMail">viewed {fmtTime(s.viewedAt)} · signed {fmtTime(s.signedAt)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          </aside>
+        )}
+
+        {/* document canvas */}
+        {tab !== "draft" && (
+        <div className="nxEsCanvasWrap">
+          {/* viewer controls ride OVER the document instead of taking a
+              full-width band of their own — they govern the page, not the
+              surface, and a third stacked header bar is what makes an embedded
+              surface read as a widget dropped into the page */}
+          {env.document && (
+            <div className="nxEsViewerBar" role="toolbar" aria-label="Document view">
+              <div className="nxEsPageNav">
+                <button type="button" className="nxEsIconBtn" aria-label="Previous page" disabled={pageIndex <= 0} onClick={() => gotoPage(pageIndex - 1)}><ChevronLeft size={16} /></button>
+                <span className="nxEsPageLabel">Page {Math.min(pageIndex + 1, Math.max(pages.length, 1))} / {Math.max(pages.length, env.document?.pageCount ?? 0, 1)}</span>
+                <button type="button" className="nxEsIconBtn" aria-label="Next page" disabled={pageIndex >= pages.length - 1} onClick={() => gotoPage(pageIndex + 1)}><ChevronRight size={16} /></button>
+              </div>
+              <span className="nxEsViewerSep" aria-hidden />
+              <div className="nxEsZoom">
+                <button type="button" className="nxEsIconBtn" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => setZoomManual((z) => Math.max(ZOOM_MIN, +(z - 0.15).toFixed(2)))}><Minus size={15} /></button>
+                <span className="nxEsPageLabel">{Math.round(zoom * 100)}%</span>
+                <button type="button" className="nxEsIconBtn" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => setZoomManual((z) => Math.min(ZOOM_MAX, +(z + 0.15).toFixed(2)))}><Plus size={15} /></button>
+              </div>
+            </div>
+          )}
+          <div className="nxEsScroll" ref={scrollRef} data-testid="esign-scroll">
+            {!env.document && (
+              <div className="nxEsEmpty">
+                <p>No document yet.</p>
+                <button type="button" className="nxEsBtn isPrimary" onClick={() => fileRef.current?.click()}>Load a PDF, image or .docx…</button>
+                <button type="button" className="nxEsBtn" onClick={startDraft}>Draft a document in the editor</button>
+              </div>
+            )}
+            {docError && <div className="nxEsNotice isError" role="alert">{docError}</div>}
+            {pages.map((p) => (
+              <PageView
+                key={p.index} page={p} zoom={zoom}
+                onVisible={() => setPageIndex(p.index)}
+              >
+                <div
+                  className={"nxEsFieldLayer" + (armedType ? " isArming" : "")}
+                  data-page={p.index}
+                  onDragOver={(e) => { if (editable) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
+                  onDrop={(e) => {
+                    if (!editable) return;
+                    const t = e.dataTransfer.getData("application/x-esign-field") as EsignFieldType;
+                    if (!t) return;
+                    e.preventDefault();
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    placeField(t, p.index, (e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height);
+                  }}
+                  onPointerDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if (editable && armedType) {
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      const fx = (e.clientX - rect.left) / rect.width;
+                      const fy = (e.clientY - rect.top) / rect.height;
+                      if (armedType === "ann-whiteout" || armedType === "ann-text") {
+                        placeAnnotation(armedType === "ann-whiteout" ? "whiteout" : "text", p.index, fx, fy);
+                      } else placeField(armedType, p.index, fx, fy);
+                    } else { setSelectedId(null); setSelectedAnnId(null); }
+                  }}
+                >
+                  {(env.annotations ?? []).filter((a) => a.page === p.index).map((a) => (
+                    <AnnotationBox
+                      key={a.id} ann={a} editable={editable && tab === "prepare"}
+                      selected={selectedAnnId === a.id}
+                      onSelect={() => { setSelectedAnnId(a.id); setSelectedId(null); }}
+                      onPatch={(patch) => patchAnnotation(a.id, patch)}
+                      onRemove={() => removeAnnotation(a.id)}
+                    />
+                  ))}
+                  {env.fields.filter((f) => f.page === p.index).map((f) => (
+                    <FieldBox
+                      key={f.id} field={f} env={env}
+                      mode={tab === "prepare" && editable ? "edit" : tab === "sign" && signer && f.signerId === signer.id ? "fill" : "view"}
+                      selected={selectedId === f.id}
+                      onSelect={() => setSelectedId(f.id)}
+                      onPatch={(patch) => patchField(f.id, patch)}
+                      onRemove={() => removeField(f.id)}
+                      onFill={(v) => fillField(f.id, v)}
+                      onOpenSignature={() => setSigDialog({ fieldId: f.id, kind: f.type === "initials" ? "initials" : "signature" })}
+                      hasAdopted={!!adopted[f.type === "initials" ? "initials" : "signature"]}
+                      onApplyAdopted={() => applyAdopted(f.type === "initials" ? "initials" : "signature", f.id)}
+                    />
+                  ))}
+                </div>
+              </PageView>
+            ))}
+          </div>
+        </div>
+        )}
+
+        {/* right rail: field properties (prepare, when selected) */}
+        {tab === "prepare" && editable && selected && (
+          <aside className="nxEsProps" aria-label="Field properties">
+            <div className="nxEsRailTitleRow">
+              <h3 className="nxEsRailTitle">{FIELD_TYPE_LABEL[selected.type]}</h3>
+              <button type="button" className="nxEsIconBtn" aria-label="Close properties" onClick={() => setSelectedId(null)}>×</button>
+            </div>
+            <label className="nxEsFieldLabel" htmlFor="es-prop-label">Label</label>
+            <input
+              id="es-prop-label" className="nxEsInput" value={selected.label ?? ""}
+              placeholder={FIELD_TYPE_LABEL[selected.type]}
+              onChange={(e) => patchField(selected.id, { label: e.target.value })}
+            />
+            <label className="nxEsFieldLabel" htmlFor="es-prop-signer">Assigned to</label>
+            <select
+              id="es-prop-signer" className="nxEsInput" value={selected.signerId}
+              onChange={(e) => patchField(selected.id, { signerId: e.target.value })}
+            >
+              {env.signers.map((s) => <option key={s.id} value={s.id}>{s.name || s.role}</option>)}
+            </select>
+            <label className="nxEsCheckRow">
+              <input
+                type="checkbox" checked={selected.required}
+                onChange={(e) => patchField(selected.id, { required: e.target.checked })}
+              />
+              Required
+            </label>
+            {selected.type === "text" && (
+              <>
+                <label className="nxEsFieldLabel" htmlFor="es-prop-placeholder">Placeholder</label>
+                <input
+                  id="es-prop-placeholder" className="nxEsInput" value={selected.placeholder ?? ""}
+                  placeholder="Shown while the field is empty"
+                  data-testid="esign-prop-placeholder"
+                  onChange={(e) => patchField(selected.id, { placeholder: e.target.value })}
+                />
+                <label className="nxEsFieldLabel" htmlFor="es-prop-format">Accepts</label>
+                <select
+                  id="es-prop-format" className="nxEsInput" value={selected.format ?? "any"}
+                  data-testid="esign-prop-format"
+                  onChange={(e) => patchField(selected.id, { format: e.target.value as EsignFieldFormat })}
+                >
+                  {(Object.keys(FIELD_FORMAT_LABEL) as EsignFieldFormat[]).map((k) => (
+                    <option key={k} value={k}>{FIELD_FORMAT_LABEL[k]}</option>
+                  ))}
+                </select>
+              </>
+            )}
+            {selected.type === "dropdown" && (
+              <>
+                <label className="nxEsFieldLabel" htmlFor="es-prop-options">Options (one per line)</label>
+                <textarea
+                  id="es-prop-options" className="nxEsInput isArea" rows={4}
+                  value={(selected.options ?? []).join("\n")}
+                  onChange={(e) => patchField(selected.id, { options: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean) })}
+                />
+              </>
+            )}
+
+            <label className="nxEsFieldLabel" htmlFor="es-prop-taborder">Tab order</label>
+            <input
+              id="es-prop-taborder" className="nxEsInput" type="number" min={1}
+              placeholder="Reading order"
+              data-testid="esign-prop-taborder"
+              value={selected.tabIndex ?? ""}
+              onChange={(e) => patchField(selected.id, {
+                tabIndex: e.target.value ? Number(e.target.value) : undefined,
+              })}
+            />
+            <p className="nxEsHint">Blank follows the page order, top to bottom.</p>
+
+            <div className="nxEsPropActions">
+              <button
+                type="button" className="nxEsBtn" data-testid="esign-duplicate-field"
+                onClick={() => duplicateField(selected.id)}
+              >
+                <Copy size={13} /> Duplicate
+              </button>
+              {pages.length > 1 && (
+                <button
+                  type="button" className="nxEsBtn" data-testid="esign-apply-all-pages"
+                  title="Place a copy of this field at the same spot on every page"
+                  onClick={() => applyFieldToAllPages(selected.id)}
+                >
+                  <CopyPlus size={13} /> All pages
+                </button>
+              )}
+            </div>
+            <button type="button" className="nxEsBtn isDanger isBlock" onClick={() => removeField(selected.id)}>
+              <Trash2 size={13} /> Delete field
+            </button>
+          </aside>
+        )}
+
+        {tab === "audit" && (
+          <div className="nxEsAuditPane" aria-label="Audit trail">
+            <h3 className="nxEsRailTitle">Audit trail</h3>
+            <ol className="nxEsAudit" data-testid="esign-audit">
+              {[...env.events].reverse().map((ev) => (
+                <li key={ev.id} className={`nxEsAuditRow t-${ev.type}`}>
+                  <span className="nxEsAuditDot" aria-hidden />
+                  <div>
+                    <div className="nxEsAuditHead">
+                      <strong>{auditTitle(ev.type)}</strong>
+                      <time dateTime={ev.at}>{fmtTime(ev.at)}</time>
+                    </div>
+                    <div className="nxEsAuditDetail">{ev.actor} — {ev.detail}</div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
+
+      {/* send review dialog — the review surface before the outward action */}
+      {sendOpen && (
+        <div className="nxEsOverlay" role="presentation" onClick={() => setSendOpen(false)}>
+          <div className="nxEsDialog isWide" role="dialog" aria-modal="true" aria-label="Review before sending" onClick={(e) => e.stopPropagation()}>
+            <header className="nxEsDialogHead"><h2>Review before sending</h2>
+              <button type="button" className="nxEsIconBtn" aria-label="Close" onClick={() => setSendOpen(false)}>×</button>
+            </header>
+            <div className="nxEsPad">
+              <div className="nxEsReviewDoc">
+                <strong>{env.document?.name}</strong>
+                <span>{env.document?.pageCount} pages · {env.fields.length} fields · {env.signingOrder === "sequential" ? "signs in order" : "signs in any order"}</span>
+              </div>
+              <table className="nxEsReviewTable">
+                <thead><tr><th>#</th><th>Recipient</th><th>Role</th><th>Fields</th><th>Signing link</th></tr></thead>
+                <tbody>
+                  {buildSendRequest().recipients.map((r) => (
+                    <tr key={r.signerId}>
+                      <td>{r.order}</td>
+                      <td><strong>{r.name}</strong><br /><span className="nxEsSignerMail">{r.email}</span></td>
+                      <td>{r.role}</td>
+                      <td>{r.fieldCount} ({r.requiredFieldCount} required)</td>
+                      <td><code className="nxEsCode">{r.signingUrl}</code></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {/* delivery policy — carried to the send seam so a backend can
+                  enforce it; the demo send records it in the audit trail */}
+              <div className="nxEsSendPolicy">
+                <label className="nxEsPolicyRow">
+                  <span>Remind unsigned recipients every</span>
+                  <select
+                    className="nxEsInput isTight" data-testid="esign-remind-every"
+                    value={(env.reminders ?? DEFAULT_REMINDER_POLICY).everyDays}
+                    onChange={(e) => commit((cur) => ({
+                      ...cur,
+                      reminders: { ...(cur.reminders ?? DEFAULT_REMINDER_POLICY), everyDays: Number(e.target.value) },
+                    }))}
+                  >
+                    <option value={0}>never</option>
+                    <option value={1}>day</option>
+                    <option value={3}>3 days</option>
+                    <option value={7}>week</option>
+                  </select>
+                </label>
+                <label className="nxEsPolicyRow">
+                  <span>Expires after</span>
+                  <select
+                    className="nxEsInput isTight" data-testid="esign-expires-in"
+                    value={(env.reminders ?? DEFAULT_REMINDER_POLICY).expiresInDays}
+                    onChange={(e) => commit((cur) => ({
+                      ...cur,
+                      reminders: { ...(cur.reminders ?? DEFAULT_REMINDER_POLICY), expiresInDays: Number(e.target.value) },
+                    }))}
+                  >
+                    <option value={0}>never</option>
+                    <option value={7}>7 days</option>
+                    <option value={14}>14 days</option>
+                    <option value={30}>30 days</option>
+                    <option value={90}>90 days</option>
+                  </select>
+                </label>
+              </div>
+              {(env.annotations ?? []).length > 0 && (
+                <p className="nxEsHint">
+                  {(env.annotations ?? []).length} document amendment{(env.annotations ?? []).length === 1 ? "" : "s"} will
+                  be baked into the PDF on send — recipients see the amended document only.
+                </p>
+              )}
+              {(env.cc ?? []).some((c) => c.email.trim()) && (
+                <p className="nxEsHint">
+                  Copied in on completion: {(env.cc ?? []).filter((c) => c.email.trim()).map((c) => c.email).join(", ")}
+                </p>
+              )}
+              <div className={config?.onSend ? "nxEsNotice isInfo" : "nxEsNotice"} role="note">
+                {config?.onSend
+                  ? "Delivery is wired to your configured send handler."
+                  : "DEMO MODE — no emails will be sent. Recipients are simulated in the Sign tab. Wire ESignConfig.onSend for real delivery (docs/RECIPES.md)."}
+              </div>
+            </div>
+            <footer className="nxEsDialogFoot">
+              <span className="nxEsLegal">Sending locks fields and signers.</span>
+              <div className="nxEsBtnRow">
+                <button type="button" className="nxEsBtn" onClick={() => setSendOpen(false)}>Cancel</button>
+                <button type="button" className="nxEsBtn isPrimary" onClick={() => void confirmSend()} data-testid="esign-confirm-send">
+                  {config?.onSend ? "Send to recipients" : "Send (demo)"}
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {/* template picker */}
+      {tplOpen && (
+        <div className="nxEsOverlay" role="presentation" onClick={() => setTplOpen(false)}>
+          <div className="nxEsDialog" role="dialog" aria-modal="true" aria-label="Apply a template" onClick={(e) => e.stopPropagation()}>
+            <header className="nxEsDialogHead"><h2>Apply a template</h2>
+              <button type="button" className="nxEsIconBtn" aria-label="Close" onClick={() => setTplOpen(false)}>×</button>
+            </header>
+            <div className="nxEsPad">
+              <p className="nxEsHint">Replaces the current field layout; roles map to signers in order.</p>
+              <ul className="nxEsTplList">
+                {env.templates.map((t) => (
+                  <li key={t.id}>
+                    <button type="button" className="nxEsTplCard" onClick={() => applyTemplate(t.id)} disabled={!editable}>
+                      <strong>{t.name}</strong>
+                      <span>{t.fields.length} fields · roles: {t.roles.join(" → ")}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <SignatureDialog
+        open={!!sigDialog}
+        kind={sigDialog?.kind ?? "signature"}
+        signerName={signer?.name ?? ""}
+        onCancel={() => setSigDialog(null)}
+        onDone={(sig) => {
+          if (!sigDialog) return;
+          const f = env.fields.find((x) => x.id === sigDialog.fieldId);
+          if (f) {
+            const kind = f.type === "initials" ? "initials" : "signature";
+            fillField(f.id, { type: kind, signature: sig });
+            // adopt once, reuse everywhere — nobody re-draws per field
+            setAdopted((cur) => ({ ...cur, [kind]: sig }));
+            setSigDialog(null);
+            goToNextUnfilled(f.id);
+            return;
+          }
+          setSigDialog(null);
+        }}
+      />
+
+      {declineOpen && (
+        <div className="nxEsScrim" onClick={() => setDeclineOpen(false)}>
+          <div
+            className="nxEsDialog isNarrow" role="dialog" aria-modal="true"
+            aria-label="Decline to sign" onClick={(e) => e.stopPropagation()}
+          >
+            <header className="nxEsDialogHead">
+              <h2>Decline to sign</h2>
+              <button type="button" className="nxEsIconBtn" aria-label="Close" onClick={() => setDeclineOpen(false)}>
+                <X size={14} />
+              </button>
+            </header>
+            <div className="nxEsDialogBody">
+              <p className="nxEsHint">
+                The envelope stops here and the sender is notified. Your reason is recorded
+                in the audit trail.
+              </p>
+              <textarea
+                className="nxEsTextarea" rows={3} autoFocus
+                aria-label="Reason for declining"
+                placeholder="Reason (optional) — e.g. the payment terms in clause 3 need revising"
+                value={declineReason}
+                onChange={(e) => setDeclineReason(e.target.value)}
+                data-testid="esign-decline-reason"
+              />
+            </div>
+            <footer className="nxEsDialogFoot">
+              <span className="nxEsHint">This cannot be undone from the signer side.</span>
+              <div className="nxEsBtnRow">
+                <button type="button" className="nxEsBtn" onClick={() => setDeclineOpen(false)}>Cancel</button>
+                <button
+                  type="button" className="nxEsBtn isDanger" onClick={declineSigning}
+                  data-testid="esign-decline-confirm"
+                >
+                  Decline to sign
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  function gotoPage(i: number) {
+    setPageIndex(i);
+    const el = scrollRef.current?.querySelector(`[data-pageview="${i}"]`);
+    el?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+}
+
+/* ---------------------------------------------------------------- PageView */
+
+function PageView({ page, zoom, children, onVisible }: {
+  page: PdfPageHandle; zoom: number; children: React.ReactNode; onVisible: () => void;
+}) {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const hostRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    let dead = false;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    void page.render(canvas, zoom).catch(() => { if (!dead) { /* render race on unmount */ } });
+    return () => { dead = true; page.cancel(canvas); };
+  }, [page, zoom]);
+  React.useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting && e.intersectionRatio > 0.5) onVisible();
+    }, { threshold: [0.55] });
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const w = Math.round(page.width * zoom);
+  const h = Math.round(page.height * zoom);
+  return (
+    <div ref={hostRef} className="nxEsPage" data-pageview={page.index} style={{ width: w, height: h }}>
+      <canvas ref={canvasRef} className="nxEsPageCanvas" style={{ width: w, height: h }} aria-label={`Page ${page.index + 1}`} />
+      {children}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- FieldBox */
+
+function FieldBox({ field: f, env, mode, selected, onSelect, onPatch, onRemove, onFill, onOpenSignature, hasAdopted, onApplyAdopted }: {
+  field: EsignField;
+  env: EsignEnvelope;
+  mode: "edit" | "fill" | "view";
+  selected: boolean;
+  onSelect: () => void;
+  onPatch: (p: Partial<EsignField>) => void;
+  onRemove: () => void;
+  onFill: (v: EsignFieldValue | undefined) => void;
+  onOpenSignature: () => void;
+  /** a signature/initials of this kind has already been adopted this session */
+  hasAdopted?: boolean;
+  onApplyAdopted?: () => void;
+}) {
+  const signer = env.signers.find((s) => s.id === f.signerId);
+  const color = signer?.colorIndex ?? 0;
+  const ref = React.useRef<HTMLDivElement>(null);
+  const drag = React.useRef<{ kind: "move" | "resize"; startX: number; startY: number; f0: EsignField } | null>(null);
+
+  const onPointerDown = (e: React.PointerEvent, kind: "move" | "resize") => {
+    if (mode !== "edit") return;
+    e.stopPropagation();
+    onSelect();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    drag.current = { kind, startX: e.clientX, startY: e.clientY, f0: { ...f } };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    const layer = ref.current?.parentElement;
+    if (!d || !layer) return;
+    const rect = layer.getBoundingClientRect();
+    const dx = (e.clientX - d.startX) / rect.width;
+    const dy = (e.clientY - d.startY) / rect.height;
+    if (d.kind === "move") {
+      onPatch({ x: clamp(d.f0.x + dx, 0, 1 - f.w), y: clamp(d.f0.y + dy, 0, 1 - f.h) });
+    } else {
+      onPatch({ w: clamp(d.f0.w + dx, 0.02, 1 - f.x), h: clamp(d.f0.h + dy, 0.012, 1 - f.y) });
+    }
+  };
+  const onPointerUp = () => { drag.current = null; };
+
+  const filled = isFieldFilled(f);
+  const label = f.label || FIELD_TYPE_LABEL[f.type];
+  const formatError = fieldFormatError(f);
+
+  const fillControl = () => {
+    if (mode !== "fill") return null;
+    switch (f.type) {
+      case "signature":
+      case "initials":
+        return (
+          <button
+            type="button" className="nxEsFillBtn"
+            onClick={() => { if (!filled && hasAdopted && onApplyAdopted) onApplyAdopted(); else onOpenSignature(); }}
+            title={!filled && hasAdopted ? "Apply your adopted signature" : undefined}
+            data-testid={`esign-fill-${f.id}`}
+          >
+            {filled
+              ? <SignaturePreview value={f.value} />
+              : hasAdopted
+                ? <span className="nxEsFillAdopt"><Check size={11} /> Apply {f.type === "initials" ? "initials" : "signature"}</span>
+                : `${f.type === "initials" ? "Initial" : "Sign"} here`}
+          </button>
+        );
+      case "date":
+        return (
+          <input
+            type="date" className="nxEsFillInput" aria-label={label} data-testid={`esign-fill-${f.id}`}
+            value={f.value?.type === "date" ? f.value.text : ""}
+            onFocus={(e) => {
+              if (!(f.value?.type === "date" && f.value.text)) {
+                const today = new Date().toISOString().slice(0, 10);
+                onFill({ type: "date", text: today });
+                (e.target as HTMLInputElement).value = today;
+              }
+            }}
+            onChange={(e) => onFill(e.target.value ? { type: "date", text: e.target.value } : undefined)}
+          />
+        );
+      case "text":
+        return (
+          <input
+            type="text"
+            className={formatError ? "nxEsFillInput isInvalid" : "nxEsFillInput"}
+            aria-label={label} aria-invalid={!!formatError || undefined}
+            title={formatError ?? undefined}
+            placeholder={f.placeholder || label}
+            data-testid={`esign-fill-${f.id}`}
+            value={f.value?.type === "text" ? f.value.text : ""}
+            onChange={(e) => onFill(e.target.value ? { type: "text", text: e.target.value } : undefined)}
+          />
+        );
+      case "checkbox":
+        return (
+          <input
+            type="checkbox" className="nxEsFillCheck" aria-label={label} data-testid={`esign-fill-${f.id}`}
+            checked={f.value?.type === "checkbox" ? f.value.checked : false}
+            onChange={(e) => onFill({ type: "checkbox", checked: e.target.checked })}
+          />
+        );
+      case "dropdown":
+        return (
+          <select
+            className="nxEsFillInput" aria-label={label} data-testid={`esign-fill-${f.id}`}
+            value={f.value?.type === "dropdown" ? f.value.text : ""}
+            onChange={(e) => onFill(e.target.value ? { type: "dropdown", text: e.target.value } : undefined)}
+          >
+            <option value="">{label}…</option>
+            {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        );
+    }
+  };
+
+  return (
+    <div
+      ref={ref}
+      className={[
+        "nxEsField", `fc-${color}`, `ft-${f.type}`, `m-${mode}`,
+        selected ? "isSelected" : "", filled ? "isFilled" : "", f.required ? "isRequired" : "",
+      ].filter(Boolean).join(" ")}
+      style={{ left: pct(f.x), top: pct(f.y), width: pct(f.w), height: pct(f.h) }}
+      role={mode === "edit" ? "button" : undefined}
+      tabIndex={mode === "edit" ? 0 : undefined}
+      aria-label={`${label} — ${signer?.name || signer?.role || "unassigned"}${f.required ? ", required" : ""}`}
+      data-testid={`esign-field-${f.id}`}
+      onPointerDown={(e) => onPointerDown(e, "move")}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onKeyDown={(e) => { if (mode === "edit" && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onSelect(); } }}
+    >
+      {mode !== "fill" && (
+        <>
+          {/* the tag sits ABOVE the box so a field reads as an owned object even
+              when the box itself is only a few millimetres of a signature line */}
+          <span className="nxEsFieldTag">
+            <FieldGlyph type={f.type} size={11} />
+            <span className="nxEsFieldTagText">{label}</span>
+            {f.required && <em className="nxEsFieldReq" title="Required" aria-hidden>*</em>}
+          </span>
+          <span className="nxEsFieldWho">{signer?.name || signer?.role || "Unassigned"}</span>
+        </>
+      )}
+      {mode === "view" && filled && <SignatureOrValue field={f} />}
+      {fillControl()}
+      {mode === "edit" && selected && (
+        <>
+          <button
+            type="button" className="nxEsFieldDel" aria-label={`Delete ${label}`}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          ><X size={11} /></button>
+          <span className="nxEsFieldGrip" aria-hidden onPointerDown={(e) => onPointerDown(e, "resize")} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------- AnnotationBox */
+
+/** An owner amendment overlay on the PDF (white-out or text correction) —
+ *  drag/resize like a field, inline-editable text, baked into the bytes at
+ *  send time. Renders paper-real (opaque white) so preview = outcome. */
+function AnnotationBox({ ann: a, editable, selected, onSelect, onPatch, onRemove }: {
+  ann: EsignAnnotation;
+  editable: boolean;
+  selected: boolean;
+  onSelect: () => void;
+  onPatch: (p: Partial<EsignAnnotation>) => void;
+  onRemove: () => void;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const drag = React.useRef<{ kind: "move" | "resize"; startX: number; startY: number; a0: EsignAnnotation } | null>(null);
+  const down = (e: React.PointerEvent, kind: "move" | "resize") => {
+    if (!editable) return;
+    if ((e.target as HTMLElement).tagName === "TEXTAREA") return; // typing, not dragging
+    e.stopPropagation();
+    onSelect();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    drag.current = { kind, startX: e.clientX, startY: e.clientY, a0: { ...a } };
+  };
+  const move = (e: React.PointerEvent) => {
+    const d = drag.current;
+    const layer = ref.current?.parentElement;
+    if (!d || !layer) return;
+    const rect = layer.getBoundingClientRect();
+    const dx = (e.clientX - d.startX) / rect.width;
+    const dy = (e.clientY - d.startY) / rect.height;
+    if (d.kind === "move") onPatch({ x: clamp(d.a0.x + dx, 0, 1 - a.w), y: clamp(d.a0.y + dy, 0, 1 - a.h) });
+    else onPatch({ w: clamp(d.a0.w + dx, 0.02, 1 - a.x), h: clamp(d.a0.h + dy, 0.012, 1 - a.y) });
+  };
+  return (
+    <div
+      ref={ref}
+      className={["nxEsAnn", `k-${a.kind}`, selected ? "isSelected" : "", editable ? "isEditable" : ""].filter(Boolean).join(" ")}
+      style={{ left: pct(a.x), top: pct(a.y), width: pct(a.w), height: pct(a.h) }}
+      role={editable ? "button" : undefined}
+      tabIndex={editable ? 0 : undefined}
+      aria-label={a.kind === "whiteout" ? "White-out amendment" : "Text correction"}
+      data-testid={`esign-ann-${a.id}`}
+      onPointerDown={(e) => down(e, "move")}
+      onPointerMove={move}
+      onPointerUp={() => { drag.current = null; }}
+    >
+      {a.kind === "text" && (editable ? (
+        <textarea
+          className="nxEsAnnText"
+          aria-label="Correction text"
+          placeholder="Corrected text…"
+          value={a.text ?? ""}
+          data-testid={`esign-ann-input-${a.id}`}
+          onChange={(e) => onPatch({ text: e.target.value })}
+          onPointerDown={(e) => { e.stopPropagation(); onSelect(); }}
+        />
+      ) : (
+        <span className="nxEsAnnTextView">{a.text}</span>
+      ))}
+      {editable && selected && (
+        <>
+          <span className="nxEsFieldTag isAnn">{a.kind === "whiteout" ? "White-out" : "Correction"} — baked at send</span>
+          <button
+            type="button" className="nxEsFieldDel" aria-label="Delete amendment"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          ><X size={11} /></button>
+          <span className="nxEsFieldGrip" aria-hidden onPointerDown={(e) => down(e, "resize")} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function SignaturePreview({ value }: { value?: EsignFieldValue }) {
+  if (!value || (value.type !== "signature" && value.type !== "initials")) return null;
+  const sig = value.signature;
+  if (sig.dataUrl) return <img className="nxEsSigImg" src={sig.dataUrl} alt="Signature" />;
+  return <span className="nxEsSigText" style={{ fontFamily: signatureFontCss(sig.font) }}>{sig.text}</span>;
+}
+
+function SignatureOrValue({ field: f }: { field: EsignField }) {
+  const v = f.value;
+  if (!v) return null;
+  if (v.type === "signature" || v.type === "initials") return <SignaturePreview value={v} />;
+  if (v.type === "checkbox") return <span className="nxEsSigText">{v.checked ? "\u2611" : "\u2610"}</span>;
+  return <span className="nxEsValText">{v.text}</span>;
+}
+
+/** Field-type icons in the app's lucide stroke language — emoji glyphs read as
+ *  a widget, and nothing else in this library uses them as UI icons. */
+const FIELD_TYPE_ICON: Record<EsignFieldType, LucideIcon> = {
+  signature: Signature,
+  initials: Baseline,
+  date: Calendar,
+  text: Type,
+  checkbox: CheckSquare,
+  dropdown: ChevronDownSquare,
+};
+
+function FieldGlyph({ type, size = 14 }: { type: EsignFieldType; size?: number }) {
+  const Icon = FIELD_TYPE_ICON[type];
+  return (
+    <span className="nxEsGlyph" aria-hidden>
+      <Icon size={size} />
+    </span>
+  );
+}
+
+/* ----------------------------------------------------------------- helpers */
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const pct = (v: number) => `${(v * 100).toFixed(3)}%`;
+const fmtTime = (iso?: string) =>
+  iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
+function auditTitle(t: string): string {
+  return t.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
