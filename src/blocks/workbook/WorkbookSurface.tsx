@@ -3,13 +3,35 @@
 import * as React from "react";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import UniverPresetSheetsCoreEnUS from "@univerjs/preset-sheets-core/locales/en-US";
+// Feature presets — each is WIRING of a capability Univer already ships; they enter
+// the presets array only when the config enables them (and their locales/CSS ride
+// this lazy chunk regardless, so importing the block still adds nothing eager).
+import { UniverSheetsFilterPreset } from "@univerjs/preset-sheets-filter";
+import UniverPresetSheetsFilterEnUS from "@univerjs/preset-sheets-filter/locales/en-US";
+import { UniverSheetsSortPreset } from "@univerjs/preset-sheets-sort";
+import UniverPresetSheetsSortEnUS from "@univerjs/preset-sheets-sort/locales/en-US";
+import { UniverSheetsConditionalFormattingPreset } from "@univerjs/preset-sheets-conditional-formatting";
+import UniverPresetSheetsConditionalFormattingEnUS from "@univerjs/preset-sheets-conditional-formatting/locales/en-US";
+import { UniverSheetsDataValidationPreset } from "@univerjs/preset-sheets-data-validation";
+import UniverPresetSheetsDataValidationEnUS from "@univerjs/preset-sheets-data-validation/locales/en-US";
+import { UniverSheetsFindReplacePreset } from "@univerjs/preset-sheets-find-replace";
+import UniverPresetSheetsFindReplaceEnUS from "@univerjs/preset-sheets-find-replace/locales/en-US";
+import { UniverSheetsNotePreset } from "@univerjs/preset-sheets-note";
+import UniverPresetSheetsNoteEnUS from "@univerjs/preset-sheets-note/locales/en-US";
 import { createUniver, LocaleType, mergeLocales } from "@univerjs/presets";
 import { defaultTheme } from "@univerjs/themes";
 import { CommandType, ThemeService, type IWorkbookData } from "@univerjs/core";
 import { IRenderManagerService } from "@univerjs/engine-render";
 import { ComponentManager } from "@univerjs/ui";
 import "@univerjs/preset-sheets-core/lib/index.css";
+import "@univerjs/preset-sheets-filter/lib/index.css";
+import "@univerjs/preset-sheets-sort/lib/index.css";
+import "@univerjs/preset-sheets-conditional-formatting/lib/index.css";
+import "@univerjs/preset-sheets-data-validation/lib/index.css";
+import "@univerjs/preset-sheets-find-replace/lib/index.css";
+import "@univerjs/preset-sheets-note/lib/index.css";
 import "./workbook.css";
+import { resolveWorkbookConfig, type WorkbookConfig } from "./config";
 import { canvasGridTheme, deriveWorkbookTheme, isDarkTheme, skinSignature, themeSignature, useThemeNonce, withLightTokens, type CanvasGridTheme, type UniverTheme } from "./workbook-theme";
 import { registerNxIcons, type IconRegistry } from "./workbook-icons";
 import { seedWorkbook } from "./snapshot";
@@ -25,7 +47,27 @@ export interface WorkbookSurfaceProps {
   /* host controls (save state, reset) — rendered INTO the right end of Univer's own
      toolbar row so the page needs no extra header strip of its own */
   actions?: React.ReactNode;
+  /* which Excel capabilities this surface carries (import/export, filters, sort,
+     conditional formatting, data validation, find & replace, notes). Omitted keys
+     fall back to the full-Excel defaults; pass a narrowed object for a simpler grid. */
+  config?: Partial<WorkbookConfig>;
   "data-testid"?: string;
+}
+
+/* Assemble the presets array + merged locale from the resolved config. Core is
+   always present; each feature preset (a capability Univer already ships) joins only
+   when enabled. importExport is NOT a preset — it is built toolbar actions, handled
+   separately — so it does not appear here. */
+function buildPresets(cfg: WorkbookConfig, container: HTMLElement) {
+  const presets: unknown[] = [UniverSheetsCorePreset({ container, ribbonType: "simple" })];
+  const locales: object[] = [UniverPresetSheetsCoreEnUS];
+  if (cfg.filters) { presets.push(UniverSheetsFilterPreset()); locales.push(UniverPresetSheetsFilterEnUS); }
+  if (cfg.sort) { presets.push(UniverSheetsSortPreset()); locales.push(UniverPresetSheetsSortEnUS); }
+  if (cfg.conditionalFormatting) { presets.push(UniverSheetsConditionalFormattingPreset()); locales.push(UniverPresetSheetsConditionalFormattingEnUS); }
+  if (cfg.dataValidation) { presets.push(UniverSheetsDataValidationPreset()); locales.push(UniverPresetSheetsDataValidationEnUS); }
+  if (cfg.findReplace) { presets.push(UniverSheetsFindReplacePreset()); locales.push(UniverPresetSheetsFindReplaceEnUS); }
+  if (cfg.notes) { presets.push(UniverSheetsNotePreset()); locales.push(UniverPresetSheetsNoteEnUS); }
+  return { presets, locale: mergeLocales(...locales) };
 }
 
 type Injector = { get: (token: unknown) => unknown };
@@ -113,8 +155,12 @@ export function WorkbookSurface({
   reloadNonce = 0,
   className,
   actions,
+  config,
   ...rest
 }: WorkbookSurfaceProps) {
+  const cfg = React.useMemo(() => resolveWorkbookConfig(config), [config]);
+  const cfgRef = React.useRef(cfg);
+  cfgRef.current = cfg;
   const hostRef = React.useRef<HTMLDivElement>(null);
   const apiRef = React.useRef<UniverApi | null>(null);
   const themeRef = React.useRef<UniverThemeService | null>(null);
@@ -141,11 +187,12 @@ export function WorkbookSurface({
     try {
       const sig = themeSignature();
       const skinSig = skinSignature();
+      const { presets, locale } = buildPresets(cfgRef.current, host);
       const created = createUniver({
         locale: LocaleType.EN_US,
-        locales: { [LocaleType.EN_US]: mergeLocales(UniverPresetSheetsCoreEnUS) },
+        locales: { [LocaleType.EN_US]: locale },
         theme: derive() as unknown as typeof defaultTheme,
-        presets: [UniverSheetsCorePreset({ container: host, ribbonType: "simple" })],
+        presets: presets as Parameters<typeof createUniver>[0]["presets"],
       }) as unknown as UniverInstance;
       instance = created;
       apiRef.current = created.univerAPI;
@@ -207,7 +254,8 @@ export function WorkbookSurface({
       unitIdRef.current = "";
       if (host) host.innerHTML = "";
     };
-  }, [reloadNonce]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadNonce, cfg]);
 
   // live re-theme when the app theme flips (data-theme) or a skin lands. The two
   // inputs are handled separately: a SKIN change re-derives the light-anchored

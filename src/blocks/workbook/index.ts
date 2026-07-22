@@ -28,6 +28,12 @@ export {
   type ColorScale,
 } from "./workbook-theme";
 export type { WorkbookSurfaceProps } from "./WorkbookSurface";
+export {
+  DEFAULT_WORKBOOK_CONFIG,
+  MINIMAL_WORKBOOK_CONFIG,
+  resolveWorkbookConfig,
+  type WorkbookConfig,
+} from "./config";
 
 /* the lazy surface — host renders it under a Suspense fallback */
 export const LazyWorkbookSurface = React.lazy(() => import("./WorkbookSurface"));
