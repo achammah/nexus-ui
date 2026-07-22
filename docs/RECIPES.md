@@ -60,7 +60,20 @@ const config: ESignConfig = {
 | `fieldTypes` | which field types the placement palette offers |
 | `signingOrder` | default order for new envelopes — `sequential` gates each signer on the previous one, `parallel` opens to everyone at once |
 | `signingUrlTemplate` | the per-recipient link shown in the review surface; `{envelopeId}` / `{signerId}` are substituted |
+| `demoStates` | show the Draft / Partially signed / Completed switcher. Default `true`; set `false` in a real deployment |
 | `onSend` | **the delivery seam** — see below |
+
+### Demo states
+
+`seedEnvelope(state)` returns a seeded envelope in one of three states, defaulting to `draft`:
+
+```ts
+seedEnvelope();             // draft — editable: place fields, edit signers, send
+seedEnvelope("sent");       // partially signed — the provider signed, client's turn
+seedEnvelope("completed");  // both signed, certificate issued
+```
+
+`seedDraftEnvelope` / `seedSentEnvelope` / `seedCompletedEnvelope` are exported directly too. The default is deliberately the **draft**: a sent envelope locks fields and signers (as a real one does once recipients hold it), so seeding one leaves a first-time visitor with a greyed-out palette and nothing to do.
 
 ### The delivery seam
 
@@ -84,14 +97,21 @@ Wire `onSend` to deliver for real. It receives an `EsignSendRequest`:
       "order": 1,
       "fieldCount": 3,
       "requiredFieldCount": 3,
-      "signingUrl": "https://app.example.com/sign/env-msa-2026-0142/signer-provider"
+      "signingUrl": "https://app.example.com/sign/env-msa-2026-0142/signer-provider",
+      "message": "Please double-check the fee schedule in Exhibit B before signing."
     }
   ],
+  "cc": [{ "id": "cc-1", "name": "", "email": "legal@example.com" }],
+  "reminders": { "everyDays": 7, "expiresInDays": 14 },
   "sentAt": "2026-07-22T09:31:00.000Z"
 }
 ```
 
-Your backend mails each recipient their `signingUrl` and, for `sequential` order, releases them one at a time as each signature lands.
+Your backend mails each recipient their `signingUrl` (including their `message`, if any) and, for `sequential` order, releases them one at a time as each signature lands. `cc` recipients get the completed document and no signing link. `reminders` is the cadence and expiry chosen in the review surface — enforce it on your side; the surface records the choice in the audit trail but cannot itself schedule mail.
+
+### Field validation
+
+Text fields carry a `format` (`any` / `email` / `number` / `phone` / `date`). A value that fails its format is flagged on the field and blocks completion, so a signer cannot return `abc` in an email field. `fieldFormatError(field)` is exported if you want to run the same check server-side — do run it there too; client-side validation is a usability feature, never a trust boundary.
 
 ### What the surface does and does not claim
 
