@@ -183,7 +183,7 @@ export default function TimelineView(props: ViewProps) {
     if (el) el.scrollLeft = Math.max(todayOff * ppd - el.clientWidth / 3, 0);
   }, [ppd, todayOff]);
 
-  const railW = isMobile ? 168 : 296;
+  const railW = isMobile ? 168 : 330;
 
   /* geometry for dependency arrows between VISIBLE rows */
   const rowIndex = new Map(visible.map((n, i) => [n.row.id, i]));

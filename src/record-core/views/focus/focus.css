@@ -348,4 +348,6 @@
      drops the secondary affordances rather than crushing every control */
   .nxFocusRemove { display: none; }
   .nxFocusSpent { min-width: 44px; }
+  /* no keyboard to hint at */
+  .nxFocusHint { display: none; }
 }

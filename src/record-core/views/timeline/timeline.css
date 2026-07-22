@@ -30,12 +30,18 @@
   color: var(--nx-fg-muted);
   border-bottom: 1px solid var(--nx-border);
 }
-.nxTlRows { overflow: hidden; }
+.nxTlRows { overflow: hidden; width: 100%; }
 .nxTlRow {
   display: flex;
   align-items: center;
   gap: 4px;
   padding-right: 6px;
+  /* the row must not size to its CONTENT — without this the title escapes the
+     rail and hard-clips at the border instead of ellipsing (visible on mobile,
+     where the rail is narrow) */
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   border-bottom: 1px solid color-mix(in oklab, var(--nx-border) 55%, transparent);
   cursor: default;
   outline: none;
@@ -67,7 +73,9 @@
 
 .nxTlTitle {
   flex: 1 1 auto;
-  min-width: 0;
+  /* the title outranks the inline cells for space: they shrink (and the
+     assignee ellipses) before the task name becomes unreadable */
+  min-width: 96px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   text-align: left;
   border: 0; background: none; padding: 0;
@@ -88,14 +96,19 @@
 }
 .nxTlRepeat { flex: none; color: var(--nx-fg-faint); }
 
-.nxTlCells { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.nxTlCells { display: inline-flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0; overflow: hidden; }
 .nxTlCellBtn {
   border: 0; background: none; padding: 1px 2px; border-radius: var(--nx-radius-s);
   cursor: pointer; display: inline-flex; align-items: center;
   font: var(--nx-text-micro); color: var(--nx-fg-muted);
 }
 .nxTlCellBtn:hover { background: var(--nx-border); }
-.nxTlAssignee { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a status chip is a single token — it may shorten, never wrap to two lines
+   (a wrapped pill breaks the fixed row height the bar canvas is aligned to) */
+.nxTlCells .nxOptChip { white-space: nowrap; flex: none; }
+/* the assignee is the first to go when space is tight: a fixed stub that
+   ellipses, rather than shrinking to one unreadable letter */
+.nxTlAssignee { flex: none; width: 46px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nxTlAddSub { opacity: 0; }
 .nxTlRow:hover .nxTlAddSub { opacity: 1; }
 .nxTlDate {
@@ -104,7 +117,11 @@
   color-scheme: light dark;
 }
 .nxTlDate::-webkit-datetime-edit { display: none; }
-.nxTlDate::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .6; }
+.nxTlDate::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .55; }
+/* the picker is an AFFORDANCE, not a readout (the bar already encodes the
+   dates) — resting rows stay clean, it appears on hover/focus */
+.nxTlRow:not(:hover):not(:focus-within) .nxTlDate { opacity: 0; }
+.nxTlDate:focus-visible { opacity: 1; }
 
 .nxTlQuick {
   display: flex; align-items: center; gap: 6px;
