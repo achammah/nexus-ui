@@ -27,6 +27,7 @@ export interface RouteStep {
   type: string; // OSRM maneuver type (depart/turn/roundabout/arrive/…) — drives the icon
   modifier?: string; // left/right/straight/slight left/…
   name?: string; // road name
+  at?: LngLat; // maneuver location — lets the panel pan the map to this turn
 }
 
 export interface RouteLeg {
@@ -83,7 +84,7 @@ function composeInstruction(type: string, modifier: string | undefined, name: st
 
 /* ── OSRM provider ───────────────────────────────────────────────────────── */
 
-interface OsrmManeuver { type?: string; modifier?: string; bearing_after?: number }
+interface OsrmManeuver { type?: string; modifier?: string; bearing_after?: number; location?: LngLat }
 interface OsrmStep { distance?: number; duration?: number; name?: string; maneuver?: OsrmManeuver }
 interface OsrmLeg { distance?: number; duration?: number; steps?: OsrmStep[] }
 interface OsrmRoute { distance?: number; duration?: number; geometry?: { coordinates?: LngLat[] }; legs?: OsrmLeg[] }
@@ -98,6 +99,7 @@ function parseOsrm(route: OsrmRoute, profile: Profile): RouteResult {
       distanceM: s.distance ?? 0,
       durationS: s.duration ?? 0,
       type: s.maneuver?.type ?? "continue",
+      at: s.maneuver?.location as LngLat | undefined,
       modifier: s.maneuver?.modifier,
       name: s.name || undefined,
     })),
@@ -140,12 +142,12 @@ export const mockRoute: RouteProvider = async (waypoints, profile) => {
     const legSteps: RouteStep[] =
       leg === 0
         ? [
-            { instruction: composeInstruction("depart", undefined, undefined, bearing), distanceM: legDist, durationS: legDur, type: "depart" },
-            { instruction: composeInstruction("arrive", undefined, undefined), distanceM: 0, durationS: 0, type: "arrive" },
+            { instruction: composeInstruction("depart", undefined, undefined, bearing), distanceM: legDist, durationS: legDur, type: "depart", at: a },
+            { instruction: composeInstruction("arrive", undefined, undefined), distanceM: 0, durationS: 0, type: "arrive", at: b },
           ]
         : [
-            { instruction: `Continue to stop ${leg + 1}`, distanceM: legDist, durationS: legDur, type: "continue", modifier: "straight" },
-            { instruction: composeInstruction("arrive", undefined, undefined), distanceM: 0, durationS: 0, type: "arrive" },
+            { instruction: `Continue to stop ${leg + 1}`, distanceM: legDist, durationS: legDur, type: "continue", modifier: "straight", at: a },
+            { instruction: composeInstruction("arrive", undefined, undefined), distanceM: 0, durationS: 0, type: "arrive", at: b },
           ];
     legs.push({ distanceM: legDist, durationS: legDur, steps: legSteps });
   }

@@ -747,3 +747,96 @@
   .nxMapToolLabel { display: none; }
   .nxMapTool--labelled { width: 44px; min-width: 44px; padding: 0; justify-content: center; }
 }
+
+/* ── directions: editable from/to fields, add-stop, arrival + depart-at ────── */
+.nxMapStop--field { align-items: center; }
+.nxMapStopInputWrap { position: relative; flex: 1 1 auto; min-width: 0; }
+.nxMapStopInput {
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s);
+  background: var(--nx-bg);
+  color: var(--nx-fg);
+  font: var(--nx-text-meta);
+}
+.nxMapStopInput:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: -1px; }
+.nxMapStopSuggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border-strong);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-2);
+}
+.nxMapStopSuggestRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--nx-fg);
+  font: var(--nx-text-meta);
+  text-align: left;
+  border-radius: var(--nx-radius-s);
+  cursor: pointer;
+}
+.nxMapStopSuggestRow:hover { background: var(--nx-bg-sunken); }
+.nxMapStopSuggestRow--loc { color: var(--nx-accent); font-weight: 600; }
+.nxMapStopSuggestLabel { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nxMapStopSuggestSub, .nxMapStopSuggestEmpty { color: var(--nx-fg-muted); font: var(--nx-text-micro); padding: 6px 8px; }
+.nxMapAddStop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  margin: 2px 0 6px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--nx-accent);
+  font: var(--nx-text-meta);
+  font-weight: 600;
+  border-radius: var(--nx-radius-s);
+  cursor: pointer;
+}
+.nxMapAddStop:hover { background: var(--nx-bg-sunken); }
+.nxMapItinHeadline { display: flex; align-items: baseline; gap: 8px; }
+.nxMapItinDur { font: var(--nx-text-title); color: var(--nx-fg); }
+.nxMapItinDist { font: var(--nx-text-meta); color: var(--nx-fg-muted); }
+.nxMapItinArrive { display: inline-flex; align-items: center; gap: 5px; font: var(--nx-text-meta); color: var(--nx-fg); font-weight: 600; }
+.nxMapDepartRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 0 2px 6px;
+  font: var(--nx-text-micro);
+  color: var(--nx-fg-muted);
+}
+.nxMapDepartInput {
+  min-height: 32px;
+  padding: 3px 6px;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s);
+  background: var(--nx-bg);
+  color: var(--nx-fg);
+  font: var(--nx-text-meta);
+}
+.nxMapDepartNow { border: 0; background: transparent; color: var(--nx-accent); font: var(--nx-text-micro); font-weight: 600; cursor: pointer; min-height: 32px; }
+/* the step list is now a list of BUTTONS (click flies to the manoeuvre) */
+.nxMapStepRow { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.nxMapStepRow:hover:not(:disabled) { background: var(--nx-bg-sunken); }
+.nxMapStepRow:disabled { cursor: default; }

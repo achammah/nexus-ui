@@ -70,7 +70,7 @@ import { applyAugments, applySky, flyToPoint, viewportRing, zoomAroundPoint } fr
 import { spiderfyLayout, type SpiderOffset } from "./spiderfy";
 import { DrawTools, LayersPanel, Legend, MapSearch, MapTypeMenu, ReadoutChips, type SearchHit } from "./overlays";
 import { MapContextMenu, type ContextItem } from "./ContextMenu";
-import { ItineraryPanel, type Stop } from "./ItineraryPanel";
+import { ItineraryPanel, type Stop, type PlaceHit } from "./ItineraryPanel";
 import { Minimap } from "./Minimap";
 
 /* MapView — records on a free vector/raster basemap, taken to Google-Maps depth:
@@ -694,7 +694,53 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   const stopSeq = React.useRef(0);
   const stopFromRecord = (l: LocatedRow): Stop => ({ key: `r${l.row.id}`, lng: l.lng, lat: l.lat, label: String(l.row[titleField.key] ?? l.row.id), recordId: String(l.row.id) });
   const stopFromCoord = (lng: number, lat: number, label?: string): Stop => ({ key: `c${stopSeq.current++}`, lng, lat, label: label ?? `Point (${lat.toFixed(3)}, ${lng.toFixed(3)})` });
-  const pickingStop = itinOpen && stops.length < 2;
+  /* ── directions: free from/to entry ────────────────────────────────────────
+     The A/B fields search the SAME two sources as the map search bar — site
+     records first, then geocoded addresses — so an origin/destination can be any
+     place, not only a record already on the map. */
+  const searchPlaces = React.useCallback(
+    async (q: string): Promise<PlaceHit[]> => {
+      const needle = q.trim().toLowerCase();
+      if (needle.length < 2) return [];
+      const recs: PlaceHit[] = located
+        .filter((l) => String(l.row[titleField.key] ?? "").toLowerCase().includes(needle))
+        .slice(0, 5)
+        .map((l) => ({ kind: "record" as const, id: `r${l.row.id}`, label: String(l.row[titleField.key] ?? "Untitled"), lng: l.lng, lat: l.lat }));
+      if (!opts.tools.geocode) return recs;
+      try {
+        const gs = await geocode(q);
+        return [...recs, ...gs.slice(0, 5).map((g, i) => ({ kind: "address" as const, id: `g${i}`, label: g.label, lng: g.lng, lat: g.lat }))];
+      } catch {
+        return recs; // geocoder unreachable — records still work
+      }
+    },
+    [located, titleField.key, opts.tools.geocode, geocode],
+  );
+  const setStopAt = React.useCallback((i: number, lng: number, lat: number, label: string) => {
+    setStops((prev) => {
+      const next = [...prev];
+      const stop: Stop = { key: next[i]?.key ?? `s${Date.now()}${i}`, lng, lat, label };
+      if (i < next.length) next[i] = stop;
+      else next.push(stop);
+      return next;
+    });
+  }, []);
+  const useMyLocation = React.useCallback(
+    (i: number) => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setStopAt(i, pos.coords.longitude, pos.coords.latitude, "Your location"),
+        () => { /* denied/unavailable — the field stays as it was */ },
+        { enableHighAccuracy: true, timeout: 8000 },
+      );
+    },
+    [setStopAt],
+  );
+  const [departAt, setDepartAt] = React.useState("");
+
+  /* an explicit "+ Add stop" arms map-picking even once A and B are set */
+  const [wantStop, setWantStop] = React.useState(false);
+  const pickingStop = itinOpen && (stops.length < 2 || wantStop);
 
   const addStop = React.useCallback((s: Stop, at: "start" | "end") => {
     setStops((prev) => {
@@ -841,6 +887,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       if (!feature) {
         if (pickingStop) {
           addStop(stopFromCoord(pt[0], pt[1]), "end");
+          setWantStop(false);
           return;
         }
         setPopupId(null);
@@ -868,7 +915,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       }
       if (props.id != null) {
         const rec = rowById(String(props.id));
-        if (pickingStop && rec) addStop(stopFromRecord(rec), "end");
+        if (pickingStop && rec) { addStop(stopFromRecord(rec), "end"); setWantStop(false); }
         else setPopupId(String(props.id));
       }
     },
@@ -1417,7 +1464,11 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
             className="nxMapCtrlBtn"
             data-testid="map-fly-btn"
             aria-pressed={flyActive}
-            title={flyActive ? "Level the view (top-down, north up)" : "Fly view — tilt into 3D. Trackpad: ⌥ + two-finger to tilt / spin"}
+            title={
+              flyActive
+                ? "Level the view (top-down, north up) · ⌥ + scroll to tilt & rotate"
+                : "3D fly view — tilt the camera · ⌥ + scroll to tilt & rotate, ⌥ + sideways to spin"
+            }
             onClick={toggleFly}
           >
             {flyActive ? "2D" : "3D"}
@@ -1473,6 +1524,16 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
           loading={routeLoading}
           addHint={pickingStop}
           onProfile={(p: Profile) => onViewState({ mapRouteProfile: p })}
+          searchPlaces={searchPlaces}
+          onPickStop={(i, hit) => setStopAt(i, hit.lng, hit.lat, hit.label)}
+          onUseMyLocation={useMyLocation}
+          onAddStop={() => setWantStop(true)}
+          onStepClick={(at) => {
+            const map = mapRef.current?.getMap();
+            if (map) flyToPoint(map, at[0], at[1], Math.max(map.getZoom(), 16), reduceMotion);
+          }}
+          departAt={departAt}
+          onDepartAt={setDepartAt}
           onRemoveStop={(i) => setStops((prev) => prev.filter((_, k) => k !== i))}
           onMoveStop={(from, to) => setStops((prev) => moveStop(prev, from, to))}
           onReverse={() => setStops((prev) => [...prev].reverse())}
