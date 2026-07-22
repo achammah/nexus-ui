@@ -219,3 +219,23 @@ Shots: `suggest-01-light.png`, `suggest-02-dark.png`.
 **Scope note (honest):** v1 tracks TEXT edits within a block, one active change per block per pass; structural edits (add/remove/retype a block) commit directly. The focus-guard means a change materialises on blur, not mid-keystroke (Google-Docs-like) — the committed model is always correct; only the un-blurred DOM is briefly raw. `suggestions`/`comments` are now real (superseding the Phase-1 "deferred" note for suggestions; standalone threaded comments beyond change-notes remain future work).
 
 tsc clean on my lane throughout; pre-existing `blocks/workbook` @univerjs errors untouched.
+
+---
+
+## Handbook review batch + composability spectrum (resumed)
+
+Live-verified in the harness. Addresses the lead's batch from the user's :4000 review.
+
+| # | Issue | Verdict | Evidence |
+|---|---|---|---|
+| A | Default landing page too short to demo the outline | ✅ | root Aurora Handbook seeded long+structured: 11 outline entries, `.nxDoc-main` scrollHeight 3280 > clientHeight 812, outline click scrolls 0→2109 with tracking |
+| 2 | Enter stacks "/" placeholders on every empty block | ✅ | scoped to `.ne-block:empty:focus` — 2 empty blocks, only the focused one shows the hint |
+| 3 | Raw `[[c:gray|You]]` token leaking in the editor | ✅ | my editor renders it as gray "You" (no leak); ALSO hardened tracked-change widgets to `inlineMd` their del/ins so a suggested edit can't leak a raw token. If :4000 still shows raw, it's app-seeded content — my components render every `[[…]]` family live |
+| 1a | Doc header "Search ⌘K" button lies when app owns ⌘K | ✅ | already gated on `cmdK` — `config.cmdK:false` hides the ws-kbar AND the tree-head search; no misleading ⌘K affordance remains |
+| 1b | Expose page index for the app's unified search | ✅ NEW | `onPageIndex(entries:{id,title,path,icon}[])` fires on store change (verified: 5 entries w/ breadcrumb paths) + `onOpenPageRef(open)` — pair with `config.cmdK:false`. **Seam for pages-c to wire into `useGlobalSearch`.** |
+| 4 | Import parity (DOCX + paste-from-Word) | ✅ | Import menu present ("From file .docx/.md/.html"); paste-from-Word HTML → blocks verified (h1 + **bold** + lists preserved). Export was already there. |
+| NS | North-star spectrum: simple doc → full Notion | ✅ | presets `doc → review → wiki → workspace` (+ `library`, `single-doc` alias); `suggestions` ORTHOGONAL toggle ON at every level; verified per preset — doc/review no nav + suggesting available, wiki/workspace full nav, `suggestions:false` removes the mode switch |
+
+Full Word-parity checklist (Phase 2 + this batch): suggesting mode ✅ · inline tracked insert/delete/substitute ✅ · author attribution ✅ · accept/reject per + all ✅ · review panel + jump-to + comments ✅ · persistence ✅ · export honesty ✅ · **DOCX import ✅ · paste-from-Word ✅** · Markdown/HTML/PDF export ✅ · suggestions as a composability toggle ✅.
+
+tsc clean on my lane throughout; `blocks/workbook` @univerjs errors are another lane's, untouched.

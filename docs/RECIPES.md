@@ -179,44 +179,60 @@ It derives entries from headings (h1–h3), click-scrolls, highlights the active
 
 `DocumentSurface` is the document twin of `WorkbookSurface`: same free-surface contract (`value` / `onChange` / `reloadNonce` / `actions`). A Pages host mounts a `kind:"document"` page by rendering `<DocumentSurface value={page.doc} onChange={persist} />` and persisting the returned `DocumentSnapshot` under `documentStoreKey(page.key)`. The surface is exported eagerly (it is light; only docx/mammoth are heavy and they are lazy), so no Suspense boundary is required.
 
-## Composability — configure the workspace for any company
+## Composability — one surface, simple doc → full Notion
 
-Every structural element of `PageWorkspace` is a toggle, and four named **layout presets** bundle them into the shapes a Pages product ships. Pass `config` (a `WorkspaceConfig`); explicit flags override the preset, anything left `undefined` inherits it. The surface **degrades coherently** — turn the tree off and its collapse control goes with it, drop breadcrumbs and the ⌘K entry moves to the tree head.
+The document surface is **one composable primitive dialable across a spectrum**: from a simple Word-like document (write, suggest, accept/reject, import/export — no navigation) all the way to a full Notion workspace (nested pages, tree, backlinks, links, search) — and every coherent point between. Every structural element is an independent toggle; named **presets** mark points on the range. Pass `config` (a `WorkspaceConfig`); explicit flags override the preset, anything left `undefined` inherits it. The surface **degrades coherently** — turn the tree off and its collapse control goes with it, drop breadcrumbs and the ⌘K entry moves to the tree head; the minimal end reads as a focused document editor, not a stripped-down workspace.
 
 ```tsx
 import { PageWorkspace, type WorkspaceConfig } from "@nexus/ui";
 
-<PageWorkspace value={store} onChange={persist}
-  config={{ preset: "wiki" }} />                       // a named starting point
-<PageWorkspace value={store} onChange={persist}
-  config={{ preset: "library", backlinks: false }} />  // preset + an override
+<PageWorkspace value={store} onChange={persist} config={{ preset: "doc" }} />        // a simple doc with review
+<PageWorkspace value={store} onChange={persist} config={{ preset: "workspace" }} />  // the full Notion
 ```
 
-### Presets (`config.preset`)
+### The preset spectrum (`config.preset`)
 
-| Preset | Tree | Breadcrumbs | Backlinks | ⌘K | Cover | Page-width | Use it for |
-|---|---|---|---|---|---|---|---|
-| `wiki` (default) | sidebar | ✓ | ✓ | ✓ | ✓ | ✓ | a nested knowledge base — the full workspace |
-| `single-doc` | off | — | — | — | ✓ | ✓ | one lone document, no navigation chrome |
-| `library` | **table** | ✓ | ✓ | ✓ | ✓ | ✓ | browse many pages as a record table, click a row to open |
-| `review` | sidebar | ✓ | ✓ | ✓ | — | — | reading/reviewing — a fixed reading width, no cover |
+| Preset | Tree | Breadcrumbs | Backlinks | ⌘K | Suggestions | Use it for |
+|---|---|---|---|---|---|---|
+| `doc` | off | — | — | — | ✓ | a single focused document (a Word-like doc with review) |
+| `review` | off | — | — | — | ✓ | a single document tuned for review — fixed width, no cover |
+| `wiki` (default) | sidebar | ✓ | ✓ | ✓ | ✓ | a nested knowledge base |
+| `workspace` | sidebar | ✓ | ✓ | ✓ | ✓ | the full Notion — everything on |
+| `library` | **table** | ✓ | ✓ | ✓ | ✓ | browse pages as a record table, click a row to open |
+| `single-doc` | off | — | — | — | ✓ | alias of `doc` (back-compat) |
+
+**`suggestions` (track-changes) is ORTHOGONAL** — ON at every preset, so "simple doc + suggestions" and "full notion + suggestions" are each one flag; a company that wants documents without review sets `suggestions: false`.
 
 ### Element toggles (each overrides the preset)
 
-`tree` (`"sidebar" | "off" | "table"`) · `breadcrumbs` · `backlinks` · `cmdK` · `outline` · `cover` · `icons` · `export` · `wordCount` · `pageWidth` · `findReplace` — all optional booleans (except `tree`).
+`tree` (`"sidebar" | "off" | "table"`) · `breadcrumbs` · `backlinks` · `cmdK` · `suggestions` · `outline` · `cover` · `icons` · `export` · `wordCount` · `pageWidth` · `findReplace` — all optional booleans (except `tree`).
 
-- **`tree: "table"`** renders the navigation as a record-table list (icon + title indented by depth, sub-page count, last-edited) in the sidebar location — the same record-object idiom as the app's `DataTable`, so tree↔table is a pure config swap.
-- The host's `breadcrumbs={false}` prop still wins over the config (used when the host app renders its own trail for the page).
-- Per-page chrome flags (`outline`/`cover`/`icons`/`export`/`wordCount`/`pageWidth`/`findReplace`) fold into each page's `DocumentSurface` `DocumentConfig`; the `documentConfig` prop still carries editor/chrome-level options untouched.
+### Worked examples — each end of the range
 
-```ts
-// resolve a config yourself (e.g. to preview a preset before mounting)
-import { resolveWorkspaceConfig } from "@nexus/ui";
-const resolved = resolveWorkspaceConfig({ preset: "library" }, undefined);
-// → { tree: "table", breadcrumbs: true, backlinks: true, cmdK: true, doc: {...} }
+```tsx
+// A company that just wants documents with review (a Word replacement):
+<PageWorkspace value={store} onChange={persist}
+  config={{ preset: "doc" }} />              // single doc, no nav, suggesting available, import/export on
+
+// The same, but review is the whole point — no distractions:
+<PageWorkspace value={store} onChange={persist}
+  config={{ preset: "review" }} />          // fixed reading width, no cover, suggesting available
+
+// A full knowledge base with review, but the app owns the ⌘K palette:
+<PageWorkspace value={store} onChange={persist}
+  config={{ preset: "workspace", cmdK: false }}
+  onPageIndex={(pages) => appSearch.index(pages)}    // feed the app's unified search
+  onOpenPageRef={(open) => (openHandbookPage = open)} />
+
+// Documents only, review turned OFF for a company that doesn't want it:
+<PageWorkspace value={store} onChange={persist}
+  config={{ preset: "doc", suggestions: false }} />
 ```
 
-> Note: `suggestions` (track-changes) and `comments` are separate capabilities; their toggles land with those features and are not yet part of `WorkspaceConfig`.
+- **`tree: "table"`** renders the navigation as a record-table list (icon + title indented by depth, sub-page count, last-edited) — the same record-object idiom as the app's `DataTable`, a pure config swap with the nested tree.
+- **Unified search seam** — `onPageIndex(entries: {id,title,path,icon}[])` fires whenever the page set changes; hand it to the app's "search everything" so handbook pages surface alongside records, and set `config.cmdK:false` so there is a single ⌘K palette. `onOpenPageRef(open)` gives the host a function to jump to a hit.
+- The host's `breadcrumbs={false}` prop still wins over the config (used when the host renders its own trail).
+- Per-page chrome flags fold into each page's `DocumentSurface` `DocumentConfig`; `documentConfig` still carries editor/chrome options untouched. Precedence: WorkspaceConfig flag > `documentConfig` flag > preset default.
 
 ## Suggesting mode — Word × Notion tracked changes
 
