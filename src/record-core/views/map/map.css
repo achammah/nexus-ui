@@ -990,3 +990,10 @@
   .nxMapTypePanel, .nxMapLayersPanel { z-index: 60; }
   .nxMapLegend { z-index: 3; }
 }
+
+@media (max-width: 768px) {
+  /* marker popups sized for a thumb: the actions shipped at 20px tall */
+  .nxMapPopup { min-width: 200px; max-width: min(320px, calc(100vw - 32px)); }
+  .nxMapPopupActions { flex-wrap: wrap; gap: 6px; }
+  .nxMapPopupActions button { min-height: 44px; padding: 0 12px; }
+}
