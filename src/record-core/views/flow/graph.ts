@@ -19,7 +19,17 @@ const refsOf = (row: RecordRow): Record<string, RelationRef> =>
 export interface FlowRecordNode { kind: "record"; id: string; row: RecordRow }
 export interface FlowHubNode { kind: "hub"; id: string; targetObject: string; targetId: string; label: string; count: number }
 export type FlowGraphNode = FlowRecordNode | FlowHubNode;
-export interface FlowGraphEdge { id: string; source: string; target: string }
+/* edges carry the drawing relation's label (rendered only when config.edgeLabels
+   is on) and a `kind` so a secondary relation renders as a visually distinct edge
+   type (dashed/colored). `relationKey` is the field the edge came from. */
+export interface FlowGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+  kind?: "primary" | "secondary";
+  relationKey?: string;
+}
 export interface XY { x: number; y: number }
 
 /* the fields a flow view can draw edges from. isActive filter inlined (rather
@@ -96,7 +106,7 @@ export const buildGraph = (
         const id = `e-${tId}-${rowId}`;
         if (!seen.has(id)) {
           seen.add(id);
-          edges.push({ id, source: tId, target: rowId });
+          edges.push({ id, source: tId, target: rowId, kind: "primary", relationKey, label: field.label });
         }
         return;
       }
@@ -108,7 +118,7 @@ export const buildGraph = (
       const hub = hubs.get(hid) ?? { kind: "hub" as const, id: hid, targetObject: tObj, targetId: tId, label, count: 0 };
       hub.count += 1;
       hubs.set(hid, hub);
-      edges.push({ id, source: hid, target: String(row.id) });
+      edges.push({ id, source: hid, target: String(row.id), kind: "primary", relationKey, label: field.label });
     });
   }
   return { nodes: [...nodes, ...hubs.values()], edges };
@@ -133,4 +143,63 @@ export const positionsPatch = (
 ): Record<string, unknown> => {
   const all = (viewState.flowPos as Record<string, Record<string, XY>> | undefined) ?? {};
   return { flowPos: { ...all, [relationKey]: { ...(all[relationKey] ?? {}), ...moved } } };
+};
+
+/* ---- node-size persistence (the flowSizes viewState key) ----
+   Resized nodes keep their WxH per relation, same scoping as positions — a
+   resize is UI state (never record data). Un-resized nodes take the default. */
+export interface WH { width: number; height: number }
+export const sizesFor = (viewState: Record<string, unknown>, relationKey: string): Record<string, WH> => {
+  const all = viewState.flowSizes as Record<string, Record<string, WH>> | undefined;
+  const m = all && typeof all === "object" ? all[relationKey] : undefined;
+  return m && typeof m === "object" ? m : {};
+};
+export const sizesPatch = (
+  viewState: Record<string, unknown>,
+  relationKey: string,
+  moved: Record<string, WH>,
+): Record<string, unknown> => {
+  const all = (viewState.flowSizes as Record<string, Record<string, WH>> | undefined) ?? {};
+  return { flowSizes: { ...all, [relationKey]: { ...(all[relationKey] ?? {}), ...moved } } };
+};
+
+/* ---- secondary relation edges (multiple edge types) ----
+   Draw a SECOND self-relation as visually distinct edges (kind "secondary") over
+   the SAME record nodes — no extra hubs. Only record→record links inside the
+   current node set (targets outside it, self-loops, dangling refs draw nothing),
+   mirroring buildGraph's self-relation rule. */
+export const secondarySelfEdges = (
+  object: ObjectConfig,
+  rows: RecordRow[],
+  relationKey: string,
+  nodeIds: Set<string>,
+): FlowGraphEdge[] => {
+  const field = object.fields.find((f) => f.key === relationKey);
+  if (!field) return [];
+  const edges: FlowGraphEdge[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const ref = refsOf(row)[relationKey];
+    if (ref === undefined || ref === null) continue;
+    const entries = Array.isArray(ref) ? ref : [ref];
+    for (const entry of entries) {
+      const isObj = typeof entry === "object" && entry !== null;
+      const tId = String(isObj ? (entry as { id: string }).id : entry);
+      const rowId = String(row.id);
+      if (!tId || !nodeIds.has(tId) || tId === rowId) continue;
+      const id = `s-${tId}-${rowId}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      edges.push({ id, source: tId, target: rowId, kind: "secondary", relationKey, label: field.label });
+    }
+  }
+  return edges;
+};
+
+/* the group value a row falls under for subflow grouping (the select field's
+   value, or an "Ungrouped" bucket for empties) */
+export const UNGROUPED = "__ungrouped__";
+export const groupValueOf = (row: RecordRow, field: FieldDef): string => {
+  const v = row[field.key];
+  return v === undefined || v === null || v === "" ? UNGROUPED : String(v);
 };

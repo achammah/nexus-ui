@@ -1,208 +1,454 @@
-// adapted from xyflow/xyflow examples/react Layouting (MIT) — the layout wiring shape only
+// layout wiring shape adapted from xyflow/xyflow examples/react Layouting (MIT)
 import * as React from "react";
 import {
   Background,
   BackgroundVariant,
+  ConnectionMode,
   Controls,
   MarkerType,
   MiniMap,
-  Position,
+  Panel,
   ReactFlow,
-  Handle,
-  useNodesState,
+  ReactFlowProvider,
   useEdgesState,
+  useNodesState,
   useReactFlow,
+  type Connection,
   type Edge,
   type Node,
-  type NodeProps,
-  type NodeTypes,
   type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "./flow.css";
-import { Network } from "lucide-react";
+import { Crosshair, Maximize2, Network, Plus, Search, X } from "lucide-react";
 import type { ViewProps } from "../types";
 import type { FieldDef, RecordRow } from "../../types";
-import { formatCell } from "../../DataTable";
-import { OptionChip } from "../../options";
 import {
   buildGraph,
   cardMetaFields,
+  groupValueOf,
   positionsFor,
   positionsPatch,
   resolveLabelField,
   resolveRelation,
+  secondarySelfEdges,
+  sizesFor,
+  sizesPatch,
+  UNGROUPED,
+  type FlowGraphEdge,
   type XY,
 } from "./graph";
-import { layoutGraph, HUB_H, HUB_W, NODE_H, NODE_W } from "./layout";
+import { HUB_H, HUB_W, layoutGraph, NODE_H, NODE_W } from "./layout";
+import {
+  ALL_LAYOUTS,
+  configAnimated,
+  configEdgeDraw,
+  configHandEdit,
+  configNodeDetail,
+  edgeTypeName,
+  enabledLayouts,
+  isGrouped,
+  LAYOUT_LABELS,
+  resolveColorField,
+  resolveDetailFields,
+  resolveEdgeStyle,
+  resolveGroupField,
+  resolveLayout,
+  resolveShapeField,
+  shapeForValue,
+  type LayoutMode,
+} from "./flowConfig";
+import {
+  FlowActionsContext,
+  GroupNodeData,
+  HubNodeData,
+  nodeTitle,
+  RecordNodeData,
+  nodeTypes,
+  type FlowActions,
+  type FlowNode,
+} from "./nodes";
+import { optionMeta } from "../../options";
+import NodeDetailPanel from "./NodeDetailPanel";
 
-/* FlowView — an object's records as a node graph: record cards as nodes, one
-   configured relation as edges (self-relations draw record→record parent edges;
-   cross-object relations draw target hub chips). Pan/zoom/minimap from xyflow;
-   drag-arrange persists per-node positions into the viewState bag (UI state,
-   never record data). Loaded as a React.lazy chunk — the registry definition
-   stays eager and light. Layout wiring (compute positions → set nodes →
-   fitView) adapted from xyflow examples/react Layouting (MIT). */
+/* FlowView — an object's records as a full-fidelity node graph. Builds ON the v1
+   (records as cards, one relation as edges, drag-persist, pan/zoom/minimap) and
+   adds the confirmed depth: switchable layouts (hierarchy/force/grid), inline
+   rename + resize, per-field node shapes + colors, subflow grouping with
+   collapse, search-and-focus, fit-to-selection, hand-create + drag-to-relate,
+   animated edges, and a rich node-detail panel — every capability config-declared
+   with a sensible default. Loaded as a React.lazy chunk; the eager registry entry
+   (definition.tsx) imports only the pure helpers. */
 
-type RecordNodeData = { row: RecordRow; labelField: FieldDef; metaFields: FieldDef[]; i: number };
-type HubNodeData = { label: string; count: number; i: number };
-type FlowNode = Node<RecordNodeData, "record"> | Node<HubNodeData, "hub">;
+/* the group-layout geometry: box padding, header, inter-node + inter-group gaps */
+const PAD = 18;
+const HEADER_H = 40;
+const GAP = 22;
+const GROUP_GAP = 44;
+const GROUPS_PER_ROW_MAXW = 1500; // wrap group boxes past this cursor width
 
-const nodeTitle = (d: RecordNodeData) => formatCell(d.row[d.labelField.key], d.labelField.type) || String(d.row.id);
+type GroupBucket = { value: string; label: string; color?: string; rows: RecordRow[] };
 
-/* anchors only — connections are never drawn in this view (flow.css hides them) */
-const anchors = (
-  <>
-    <Handle type="target" position={Position.Top} isConnectable={false} />
-    <Handle type="source" position={Position.Bottom} isConnectable={false} />
-  </>
-);
+/* order + label the group buckets: a select field keeps its declared option order
+   + colors; the ungrouped bucket lands last */
+function bucketize(rows: RecordRow[], field: FieldDef): GroupBucket[] {
+  const byVal = new Map<string, RecordRow[]>();
+  for (const r of rows) {
+    const v = groupValueOf(r, field);
+    (byVal.get(v) ?? byVal.set(v, []).get(v)!).push(r);
+  }
+  const order = (field.options ?? []).map((o) => (typeof o === "string" ? o : o.value));
+  const seen = new Set<string>();
+  const buckets: GroupBucket[] = [];
+  const pushBucket = (v: string) => {
+    if (v === UNGROUPED || seen.has(v) || !byVal.has(v)) return;
+    seen.add(v);
+    const meta = optionMeta(field, v);
+    buckets.push({ value: v, label: meta.label || v, color: meta.color ? `var(--nx-opt-${meta.color})` : undefined, rows: byVal.get(v)! });
+  };
+  order.forEach(pushBucket);
+  [...byVal.keys()].forEach(pushBucket); // any values not in the option list
+  if (byVal.has(UNGROUPED)) buckets.push({ value: UNGROUPED, label: "Ungrouped", rows: byVal.get(UNGROUPED)! });
+  return buckets;
+}
 
-function RecordCardNode({ id, data }: NodeProps<Node<RecordNodeData, "record">>) {
+export default function FlowView(props: ViewProps) {
   return (
-    <div
-      className="nxFlowCard"
-      data-testid={`flow-node-${id}`}
-      style={{ "--i": data.i } as React.CSSProperties}
-    >
-      <div className="nxKTitle">{nodeTitle(data)}</div>
-      <div className="nxKMeta">
-        {data.metaFields.map((f) =>
-          f.type === "select" ? (
-            <OptionChip key={f.key} field={f} value={data.row[f.key]} />
-          ) : (
-            <span key={f.key}>{formatCell(data.row[f.key], f.type)}</span>
-          ),
-        )}
-      </div>
-      {anchors}
-    </div>
+    <ReactFlowProvider>
+      <FlowCanvas {...props} />
+    </ReactFlowProvider>
   );
 }
 
-function HubChipNode({ id, data }: NodeProps<Node<HubNodeData, "hub">>) {
-  return (
-    <div
-      className="nxFlowHub"
-      data-testid={`flow-${id.replaceAll(":", "-")}`}
-      style={{ "--i": data.i } as React.CSSProperties}
-      title={data.label}
-    >
-      <span className="nxFlowHubLabel">{data.label}</span>
-      <span className="nxCount">{data.count}</span>
-      {anchors}
-    </div>
-  );
-}
-
-/* module-scope: a stable identity keeps xyflow from re-registering node types */
-const nodeTypes: NodeTypes = { record: RecordCardNode, hub: HubChipNode };
-
-/* re-fit the viewport when the edge relation (and so the whole layout) changes */
-function FitOnRelationChange({ relationKey }: { relationKey: string }) {
+function FlowCanvas({ object, rows, readOnly, viewConfig, viewState, onViewState, onOpen, onPatch, onCreateDraft, onCreate, onDelete }: ViewProps) {
   const { fitView } = useReactFlow();
-  const first = React.useRef(true);
-  React.useEffect(() => {
-    if (first.current) {
-      first.current = false; // the initial fit is the fitView prop's job
-      return;
-    }
-    const t = window.setTimeout(() => fitView({ duration: 180 }), 30);
-    return () => window.clearTimeout(t);
-  }, [relationKey, fitView]);
-  return null;
-}
 
-export default function FlowView({ object, rows, readOnly, viewConfig, viewState, onViewState, onOpen }: ViewProps) {
+  /* ---- resolve config ---- */
   const relationKey = resolveRelation(object, viewConfig, viewState);
   const labelField = resolveLabelField(object, viewConfig);
   const metaFields = React.useMemo(() => cardMetaFields(object, relationKey), [object, relationKey]);
-  const graph = React.useMemo(() => buildGraph(object, rows, relationKey), [object, rows, relationKey]);
-  // layout re-runs on STRUCTURE change (ids + edges), not on row-content edits
-  const layoutKey = React.useMemo(
-    () => graph.nodes.map((n) => n.id).join("|") + "#" + graph.edges.map((e) => e.id).join("|"),
-    [graph],
-  );
-  const layout = React.useMemo(
-    () => layoutGraph(graph.nodes, graph.edges),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layoutKey],
-  );
-  const persisted = positionsFor(viewState, relationKey);
+  const colorField = React.useMemo(() => resolveColorField(object, viewConfig), [object, viewConfig]);
+  const shapeField = React.useMemo(() => resolveShapeField(object, viewConfig), [object, viewConfig]);
+  const groupField = React.useMemo(() => resolveGroupField(object, viewConfig), [object, viewConfig]);
+  const detailFields = React.useMemo(() => resolveDetailFields(object, viewConfig), [object, viewConfig]);
+  const enabled = React.useMemo(() => enabledLayouts(viewConfig), [viewConfig]);
+  const layoutMode = resolveLayout(viewConfig, viewState, enabled);
+  const edgeStyle = resolveEdgeStyle(viewConfig);
+  const animated = configAnimated(viewConfig);
+  const handEdit = configHandEdit(viewConfig) && !readOnly;
+  const detailOn = configNodeDetail(viewConfig);
+  const grouped = !!groupField && isGrouped(object, viewConfig, viewState);
+  const edgeLabelsOn = viewConfig.edgeLabels === true;
 
-  const rfNodes = React.useMemo<FlowNode[]>(
-    () =>
-      graph.nodes.map((n, idx) => {
-        const i = Math.min(idx, 11); // stagger caps: late nodes enter together
-        const position: XY = persisted[n.id] ?? layout[n.id] ?? { x: 0, y: 0 };
-        return n.kind === "record"
-          ? {
-              id: n.id,
-              type: "record" as const,
-              position,
+  const activeField = object.fields.find((f) => f.key === relationKey);
+  const selfRelation = !!activeField && (activeField.relation === object.key);
+  const connectable = configEdgeDraw(viewConfig) && !readOnly && selfRelation;
+
+  const secondaryKey = typeof viewConfig.secondaryRelationField === "string" ? viewConfig.secondaryRelationField : "";
+  // skip the overlay when it names the ACTIVE relation (else the same links draw twice)
+  const secondaryField =
+    secondaryKey && secondaryKey !== relationKey
+      ? object.fields.find((f) => f.key === secondaryKey && f.type === "relation" && f.relation === object.key)
+      : undefined;
+
+  /* ---- graph derivation ---- */
+  const graph = React.useMemo(() => buildGraph(object, rows, relationKey), [object, rows, relationKey]);
+  const nodeIds = React.useMemo(() => new Set(graph.nodes.map((n) => n.id)), [graph]);
+  const graphEdges = React.useMemo<FlowGraphEdge[]>(() => {
+    if (!secondaryField) return graph.edges;
+    return [...graph.edges, ...secondarySelfEdges(object, rows, secondaryField.key, nodeIds)];
+  }, [graph, secondaryField, object, rows, nodeIds]);
+
+  /* ---- persistence (memoized: an inline call returns a fresh {} when the key is
+     absent, which would thrash the node memo into an infinite setNodes loop) ---- */
+  const persisted = React.useMemo(() => positionsFor(viewState, relationKey), [viewState.flowPos, relationKey]);
+  const persistedSizes = React.useMemo(() => sizesFor(viewState, relationKey), [viewState.flowSizes, relationKey]);
+  const collapsed = React.useMemo(() => {
+    const c = viewState.flowCollapsed as Record<string, boolean> | undefined;
+    return c && typeof c === "object" ? c : {};
+  }, [viewState.flowCollapsed]);
+
+  /* ---- auto layout (flat mode) ---- */
+  const structureKey = React.useMemo(
+    () => graph.nodes.map((n) => n.id).join("|") + "#" + graphEdges.map((e) => e.id).join("|"),
+    [graph, graphEdges],
+  );
+  const flatLayout = React.useMemo(
+    () => (grouped ? {} : layoutGraph(graph.nodes, graph.edges, layoutMode)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [structureKey, layoutMode, grouped],
+  );
+
+  /* ---- search ---- */
+  const [query, setQuery] = React.useState("");
+  const matchIds = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    const ids = new Set<string>();
+    for (const n of graph.nodes) {
+      const label = n.kind === "record" ? nodeTitle({ row: n.row, labelField, metaFields, i: 0, shape: "rounded" }) : n.label;
+      if (label.toLowerCase().includes(q)) ids.add(n.id);
+    }
+    return ids;
+  }, [query, graph, labelField, metaFields]);
+
+  /* ---- build xyflow nodes ---- */
+  const rfNodes = React.useMemo<FlowNode[]>(() => {
+    const shapeOf = (row: RecordRow) => (shapeField ? shapeForValue(shapeField, row[shapeField.key]) : "rounded");
+    const cls = (id: string) => (matchIds ? (matchIds.has(id) ? "nxMatch" : "nxDim") : undefined);
+
+    if (grouped && groupField) {
+      const buckets = bucketize(rows, groupField);
+      const out: FlowNode[] = [];
+      let cx = 0;
+      let cy = 0;
+      let rowMaxH = 0;
+      buckets.forEach((b, bi) => {
+        const isCollapsed = !!collapsed[b.value];
+        const cols = Math.max(1, Math.ceil(Math.sqrt(b.rows.length)));
+        const bodyRows = Math.ceil(b.rows.length / cols);
+        const boxW = isCollapsed ? 260 : PAD * 2 + cols * NODE_W + (cols - 1) * GAP;
+        const boxH = isCollapsed ? HEADER_H + 8 : HEADER_H + PAD + bodyRows * NODE_H + (bodyRows - 1) * GAP + PAD;
+        if (cx > 0 && cx + boxW > GROUPS_PER_ROW_MAXW) { cx = 0; cy += rowMaxH + GROUP_GAP; rowMaxH = 0; }
+        const groupId = `group:${b.value}`;
+        out.push({
+          id: groupId,
+          type: "group",
+          position: { x: cx, y: cy },
+          width: boxW,
+          height: boxH,
+          draggable: false,
+          selectable: false,
+          data: { label: b.label, count: b.rows.length, color: b.color, collapsed: isCollapsed, value: b.value } as GroupNodeData,
+        });
+        if (!isCollapsed) {
+          b.rows.forEach((row, i) => {
+            const id = String(row.id);
+            const col = i % cols;
+            const rr = Math.floor(i / cols);
+            out.push({
+              id,
+              type: "record",
+              parentId: groupId,
+              extent: "parent",
+              position: { x: PAD + col * (NODE_W + GAP), y: HEADER_H + PAD + rr * (NODE_H + GAP) },
               width: NODE_W,
               height: NODE_H,
-              ariaLabel: nodeTitle({ row: n.row, labelField, metaFields, i }),
-              data: { row: n.row, labelField, metaFields, i },
-            }
-          : {
-              id: n.id,
-              type: "hub" as const,
-              position,
-              width: HUB_W,
-              height: HUB_H,
-              ariaLabel: n.label,
-              data: { label: n.label, count: n.count, i },
-            };
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [graph, layout, viewState.flowPos, relationKey, labelField, metaFields],
-  );
-  const rfEdges = React.useMemo<Edge[]>(
-    () =>
-      graph.edges.map((e) => ({
-        ...e,
-        markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
-      })),
-    [graph],
-  );
+              className: cls(id),
+              ariaLabel: nodeTitle({ row, labelField, metaFields, i, shape: "rounded" }),
+              data: { row, labelField, metaFields, i: Math.min(i + bi, 11), shape: shapeOf(row) } as RecordNodeData,
+            });
+          });
+        }
+        cx += boxW + GROUP_GAP;
+        rowMaxH = Math.max(rowMaxH, boxH);
+      });
+      return out;
+    }
 
-  // xyflow owns in-flight drag state; external truth (rows/relation/persisted
-  // positions) rebuilds it — same wiring as the xyflow Layouting example
+    // flat mode
+    return graph.nodes.map((n, idx) => {
+      const i = Math.min(idx, 11);
+      const position: XY = persisted[n.id] ?? flatLayout[n.id] ?? { x: 0, y: 0 };
+      if (n.kind === "record") {
+        const sz = persistedSizes[n.id];
+        return {
+          id: n.id,
+          type: "record" as const,
+          position,
+          width: sz?.width ?? NODE_W,
+          height: sz?.height ?? NODE_H,
+          className: cls(n.id),
+          ariaLabel: nodeTitle({ row: n.row, labelField, metaFields, i, shape: "rounded" }),
+          data: { row: n.row, labelField, metaFields, i, shape: shapeOf(n.row) } as RecordNodeData,
+        };
+      }
+      return {
+        id: n.id,
+        type: "hub" as const,
+        position,
+        width: HUB_W,
+        height: HUB_H,
+        className: cls(n.id),
+        ariaLabel: n.label,
+        data: { label: n.label, count: n.count, i } as HubNodeData,
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graph, flatLayout, grouped, groupField, collapsed, rows, matchIds, shapeField, persistedSizes, persisted, relationKey, labelField, metaFields]);
+
+  /* ---- build xyflow edges ---- */
+  const rfEdges = React.useMemo<Edge[]>(() => {
+    // in grouped+collapsed mode, drop edges whose endpoints are hidden
+    const visible = new Set(rfNodes.filter((n) => n.type === "record").map((n) => n.id));
+    return graphEdges
+      .filter((e) => !grouped || (visible.has(e.source) && visible.has(e.target)))
+      .map((e) => {
+        const secondary = e.kind === "secondary";
+        return {
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          type: edgeTypeName(edgeStyle),
+          animated,
+          label: edgeLabelsOn ? e.label : undefined,
+          className: secondary ? "nxEdgeSecondary" : "nxEdgePrimary",
+          markerEnd: { type: MarkerType.ArrowClosed, width: 15, height: 15 },
+          data: { kind: e.kind },
+        } as Edge;
+      });
+  }, [graphEdges, rfNodes, grouped, edgeStyle, animated, edgeLabelsOn]);
+
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(rfNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(rfEdges);
   React.useEffect(() => setNodes(rfNodes), [rfNodes, setNodes]);
   React.useEffect(() => setEdges(rfEdges), [rfEdges, setEdges]);
 
+  /* re-fit when the STRUCTURE, layout mode, grouping, or relation changes */
+  const fitKey = `${structureKey}~${layoutMode}~${grouped}~${relationKey}`;
+  const firstFit = React.useRef(true);
+  const [animating, setAnimating] = React.useState(false);
+  React.useEffect(() => {
+    if (firstFit.current) { firstFit.current = false; return; }
+    setAnimating(true);
+    const t = window.setTimeout(() => fitView({ duration: 400, padding: 0.16, maxZoom: 1.4 }), 30);
+    const t2 = window.setTimeout(() => setAnimating(false), 480);
+    return () => { window.clearTimeout(t); window.clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitKey]);
+
+  /* ---- handlers ---- */
   const [announced, setAnnounced] = React.useState("");
   const onNodeDragStop = React.useCallback<OnNodeDrag<FlowNode>>(
     (_e, node, dragged) => {
+      if (grouped) return; // grouped positions are derived, not persisted
       const movedNodes = dragged?.length ? dragged : [node];
       const moved: Record<string, XY> = {};
-      for (const n of movedNodes) moved[n.id] = { x: n.position.x, y: n.position.y };
+      for (const n of movedNodes) if (n.type !== "group") moved[n.id] = { x: n.position.x, y: n.position.y };
       onViewState(positionsPatch(viewState, relationKey, moved));
-      const label = node.type === "record" ? nodeTitle(node.data as RecordNodeData) : (node.data as HubNodeData).label;
+      const label = node.type === "record" ? nodeTitle(node.data as RecordNodeData) : String((node.data as HubNodeData).label ?? "");
       setAnnounced(`${label} moved`);
+    },
+    [onViewState, viewState, relationKey, grouped],
+  );
+
+  /* drag-between-records-to-create-a-relation: writing the target row's relation
+     field to include the source (source ranks as parent, matching buildGraph) */
+  const onConnect = React.useCallback(
+    (c: Connection) => {
+      if (!connectable || !onPatch || !activeField || !c.source || !c.target || c.source === c.target) return;
+      const child = c.target;
+      const parent = c.source;
+      const childRow = rows.find((r) => String(r.id) === child);
+      if (!childRow) return;
+      const existing = childRow._refs && (childRow._refs as Record<string, unknown>)[relationKey];
+      const cur = Array.isArray(existing) ? existing.map(String) : existing ? [String(existing)] : [];
+      if (cur.includes(parent)) return; // already linked
+      const next = activeField.multiple ? [...cur, parent] : parent;
+      onPatch(child, { [relationKey]: next });
+      setAnnounced(`Linked ${nodeTitle({ row: childRow, labelField, metaFields, i: 0, shape: "rounded" })}`);
+    },
+    [connectable, onPatch, activeField, rows, relationKey, labelField, metaFields],
+  );
+
+  const onResize = React.useCallback(
+    (id: string, width: number, height: number) => {
+      onViewState(sizesPatch(viewState, relationKey, { [id]: { width, height } }));
     },
     [onViewState, viewState, relationKey],
   );
 
-  const open = React.useCallback(
-    (node: FlowNode) => {
-      if (node.type === "record") onOpen(node.id); // hubs are another object's records — no cross-object peek
+  const onCommitTitle = React.useCallback(
+    (id: string, key: string, value: string) => {
+      if (onPatch) onPatch(id, { [key]: value });
     },
-    [onOpen],
+    [onPatch],
   );
-  // Enter/Space on a focused node wrapper = the click path (one tab stop per node)
+
+  const [detailId, setDetailId] = React.useState<string | null>(null);
+  const detailRow = detailId ? rows.find((r) => String(r.id) === detailId) : undefined;
+  // the detail target vanished (deleted / filtered out) → close
+  React.useEffect(() => {
+    if (detailId && !detailRow) setDetailId(null);
+  }, [detailId, detailRow]);
+
+  const openTarget = React.useCallback(
+    (id: string) => {
+      const isRecord = graph.nodes.some((n) => n.kind === "record" && n.id === id);
+      if (!isRecord) return; // hubs are another object's records
+      if (detailOn) setDetailId(id);
+      else onOpen(id);
+    },
+    [graph, detailOn, onOpen],
+  );
+
+  const onToggleGroup = React.useCallback(
+    (value: string) => {
+      const cur = (viewState.flowCollapsed as Record<string, boolean>) ?? {};
+      onViewState({ flowCollapsed: { ...cur, [value]: !cur[value] } });
+    },
+    [onViewState, viewState],
+  );
+
+  const setLayout = React.useCallback((m: LayoutMode) => onViewState({ flowLayout: m }), [onViewState]);
+  const toggleGrouping = React.useCallback(
+    () => onViewState({ flowGrouped: !grouped }),
+    [onViewState, grouped],
+  );
+
+  const fitSelection = React.useCallback(() => {
+    const sel = nodes.filter((n) => n.selected && n.type !== "group");
+    if (sel.length) fitView({ nodes: sel.map((n) => ({ id: n.id })), duration: 400, padding: 0.3, maxZoom: 1.5 });
+    else fitView({ duration: 400, padding: 0.16, maxZoom: 1.4 });
+  }, [nodes, fitView]);
+
+  const runSearch = React.useCallback(() => {
+    if (!matchIds || matchIds.size === 0) return;
+    fitView({ nodes: [...matchIds].map((id) => ({ id })), duration: 400, padding: 0.4, maxZoom: 1.4 });
+  }, [matchIds, fitView]);
+
+  const addNode = React.useCallback(() => {
+    const prefill: Record<string, unknown> = { [labelField.key]: `New ${object.labelOne}` };
+    if (onCreateDraft) onCreateDraft(prefill);
+    else if (onCreate) void onCreate(prefill);
+  }, [onCreateDraft, onCreate, labelField, object]);
+
+  const actions = React.useMemo<FlowActions>(
+    () => ({ editable: handEdit, connectable, colorField, onCommitTitle, onResize, onOpenDetail: openTarget, onToggleGroup }),
+    [handEdit, connectable, colorField, onCommitTitle, onResize, openTarget, onToggleGroup],
+  );
+
+  /* keyboard: Enter/Space on a focused node opens it; arrows move focus to the
+     nearest node in that direction (one tab-stop per node from xyflow) */
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
     const el = e.target as HTMLElement | null;
-    const id = el?.classList?.contains("react-flow__node") ? el.getAttribute("data-id") : null;
-    if (!id) return;
-    const node = nodes.find((n) => n.id === id);
-    if (node) {
-      e.preventDefault();
-      open(node);
+    if (el && (el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA")) return;
+    const focused = el?.closest?.(".react-flow__node") as HTMLElement | null;
+    if ((e.key === "Enter" || e.key === " ") && focused) {
+      const id = focused.getAttribute("data-id");
+      if (id) { e.preventDefault(); openTarget(id); }
+      return;
+    }
+    if (focused && e.key.startsWith("Arrow")) {
+      const id = focused.getAttribute("data-id");
+      const from = nodes.find((n) => n.id === id);
+      if (!from) return;
+      const dir = e.key;
+      let best: { id: string; d: number } | null = null;
+      for (const n of nodes) {
+        if (n.id === id || n.type === "group") continue;
+        const dx = n.position.x - from.position.x;
+        const dy = n.position.y - from.position.y;
+        const ok = dir === "ArrowRight" ? dx > 12 : dir === "ArrowLeft" ? dx < -12 : dir === "ArrowDown" ? dy > 12 : dy < -12;
+        if (!ok) continue;
+        const d = dx * dx + dy * dy;
+        if (!best || d < best.d) best = { id: n.id, d };
+      }
+      if (best) {
+        e.preventDefault();
+        const target = document.querySelector(`.react-flow__node[data-id="${best.id}"]`) as HTMLElement | null;
+        target?.focus();
+      }
     }
   };
 
@@ -211,52 +457,140 @@ export default function FlowView({ object, rows, readOnly, viewConfig, viewState
       <div className="nxCard nxFlowEmpty nx-rise-in" data-testid="flow-empty">
         <Network size={22} />
         <b>Nothing to map yet</b>
-        <span>
-          {object.label} appear here as a graph — records as cards, linked records connected by edges.
-        </span>
+        <span>{object.label} appear here as a graph — records as cards, linked records connected by edges.</span>
       </div>
     );
   }
 
+  const canAdd = handEdit && (!!onCreateDraft || !!onCreate);
+
   return (
     <div
-      className="nxFlowWrap nx-rise-in"
+      className={`nxFlowWrap nx-rise-in${animating ? " nxFlowAnimating" : ""}${detailRow ? " nxFlowHasDetail" : ""}`}
       data-testid={`flow-${object.key}`}
+      data-layout={layoutMode}
+      data-connectable={connectable ? "1" : "0"}
       role="region"
       aria-label={`${object.label} flow graph`}
       onKeyDown={onKeyDown}
     >
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        onNodeClick={(_e, node) => open(node)}
-        onNodeDragStop={onNodeDragStop}
-        nodesDraggable={!readOnly}
-        nodesConnectable={false}
-        edgesFocusable={false}
-        deleteKeyCode={null}
-        nodeDragThreshold={6}
-        fitView
-        fitViewOptions={{ padding: 0.16, maxZoom: 1.4 }}
-        minZoom={0.05}
-        onlyRenderVisibleElements
-        defaultMarkerColor={null}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
-        <div style={{ display: "contents" }} data-testid="flow-controls">
-          <Controls showInteractive={false} orientation="horizontal" />
-        </div>
-        <div style={{ display: "contents" }} data-testid="flow-minimap">
-          <MiniMap pannable zoomable />
-        </div>
-        <FitOnRelationChange relationKey={relationKey} />
-      </ReactFlow>
-      <span className="nxFlowSrOnly" aria-live="polite">
-        {announced}
-      </span>
+      <FlowActionsContext.Provider value={actions}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          nodeTypes={nodeTypes}
+          onNodeClick={(_e, node) => node.type !== "group" && openTarget(node.id)}
+          onNodeDragStop={onNodeDragStop}
+          onConnect={onConnect}
+          connectionMode={ConnectionMode.Loose}
+          nodesDraggable={!readOnly && !grouped}
+          nodesConnectable={connectable}
+          elementsSelectable
+          selectNodesOnDrag={false}
+          multiSelectionKeyCode="Shift"
+          edgesFocusable={false}
+          deleteKeyCode={null}
+          zoomOnDoubleClick={false}
+          nodeDragThreshold={6}
+          fitView
+          fitViewOptions={{ padding: 0.16, maxZoom: 1.4 }}
+          minZoom={0.05}
+          onlyRenderVisibleElements
+          proOptions={{ hideAttribution: false }}
+          defaultMarkerColor={null as unknown as string}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
+
+          {/* on-canvas control cluster — layout switcher + grouping + search */}
+          <Panel position="top-left">
+            <div className="nxFlowToolbar" data-testid="flow-toolbar">
+              {enabled.length > 1 && (
+                <div className="nxSeg nxFlowLayoutSeg" role="group" aria-label="Layout">
+                  {ALL_LAYOUTS.filter((m) => enabled.includes(m)).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className="nxSegBtn"
+                      data-active={layoutMode === m}
+                      data-testid={`flow-layout-${m}`}
+                      onClick={() => setLayout(m)}
+                    >
+                      {LAYOUT_LABELS[m]}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {groupField && (
+                <button
+                  type="button"
+                  className="nxFlowChipBtn"
+                  data-active={grouped}
+                  data-testid="flow-group-toggle"
+                  onClick={toggleGrouping}
+                  title={`Group by ${groupField.label}`}
+                >
+                  Group: {groupField.label}
+                </button>
+              )}
+              <div className="nxFlowSearch">
+                <Search size={13} aria-hidden />
+                <input
+                  className="nxFlowSearchInput"
+                  data-testid="flow-search"
+                  placeholder="Search…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); runSearch(); } e.stopPropagation(); }}
+                  aria-label="Search nodes"
+                />
+                {query && (
+                  <button type="button" className="nxIconBtn" data-testid="flow-search-clear" aria-label="Clear search" onClick={() => setQuery("")}>
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </Panel>
+
+          {/* on-canvas actions — fit-to-selection + hand-create */}
+          <Panel position="top-right">
+            <div className="nxFlowToolbar" data-testid="flow-actions">
+              <button type="button" className="nxIconBtn nxFlowActionBtn" data-testid="flow-fit-selection" aria-label="Fit to selection" title="Fit to selection" onClick={fitSelection}>
+                <Crosshair size={15} />
+              </button>
+              {canAdd && (
+                <button type="button" className="nxIconBtn nxFlowActionBtn" data-testid="flow-add-node" aria-label={`Add ${object.labelOne}`} title={`Add ${object.labelOne}`} onClick={addNode}>
+                  <Plus size={15} />
+                </button>
+              )}
+            </div>
+          </Panel>
+
+          <div style={{ display: "contents" }} data-testid="flow-controls">
+            <Controls showInteractive={false} orientation="horizontal" />
+          </div>
+          <div style={{ display: "contents" }} data-testid="flow-minimap">
+            <MiniMap pannable zoomable nodeClassName={(n) => (n.type === "group" ? "nxMiniGroup" : "")} />
+          </div>
+        </ReactFlow>
+
+        {detailRow && (
+          <NodeDetailPanel
+            object={object}
+            row={detailRow}
+            fields={detailFields}
+            colorField={colorField}
+            readOnly={readOnly}
+            onPatch={(id, patch) => onPatch?.(id, patch)}
+            onOpen={(id) => { setDetailId(null); onOpen(id); }}
+            onDelete={onDelete}
+            onClose={() => setDetailId(null)}
+          />
+        )}
+      </FlowActionsContext.Provider>
+      <span className="nxFlowSrOnly" aria-live="polite">{announced}</span>
     </div>
   );
 }
