@@ -91,8 +91,10 @@ const SPECS: Record<BasemapId, BasemapSpec> = {
       },
       layers: [
         { id: "basemap", type: "raster", source: "basemap" },
-        { id: "sat-roads", type: "raster", source: "sat-roads" },
-        { id: "sat-labels", type: "raster", source: "sat-labels" },
+        // the reference overlays are RASTER (fixed glyph size); dial their opacity
+        // down so the labels read as a subtle hybrid, not bold billboards
+        { id: "sat-roads", type: "raster", source: "sat-roads", paint: { "raster-opacity": 0.85 } },
+        { id: "sat-labels", type: "raster", source: "sat-labels", paint: { "raster-opacity": 0.68 } },
       ],
     }),
   },

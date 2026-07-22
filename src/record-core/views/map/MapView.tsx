@@ -646,7 +646,13 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
           visibleLocated.map(({ row, lat, lng }) => {
             const title = String(row[titleField.key] ?? row.id);
             const tint = colorField ? optionMeta(colorField, row[colorKey ?? ""]).color : undefined;
-            const scale = sizeKey ? radiusFor(numericValue(row[sizeKey]), ext) / MARKER_DEFAULT_R : 1;
+            // size-by-field on a TIGHT range (0.82–1.32) so big values don't produce
+            // giant colliding pins — the legend still conveys the field
+            const sv = sizeKey ? numericValue(row[sizeKey]) : undefined;
+            const scale =
+              sizeKey && ext && sv !== undefined && ext.max > ext.min
+                ? 0.82 + 0.5 * Math.max(0, Math.min(1, (sv - ext.min) / (ext.max - ext.min)))
+                : 1;
             const off = spider.get(String(row.id));
             const dx = off?.dx ?? 0;
             const dy = off?.dy ?? 0;
@@ -672,7 +678,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
                         else setPopupId(String(row.id));
                       }}
                     >
-                      <svg width="28" height="34" viewBox="0 0 26 31" aria-hidden="true">
+                      <svg width="24" height="29" viewBox="0 0 26 31" aria-hidden="true">
                         <path d="M13 1C6.4 1 1 6.3 1 12.8 1 21.3 13 30 13 30s12-8.7 12-17.2C25 6.3 19.6 1 13 1Z" fill="currentColor" stroke="var(--nx-bg-raised)" strokeWidth="1.5" />
                         <circle cx="13" cy="12.6" r="4.6" fill="var(--nx-bg-raised)" />
                       </svg>

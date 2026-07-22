@@ -44,9 +44,9 @@
    spread pin back to its true spot (a dot marks the true location). */
 .nxMapPinCell { position: relative; }
 .nxMapPinOffset { transition: transform var(--nx-t-med) var(--nx-ease-settle); }
-.nxMapLeader { position: absolute; left: 50%; bottom: 0; z-index: -1; pointer-events: none; }
-.nxMapLeader line { stroke: var(--nx-fg-faint); stroke-width: 1.5; stroke-dasharray: 2.5 2.5; opacity: 0.75; }
-.nxMapLeader circle { fill: var(--nx-fg-muted); }
+.nxMapLeader { position: absolute; left: 50%; bottom: 0; pointer-events: none; }
+.nxMapLeader line { stroke: var(--nx-accent); stroke-width: 1.5; stroke-dasharray: 3 2; opacity: 0.85; }
+.nxMapLeader circle { fill: var(--nx-accent); }
 
 /* search result pin (geocode) + route waypoint pin */
 .nxMapSearchPin {
@@ -171,13 +171,17 @@
    clicks) */
 .nxMapLeftRail { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); z-index: 5; }
 
-/* the group's buttons are transparent (the group provides the surface) */
+/* the group's buttons are transparent (the group provides the surface); the label
+   + icon drive the token fg so they stay legible over a dark basemap (the shadcn
+   button's own color would not follow the dark-token override) */
 .nxMapCtrlBtn {
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
   border-radius: var(--nx-radius-m) !important;
+  color: var(--nx-fg) !important;
 }
+.nxMapCtrlBtn svg { color: var(--nx-fg-muted); }
 
 /* ── layers panel ── */
 .nxMapLayers { position: relative; }
@@ -257,7 +261,10 @@
   background: var(--nx-bg-raised);
   box-shadow: var(--nx-shadow-1);
   border: 1px solid var(--nx-border);
+  color: var(--nx-fg);
 }
+/* legible placeholder in both themes + over a dark basemap */
+.nxMapSearch input::placeholder { color: var(--nx-fg-faint); opacity: 1; }
 .nxMapSearchClear {
   position: absolute;
   right: 6px;

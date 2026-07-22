@@ -19,31 +19,33 @@ export interface SpiderOffset {
   spread: boolean;
 }
 
-/* pins within this many px of each other are treated as a colliding group */
-export const COLLISION_PX = 26;
+/* pins within this many px of the group anchor are treated as a colliding pile
+   (≈ one pin width — genuine overlap, not merely "near") */
+export const COLLISION_PX = 22;
 /* arc length reserved per pin on the fan ring */
-const RING_SPACING = 34;
+const RING_SPACING = 30;
 
-/* group points by proximity (transitive: a point joins a group if within
-   collisionPx of ANY member), then fan each group of 2+ onto a ring. */
+/* group points by proximity to an ANCHOR (a point joins a group only if within
+   collisionPx of the group's first point) — NOT transitive, so a dense field can't
+   chain into one continent-wide mega-group; each group stays a tight local pile
+   (diameter ≤ 2·collisionPx). Then fan each group of 2+ onto a ring. Points that
+   aren't genuinely colliding are left in place (this fans same-spot piles; broad
+   density is the clustering layer's job). */
 export function spiderfyLayout(points: PixelPoint[], collisionPx = COLLISION_PX): Map<string, SpiderOffset> {
   const out = new Map<string, SpiderOffset>();
   const assigned = new Array(points.length).fill(false);
 
   for (let i = 0; i < points.length; i++) {
     if (assigned[i]) continue;
+    const anchor = points[i];
     const group = [i];
     assigned[i] = true;
-    // transitive expansion
-    for (let g = 0; g < group.length; g++) {
-      const a = points[group[g]];
-      for (let j = 0; j < points.length; j++) {
-        if (assigned[j]) continue;
-        const b = points[j];
-        if (Math.hypot(a.x - b.x, a.y - b.y) <= collisionPx) {
-          group.push(j);
-          assigned[j] = true;
-        }
+    // anchor-bounded: within collisionPx of the ANCHOR only
+    for (let j = i + 1; j < points.length; j++) {
+      if (assigned[j]) continue;
+      if (Math.hypot(anchor.x - points[j].x, anchor.y - points[j].y) <= collisionPx) {
+        group.push(j);
+        assigned[j] = true;
       }
     }
 
