@@ -1,104 +1,52 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { Excalidraw, MainMenu, getSceneVersion } from "@excalidraw/excalidraw";
-import "@excalidraw/excalidraw/index.css";
 import { Pencil, X } from "lucide-react";
 import { Button } from "../../../primitives/Button";
-import { useDebouncedSave } from "../../../hooks/useDebouncedSave";
+import type { SaveState } from "../../../hooks/useDebouncedSave";
 import { useIsMobile } from "../../../hooks/use-mobile";
 import type { FieldRenderProps } from "../types";
+import type { FieldDef } from "../../types";
 import type { WhiteboardScene } from "./scene";
-import { isScene, liveElements } from "./scene";
-import { useNxTheme } from "./useNxTheme";
+import { isScene } from "./scene";
+import { resolveWhiteboardConfig } from "./config";
 import { Thumbnail } from "./Thumbnail";
+import WhiteboardCanvas from "./WhiteboardCanvas";
 
-/* Whiteboard field editor — a per-record excalidraw canvas persisted as plain
-   scene JSON through the record store's one-patch path (the richText model:
-   seed-once local document keyed by row id at the mount site, debounced
-   whole-value commits, a subtle Saving…/Saved chip).
+/* Whiteboard field editor — a per-record, FULL-DEPTH excalidraw canvas persisted as
+   scene JSON ({ elements, files? }) through the record store's one-patch path. The
+   depth (every native tool surfaced, the ops rail — boolean/arrange/templates/palette
+   — image + record drop, and the presence seam) lives in WhiteboardCanvas; this file
+   owns the field lifecycle: config resolution, the invalid-value state, the mobile
+   preview↔overlay flip, and the Saving…/Saved chip.
 
-   Save discipline: onChange fires for every interactive change including pure
-   viewport moves; getSceneVersion only advances when ELEMENTS change, so pans/
-   zooms/selection never write (no toast churn, no timeline noise). The value is
-   ELEMENTS ONLY — a viewport is never persisted: scene coordinates absorb the
-   authoring-time canvas offset, so a stored scroll re-applied on a differently
-   laid-out mount can open on empty space. Every mount scrolls to content instead
-   (a stored appState key from older writes is tolerated and ignored).
+   Save discipline is unchanged: WhiteboardCanvas only writes when ELEMENTS or the
+   referenced image FILES change (viewport/selection/presence never write); the value
+   is elements (+ image files only when an image is on the board).
 
-   Mobile (≤768px): the resting state is a static thumbnail + an Edit affordance —
-   the page never traps touch scroll. Editing happens in a fullscreen overlay
-   (portaled to <body>: the record page may sit inside the transformed peek panel,
-   which would break position:fixed). Inside it, excalidraw's native touch handles
-   one-finger draw/pan and pinch-zoom.
-
-   v1 boundary: the image tool is off (scene stays lean JSON — no base64 blobs in
-   the command log) and file-system canvas actions are hidden (an embedded field
-   is not a file editor). */
-
-type ExcalidrawElements = readonly { isDeleted?: boolean }[];
-
-/* Trim excalidraw's foreign chrome to a native minimum: no view-background picker
-   (the surface is token-driven), no export-to dialog (its links/collab are foreign),
-   no theme toggle (the app drives the theme), no file load/save. Kept: Reset the
-   canvas + Save as image (native, useful). The image TOOL stays off (scenes stay
-   lean JSON — no base64 blobs in the command log). */
-const UI_OPTIONS = {
-  canvasActions: {
-    changeViewBackgroundColor: false,
-    clearCanvas: true,
-    export: false,
-    loadScene: false,
-    saveToActiveFile: false,
-    toggleTheme: false,
-    saveAsImage: true,
-  },
-  tools: { image: false },
-} as const;
+   Mobile (≤768px): the resting state is a static thumbnail + an Edit affordance — the
+   page never traps touch scroll. Editing happens in a fullscreen overlay (portaled to
+   <body>), where excalidraw's native touch handles draw/pan/pinch. */
 
 export default function WhiteboardField({ field, row, value, readOnly, onSave }: FieldRenderProps) {
-  const theme = useNxTheme();
   const mobile = useIsMobile();
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [saveState, setSaveState] = React.useState<SaveState>("idle");
 
-  // seed-once PER CANVAS MOUNT: the canvas owns the live scene while mounted (the
-  // mount site keys this component by row id, so a same-record poll never reseeds).
-  // A desktop↔mobile flip or overlay open/close REMOUNTS the canvas — reseed from
-  // the current value then (edits inside the 700ms debounce window at the exact
-  // moment of a viewport-mode flip are the accepted edge; saves cover the rest).
+  const config = React.useMemo(() => resolveWhiteboardConfig((field as FieldDef).whiteboard), [field]);
+  const boardId = React.useMemo(() => `wb:${field.key}:${String((row as { id?: unknown })?.id ?? "new")}`, [field.key, row]);
+
+  // remount key: a desktop↔mobile flip or overlay open/close remounts the canvas so it
+  // reseeds from the current value (the 700ms-debounce edge at the flip is accepted).
   const epoch = `${mobile ? "m" : "d"}:${mobileOpen ? "open" : "rest"}`;
-  const seed = React.useMemo(
-    () => ({ elements: liveElements(value) as unknown[] }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [epoch],
-  );
-  const lastVersion = React.useRef<number>(0);
-  React.useMemo(() => { lastVersion.current = getSceneVersion(seed.elements as never); }, [seed]);
 
-  const { saveState, trigger: saveScene } = useDebouncedSave<WhiteboardScene>((next) => onSave(next), 700);
-
-  const onChange = React.useCallback(
-    (elements: ExcalidrawElements) => {
-      const v = getSceneVersion(elements as never);
-      if (v === lastVersion.current) return; // viewport/selection only — never a write
-      lastVersion.current = v;
-      saveScene({ elements: elements.filter((e) => !e.isDeleted) as WhiteboardScene["elements"] });
-    },
-    [saveScene],
-  );
-
-  // a non-null value that is not a scene: render the designed invalid state; the
-  // reset is an explicit, labeled user action — never an automatic overwrite
+  // a non-null value that is not a scene: the designed invalid state; the reset is an
+  // explicit, labeled user action — never an automatic overwrite.
   if (value !== null && value !== undefined && value !== "" && !isScene(value)) {
     return (
       <span className="nxWbInvalid" data-testid={`wb-invalid-${field.key}`} role="group" aria-label={field.label}>
         <span>This {field.label.toLowerCase()} value is not a readable canvas scene.</span>
         {!readOnly && (
-          <Button
-            size="sm"
-            variant="secondary"
-            data-testid={`wb-reset-${field.key}`}
-            onClick={() => onSave({ elements: [] })}
-          >
+          <Button size="sm" variant="secondary" data-testid={`wb-reset-${field.key}`} onClick={() => onSave({ elements: [] })}>
             Replace with a blank canvas
           </Button>
         )}
@@ -118,22 +66,16 @@ export default function WhiteboardField({ field, row, value, readOnly, onSave }:
   );
 
   const canvas = (
-    <Excalidraw
+    <WhiteboardCanvas
       key={epoch}
-      theme={theme}
-      viewModeEnabled={readOnly}
-      UIOptions={UI_OPTIONS}
-      initialData={{ elements: seed.elements as never, appState: { showWelcomeScreen: false } as never, scrollToContent: true }}
-      onChange={onChange as never}
-    >
-      {/* a minimal native menu — Save as image + Reset only; excalidraw's foreign
-          items (library, live-collaboration, socials, help, load/save-file) are gone.
-          Rendering children also suppresses the default welcome-screen overlay. */}
-      <MainMenu>
-        <MainMenu.DefaultItems.SaveAsImage />
-        <MainMenu.DefaultItems.ClearCanvas />
-      </MainMenu>
-    </Excalidraw>
+      value={value}
+      onSave={onSave as (v: WhiteboardScene) => void}
+      readOnly={readOnly}
+      config={config}
+      boardId={boardId}
+      epoch={epoch}
+      onSaveState={setSaveState}
+    />
   );
 
   // mobile rest state: static preview + Edit; the canvas mounts only in the overlay
@@ -159,9 +101,6 @@ export default function WhiteboardField({ field, row, value, readOnly, onSave }:
           {saveChip}
         </span>
         {createPortal(
-          /* laddered escape: excalidraw consumes Escape for its own deselect; an
-             Escape that bubbles out of the canvas closes the overlay (one level),
-             matching the peek panel's step-back model. Done is the touch path. */
           <div
             className="nxWbOverlay nx-rise-in-sm"
             role="dialog"
