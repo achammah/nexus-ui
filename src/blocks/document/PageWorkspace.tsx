@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronRight, ChevronLeft, PanelLeft, Search, CornerDownLeft, FileText } from "lucide-react";
+import { ChevronRight, ChevronLeft, PanelLeft, Search, CornerDownLeft, FileText, Plus } from "lucide-react";
 import { DocumentSurface, useTouchLayout, type DocumentConfig } from "./DocumentSurface";
 import { PageTree } from "./PageTree";
 import { type PageContext } from "../../record-core/NotionEditor";
@@ -7,7 +7,7 @@ import type { DocumentSnapshot } from "./snapshot";
 import { PageIcon } from "../../record-core/PageIcon";
 import {
   seedPageStore, createPage, duplicatePage, deletePage, movePage, renamePage, setPageIcon, setPageCover,
-  setPageBlocks, toggleFavorite, setActive, setExpanded, breadcrumb, backlinksOf, searchPages, rootPages,
+  setPageBlocks, toggleFavorite, setActive, setExpanded, breadcrumb, backlinksOf, searchPages, rootPages, childrenOf,
   type PageStore, type PageNode,
 } from "./page-store";
 import "./page-workspace.css";
@@ -20,21 +20,84 @@ import "./page-workspace.css";
    pageContext seam so sub-page blocks and [[page:]] links resolve/open/create against the
    store. This is what a Pages host mounts for a kind:"document" page. */
 
+/* Composability — a workspace configures "for any company": every structural element is a
+   toggle, and named LAYOUT PRESETS bundle them into the four shapes a Pages product ships
+   (wiki / single-doc / library / review). Explicit flags override the preset; anything left
+   undefined inherits the preset. The whole surface degrades coherently: turn the tree off and
+   the sidebar collapse control vanishes with it, drop breadcrumbs and Cmd-K moves to the tree
+   head, etc. Full surface + recipes → docs/RECIPES.md. */
+export type TreeMode = "sidebar" | "off" | "table";
+export type WorkspaceLayout = "wiki" | "single-doc" | "library" | "review";
+
+export interface WorkspaceConfig {
+  preset?: WorkspaceLayout;          // named starting point (default "wiki")
+  tree?: TreeMode;                   // page navigation: nested sidebar | none | a library table
+  breadcrumbs?: boolean;             // the workspace trail
+  backlinks?: boolean;               // "linked references" panel
+  cmdK?: boolean;                    // ⌘K quick-switcher + its search entries
+  outline?: boolean;                 // per-page outline rail/sheet
+  cover?: boolean;                   // per-page cover image
+  icons?: boolean;                   // per-page icon/emoji
+  export?: boolean;                  // the import/export menu
+  wordCount?: boolean;               // the word/char readout
+  pageWidth?: boolean;               // the narrow/wide toggle
+  findReplace?: boolean;             // the find & replace bar
+}
+
+type WsFlags = Required<Omit<WorkspaceConfig, "preset">>;
+const WORKSPACE_PRESETS: Record<WorkspaceLayout, WsFlags> = {
+  wiki:         { tree: "sidebar", breadcrumbs: true,  backlinks: true,  cmdK: true,  outline: true, cover: true,  icons: true, export: true, wordCount: true, pageWidth: true,  findReplace: true },
+  "single-doc": { tree: "off",     breadcrumbs: false, backlinks: false, cmdK: false, outline: true, cover: true,  icons: true, export: true, wordCount: true, pageWidth: true,  findReplace: true },
+  library:      { tree: "table",   breadcrumbs: true,  backlinks: true,  cmdK: true,  outline: true, cover: true,  icons: true, export: true, wordCount: true, pageWidth: true,  findReplace: true },
+  review:       { tree: "sidebar", breadcrumbs: true,  backlinks: true,  cmdK: true,  outline: true, cover: false, icons: true, export: true, wordCount: true, pageWidth: false, findReplace: true },
+};
+
+interface ResolvedWs { tree: TreeMode; breadcrumbs: boolean; backlinks: boolean; cmdK: boolean; doc: DocumentConfig }
+export function resolveWorkspaceConfig(cfg: WorkspaceConfig | undefined, docCfg: DocumentConfig | undefined): ResolvedWs {
+  const base = WORKSPACE_PRESETS[cfg?.preset ?? "wiki"];
+  const pick = <K extends keyof WsFlags>(k: K): WsFlags[K] => (cfg?.[k] ?? base[k]) as WsFlags[K];
+  return {
+    tree: pick("tree"),
+    breadcrumbs: pick("breadcrumbs"),
+    backlinks: pick("backlinks"),
+    cmdK: pick("cmdK"),
+    // workspace-level element flags fold into the per-page DocumentConfig; any other
+    // DocumentConfig fields (editor block set, chrome) pass through untouched
+    // precedence: explicit WorkspaceConfig flag > explicit documentConfig flag > preset default
+    doc: {
+      ...docCfg,
+      outline: cfg?.outline ?? docCfg?.outline ?? base.outline,
+      cover: cfg?.cover ?? docCfg?.cover ?? base.cover,
+      icon: cfg?.icons ?? docCfg?.icon ?? base.icons,
+      importExport: cfg?.export ?? docCfg?.importExport ?? base.export,
+      wordCount: cfg?.wordCount ?? docCfg?.wordCount ?? base.wordCount,
+      pageWidthToggle: cfg?.pageWidth ?? docCfg?.pageWidthToggle ?? base.pageWidth,
+      findReplace: cfg?.findReplace ?? docCfg?.findReplace ?? base.findReplace,
+    },
+  };
+}
+
 export interface PageWorkspaceProps {
   value: PageStore | null;
   onChange?: (store: PageStore) => void;
   reloadNonce?: number;
   className?: string;
   readOnly?: boolean;
-  documentConfig?: DocumentConfig;   // forwarded to the per-page DocumentSurface
+  documentConfig?: DocumentConfig;   // forwarded to the per-page DocumentSurface (editor/chrome)
+  config?: WorkspaceConfig;          // composability — element toggles + a layout preset
   /* Set false when the HOST already renders a breadcrumb for this page — the workspace then
-     renders no trail of its own, so the surface never stacks two of them. */
+     renders no trail of its own, so the surface never stacks two of them. Overrides the
+     config/preset when explicitly false. */
   breadcrumbs?: boolean;
   "data-testid"?: string;
 }
 
-export function PageWorkspace({ value, onChange, reloadNonce = 0, className, readOnly, documentConfig, breadcrumbs = true, ...rest }: PageWorkspaceProps) {
-  const showCrumbs = breadcrumbs !== false;
+export function PageWorkspace({ value, onChange, reloadNonce = 0, className, readOnly, documentConfig, config, breadcrumbs = true, ...rest }: PageWorkspaceProps) {
+  const ws = React.useMemo(() => resolveWorkspaceConfig(config, documentConfig), [config, documentConfig]);
+  // the host's explicit breadcrumbs=false (it owns the trail) wins over the preset
+  const showCrumbs = breadcrumbs !== false && ws.breadcrumbs;
+  const treeMode = ws.tree;
+  const showCmdK = ws.cmdK;
   const [store, setStore] = React.useState<PageStore>(() => value ?? seedPageStore());
   const storeRef = React.useRef(store); storeRef.current = store;
   const onChangeRef = React.useRef(onChange); onChangeRef.current = onChange;
@@ -75,12 +138,13 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
 
   // ⌘K / Ctrl-K quick-switcher
   React.useEffect(() => {
+    if (!showCmdK) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); setSwitcher((v) => !v); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [showCmdK]);
 
   if (!active) {
     return <div className={`nxWs${className ? " " + className : ""}`} {...rest}><div className="nxWs-blank"><FileText size={22} /><p>No pages yet.</p><button onClick={() => create(null)}>Create the first page</button></div></div>;
@@ -111,7 +175,7 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
 
   const topBar = (
     <div className="nxWs-crumbbar" data-testid="ws-breadcrumbs">
-      {!sidebar && <button className="nxWs-iconbtn" title="Show pages" data-testid="ws-show-sidebar" onClick={() => setSidebar(true)}><PanelLeft size={15} /></button>}
+      {treeMode !== "off" && !sidebar && <button className="nxWs-iconbtn" title="Show pages" data-testid="ws-show-sidebar" onClick={() => setSidebar(true)}><PanelLeft size={15} /></button>}
       {/* touch: the trail collapses to a BACK affordance to the parent page — a full trail
           does not fit, and "up one level" is the gesture a sub-page actually needs */}
       {touch && parent && (
@@ -119,7 +183,7 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
           <ChevronLeft size={16} /><span>{parent.title || "Untitled"}</span>
         </button>
       )}
-      {touch && (
+      {touch && showCmdK && (
         <button className="nxWs-iconbtn nxWs-msearch" title="Search pages" data-testid="ws-search-touch" onClick={() => setSwitcher(true)}><Search size={16} /></button>
       )}
       {showCrumbs && !touch && <nav className="nxWs-crumbs">
@@ -140,11 +204,11 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
       </nav>}
       {/* only alongside the trail — without it the tree head's search is the single, closer
           entry point, and two search affordances in one row read as clutter */}
-      {showCrumbs && !touch && <button className="nxWs-kbar" data-testid="ws-search" onClick={() => setSwitcher(true)}><Search size={13} /><span className="nxWs-kbar-tx">Search</span><kbd>⌘K</kbd></button>}
+      {showCrumbs && showCmdK && !touch && <button className="nxWs-kbar" data-testid="ws-search" onClick={() => setSwitcher(true)}><Search size={13} /><span className="nxWs-kbar-tx">Search</span><kbd>⌘K</kbd></button>}
     </div>
   );
 
-  const footer = backs.length > 0 && (
+  const footer = ws.backlinks && backs.length > 0 && (
     <div className="nxWs-backlinks" data-testid="ws-backlinks">
       <div className="nxWs-backlinks-h">Linked references · {backs.length}</div>
       {backs.map((b, i) => {
@@ -160,26 +224,39 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
     </div>
   );
 
+  const hasNav = treeMode !== "off";
+  const showSidebar = hasNav && sidebar;
   return (
-    <div className={`nxWs${sidebar ? "" : " is-collapsed"}${className ? " " + className : ""}`} data-testid="page-workspace" {...rest}>
+    <div className={`nxWs${showSidebar ? "" : " is-collapsed"}${className ? " " + className : ""}`} data-testid="page-workspace" {...rest}>
       {/* the drawer is modal on touch: a scrim to tap away, and opening a page closes it */}
-      {sidebar && touch && <div className="nxWs-scrim" data-testid="ws-scrim" onClick={() => setSidebar(false)} />}
-      {sidebar && (
+      {showSidebar && touch && <div className="nxWs-scrim" data-testid="ws-scrim" onClick={() => setSidebar(false)} />}
+      {showSidebar && (
         <aside className="nxWs-sidebar" data-testid="ws-sidebar">
-          <PageTree
-            onCollapse={() => setSidebar(false)}
-            store={store}
-            activeId={active.id}
-            onOpen={open}
-            onCreate={create}
-            onDuplicate={(id) => { const r = duplicatePage(storeRef.current, id); mutate(() => setActive(r.store, r.id)); }}
-            onDelete={(id) => mutate((s) => deletePage(s, id))}
-            onFavorite={(id) => mutate((s) => toggleFavorite(s, id))}
-            onRename={(id, title) => mutate((s) => renamePage(s, id, title))}
-            onMove={(id, parent, after) => mutate((s) => movePage(s, id, parent, after))}
-            onToggleExpand={(id, o) => mutate((s) => setExpanded(s, id, o))}
-            onSearch={() => setSwitcher(true)}
-          />
+          {treeMode === "table" ? (
+            <PageTable
+              store={store}
+              activeId={active.id}
+              onCollapse={() => setSidebar(false)}
+              onOpen={open}
+              onCreate={() => create(null)}
+              onSearch={showCmdK ? () => setSwitcher(true) : undefined}
+            />
+          ) : (
+            <PageTree
+              onCollapse={() => setSidebar(false)}
+              store={store}
+              activeId={active.id}
+              onOpen={open}
+              onCreate={create}
+              onDuplicate={(id) => { const r = duplicatePage(storeRef.current, id); mutate(() => setActive(r.store, r.id)); }}
+              onDelete={(id) => mutate((s) => deletePage(s, id))}
+              onFavorite={(id) => mutate((s) => toggleFavorite(s, id))}
+              onRename={(id, title) => mutate((s) => renamePage(s, id, title))}
+              onMove={(id, parent, after) => mutate((s) => movePage(s, id, parent, after))}
+              onToggleExpand={(id, o) => mutate((s) => setExpanded(s, id, o))}
+              onSearch={showCmdK ? () => setSwitcher(true) : undefined}
+            />
+          )}
         </aside>
       )}
       <div className="nxWs-main">
@@ -188,14 +265,14 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
           value={activeSnap}
           onChange={onDocChange}
           readOnly={readOnly}
-          config={documentConfig}
+          config={ws.doc}
           pageContext={pageContext}
           topBar={topBar}
           footer={footer}
         />
       </div>
 
-      {switcher && <QuickSwitcher store={store} onOpen={open} onClose={() => setSwitcher(false)} />}
+      {switcher && showCmdK && <QuickSwitcher store={store} onOpen={open} onClose={() => setSwitcher(false)} />}
     </div>
   );
 }
@@ -233,6 +310,64 @@ function QuickSwitcher({ store, onOpen, onClose }: { store: PageStore; onOpen: (
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* PageTable — the "library" navigation: every page as a row in a record-table idiom (icon +
+   title indented by depth, sub-page count, last-edited), instead of the nested tree. Same
+   sidebar location + head controls, so tree↔table is a pure config swap. Rows open a page. */
+function PageTable({ store, activeId, onOpen, onCreate, onCollapse, onSearch }: {
+  store: PageStore;
+  activeId: string;
+  onOpen: (id: string) => void;
+  onCreate: () => void;
+  onCollapse: () => void;
+  onSearch?: () => void;
+}) {
+  // depth-first flatten so the table preserves the page hierarchy as indentation
+  const rows = React.useMemo(() => {
+    const out: { page: PageNode; depth: number; kids: number }[] = [];
+    const walk = (parentId: string | null, depth: number) => {
+      for (const p of childrenOf(store, parentId)) {
+        const kids = childrenOf(store, p.id).length;
+        out.push({ page: p, depth, kids });
+        walk(p.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    return out;
+  }, [store]);
+  const edited = (t: number) => {
+    const d = Math.floor((Date.now() - t) / 86400000);
+    return d <= 0 ? "Today" : d === 1 ? "Yesterday" : d < 30 ? `${d}d ago` : new Date(t).toLocaleDateString();
+  };
+  return (
+    <div className="nxWs-table" data-testid="ws-page-table">
+      <div className="nxTree-head">
+        <span className="nxTree-head-tx">All pages</span>
+        <div className="nxTree-head-actions">
+          {onSearch && <button className="nxTree-hbtn" title="Search (⌘K)" data-testid="table-search" onClick={onSearch}><Search size={14} /></button>}
+          <button className="nxTree-hbtn" title="New page" data-testid="table-new" onClick={onCreate}><Plus size={15} /></button>
+          <button className="nxTree-hbtn" title="Hide sidebar" data-testid="ws-hide-sidebar" onClick={onCollapse}><PanelLeft size={15} /></button>
+        </div>
+      </div>
+      <div className="nxWs-table-head" role="row">
+        <span>Page</span><span className="nxWs-table-meta">Edited</span>
+      </div>
+      <div className="nxWs-table-body">
+        {rows.map(({ page, depth, kids }) => (
+          <button key={page.id} className={`nxWs-table-row${activeId === page.id ? " is-active" : ""}`}
+            data-testid={`table-row-${page.id}`} onClick={() => onOpen(page.id)}>
+            <span className="nxWs-table-name" style={{ paddingInlineStart: 8 + depth * 16 }}>
+              <span className="nxWs-table-ic"><PageIcon icon={page.icon} size={16} fallback={<FileText size={13} />} /></span>
+              <span className="nxWs-table-title">{page.title || "Untitled"}</span>
+              {kids > 0 && <span className="nxWs-table-count">{kids}</span>}
+            </span>
+            <span className="nxWs-table-meta">{edited(page.updatedAt)}</span>
+          </button>
+        ))}
       </div>
     </div>
   );

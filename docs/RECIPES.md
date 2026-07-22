@@ -178,3 +178,42 @@ It derives entries from headings (h1–h3), click-scrolls, highlights the active
 ## Pages wiring (kind:"document")
 
 `DocumentSurface` is the document twin of `WorkbookSurface`: same free-surface contract (`value` / `onChange` / `reloadNonce` / `actions`). A Pages host mounts a `kind:"document"` page by rendering `<DocumentSurface value={page.doc} onChange={persist} />` and persisting the returned `DocumentSnapshot` under `documentStoreKey(page.key)`. The surface is exported eagerly (it is light; only docx/mammoth are heavy and they are lazy), so no Suspense boundary is required.
+
+## Composability — configure the workspace for any company
+
+Every structural element of `PageWorkspace` is a toggle, and four named **layout presets** bundle them into the shapes a Pages product ships. Pass `config` (a `WorkspaceConfig`); explicit flags override the preset, anything left `undefined` inherits it. The surface **degrades coherently** — turn the tree off and its collapse control goes with it, drop breadcrumbs and the ⌘K entry moves to the tree head.
+
+```tsx
+import { PageWorkspace, type WorkspaceConfig } from "@nexus/ui";
+
+<PageWorkspace value={store} onChange={persist}
+  config={{ preset: "wiki" }} />                       // a named starting point
+<PageWorkspace value={store} onChange={persist}
+  config={{ preset: "library", backlinks: false }} />  // preset + an override
+```
+
+### Presets (`config.preset`)
+
+| Preset | Tree | Breadcrumbs | Backlinks | ⌘K | Cover | Page-width | Use it for |
+|---|---|---|---|---|---|---|---|
+| `wiki` (default) | sidebar | ✓ | ✓ | ✓ | ✓ | ✓ | a nested knowledge base — the full workspace |
+| `single-doc` | off | — | — | — | ✓ | ✓ | one lone document, no navigation chrome |
+| `library` | **table** | ✓ | ✓ | ✓ | ✓ | ✓ | browse many pages as a record table, click a row to open |
+| `review` | sidebar | ✓ | ✓ | ✓ | — | — | reading/reviewing — a fixed reading width, no cover |
+
+### Element toggles (each overrides the preset)
+
+`tree` (`"sidebar" | "off" | "table"`) · `breadcrumbs` · `backlinks` · `cmdK` · `outline` · `cover` · `icons` · `export` · `wordCount` · `pageWidth` · `findReplace` — all optional booleans (except `tree`).
+
+- **`tree: "table"`** renders the navigation as a record-table list (icon + title indented by depth, sub-page count, last-edited) in the sidebar location — the same record-object idiom as the app's `DataTable`, so tree↔table is a pure config swap.
+- The host's `breadcrumbs={false}` prop still wins over the config (used when the host app renders its own trail for the page).
+- Per-page chrome flags (`outline`/`cover`/`icons`/`export`/`wordCount`/`pageWidth`/`findReplace`) fold into each page's `DocumentSurface` `DocumentConfig`; the `documentConfig` prop still carries editor/chrome-level options untouched.
+
+```ts
+// resolve a config yourself (e.g. to preview a preset before mounting)
+import { resolveWorkspaceConfig } from "@nexus/ui";
+const resolved = resolveWorkspaceConfig({ preset: "library" }, undefined);
+// → { tree: "table", breadcrumbs: true, backlinks: true, cmdK: true, doc: {...} }
+```
+
+> Note: `suggestions` (track-changes) and `comments` are separate capabilities; their toggles land with those features and are not yet part of `WorkspaceConfig`.

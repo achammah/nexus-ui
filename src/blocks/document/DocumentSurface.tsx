@@ -21,6 +21,7 @@ export interface DocumentConfig {
   importExport?: boolean;       // the import/export menu (default true)
   chrome?: boolean;             // cover + icon + title header (default true)
   cover?: boolean;              // allow a cover (default true)
+  icon?: boolean;              // allow a page icon/emoji (default true)
   wordCount?: boolean;          // the word/char readout (default true)
   findReplace?: boolean;        // the find & replace bar (default true)
   pageWidthToggle?: boolean;    // narrow/wide toggle (default true)
@@ -70,6 +71,7 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
   const showIO = cfg.importExport !== false && !readOnly;
   const showChrome = cfg.chrome !== false;
   const allowCover = cfg.cover !== false && showChrome;
+  const allowIcon = cfg.icon !== false && showChrome;
   const showWordCount = cfg.wordCount !== false;
   const showFind = cfg.findReplace !== false;
   const showWidthToggle = cfg.pageWidthToggle !== false;
@@ -262,7 +264,7 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
             {showChrome && (
               <div className="nxDoc-head">
                 <div className="nxDoc-head-ctl">
-                  <div className="nxDoc-iconwrap">
+                  {allowIcon && <div className="nxDoc-iconwrap">
                     <button className="nxDoc-icon" data-testid="doc-icon" disabled={readOnly}
                       onClick={() => { if (!readOnly) setIconOpen((v) => !v); }}
                       title={snap.icon ? "Change icon" : "Add an icon"}>
@@ -274,7 +276,7 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
                         onRemove={() => patch({ icon: undefined })}
                         onClose={() => setIconOpen(false)} />
                     )}
-                  </div>
+                  </div>}
                   {!readOnly && allowCover && !snap.cover && (
                     <div className="nxDoc-iconwrap">
                       <button className="nxDoc-addcover" data-testid="doc-add-cover" onClick={() => setCoverOpen((v) => !v)}><ImageIcon size={13} /> Add cover</button>
