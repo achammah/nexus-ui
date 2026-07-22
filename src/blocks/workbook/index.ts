@@ -34,6 +34,14 @@ export {
   resolveWorkbookConfig,
   type WorkbookConfig,
 } from "./config";
+export {
+  exportWorkbookToXlsx,
+  importXlsxToWorkbook,
+  exportSheetToCsv,
+  importCsvToWorkbook,
+  triggerDownload,
+} from "./xlsx-io";
+export type { WorkbookIOController } from "./workbook-actions";
 
 /* the lazy surface — host renders it under a Suspense fallback */
 export const LazyWorkbookSurface = React.lazy(() => import("./WorkbookSurface"));

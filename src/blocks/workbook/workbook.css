@@ -153,9 +153,14 @@
 /* host actions inside the vendor toolbar band: reserve its right end so Univer's
    overflow math never lays commands under the cluster, then overlay the cluster
    in the reserved inset. The strip itself stays click-through. */
-.nxWorkbook--hostActions .nxWorkbookMount [data-u-comp="ribbon-toolbar"] {
+.nxWorkbook--hostActions .nxWorkbookMount [data-u-comp="ribbon-toolbar"],
+.nxWorkbook--io .nxWorkbookMount [data-u-comp="ribbon-toolbar"] {
   margin-right: var(--nxwb-actions-w);
 }
+/* the import/export cluster widens the reserved inset (each combo gets exactly the
+   room its band needs, so Univer's overflow math never lays commands underneath) */
+.nxWorkbook--io:not(.nxWorkbook--hostActions) { --nxwb-actions-w: 186px; }
+.nxWorkbook--io.nxWorkbook--hostActions { --nxwb-actions-w: 364px; }
 .nxWorkbookActions {
   position: absolute;
   top: 0;
@@ -186,6 +191,104 @@
 }
 .nxWorkbookSave[data-state="saved"] { color: var(--nx-accent); background: var(--nx-accent-soft); }
 .nxWorkbookSave:empty { display: none; }
+
+/* import/export cluster — sits at the left of the actions band, in the app's icon
+   language; the buttons are the house ghost buttons so they read as native chrome */
+.nxWorkbookIO {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.nxWorkbookIOItem { display: inline-flex; align-items: center; gap: 8px; }
+
+/* toolbar-native ghost button — transparent at rest, sunken on hover, accent focus
+   ring; icon-left + label inline, sized to sit inside the 40px toolbar band */
+.nxWorkbookIOBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--nx-fg-muted);
+  font-family: var(--nx-font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.nxWorkbookIOBtn:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxWorkbookIOBtn:active { background: color-mix(in srgb, var(--nx-fg) 8%, var(--nx-bg-sunken)); }
+.nxWorkbookIOBtn:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 1px; color: var(--nx-fg); }
+.nxWorkbookIOBtn svg { width: 15px; height: 15px; flex: none; }
+.nxWorkbookIOBtn .nxSpin { width: 14px; height: 14px; }
+
+/* transient result of an import/export — a quiet pill, colored by outcome, that
+   auto-dismisses; role="status" announces it to assistive tech */
+.nxWorkbookIOStatus {
+  /* detached from the button row (so a long result never pushes the buttons over the
+     vendor toolbar) — a transient pill just under the toolbar, right-aligned */
+  position: absolute;
+  top: calc(var(--nxwb-toolbar-h) + 4px);
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--nx-bg-sunken);
+  color: var(--nx-fg-muted);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  z-index: 25;
+  animation: nxRiseIn 0.18s ease both;
+}
+.nxWorkbookIOStatus[data-kind="ok"] { color: var(--nx-ok, var(--nx-accent)); background: color-mix(in srgb, var(--nx-ok, var(--nx-accent)) 12%, var(--nx-bg-raised)); }
+.nxWorkbookIOStatus[data-kind="err"] { color: var(--nx-danger); background: color-mix(in srgb, var(--nx-danger) 12%, var(--nx-bg-raised)); }
+/* inline import-confirm strip (replaces the Import/Export cluster while a file waits).
+   A floating opaque pill so it never visually collides with the vendor toolbar it
+   overlaps while open. */
+.nxWorkbookIO--confirm {
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: 10px;
+  box-shadow: var(--nx-shadow-md, 0 4px 14px rgba(0, 0, 0, 0.12));
+  animation: nxPopIn 0.16s ease both;
+}
+.nxWorkbookIOConfirmText {
+  font-size: 12px;
+  color: var(--nx-fg);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nxWorkbookIOBtn--primary {
+  color: var(--nx-accent-fg, white);
+  background: var(--nx-accent);
+  font-weight: 600;
+  padding: 0 12px;
+}
+.nxWorkbookIOBtn--primary:hover { background: color-mix(in srgb, var(--nx-accent) 88%, black); color: var(--nx-accent-fg, white); }
+
+/* the export menu portals to <body> and drops OVER Univer's formula-bar band, whose
+   editor canvas sits in Univer's own stacking context (z ~8) and would otherwise
+   swallow the menu-item clicks. Radix leaves the popper wrapper at z:auto, so lift it
+   above Univer's inline chrome (still below Univer's own high-z popups, which never
+   co-occur with this menu). Present only while the workbook block's CSS is loaded. */
+[data-radix-popper-content-wrapper] { z-index: 60 !important; }
+
+/* on a phone the labels would crowd the toolbar — collapse the IO buttons to icons */
+@media (max-width: 640px) {
+  .nxWorkbookIOLabel { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+}
 
 /* overlay states share one centered layer over the host */
 .nxWorkbookOverlay {
