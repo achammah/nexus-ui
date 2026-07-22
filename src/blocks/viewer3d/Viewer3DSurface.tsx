@@ -42,6 +42,15 @@ export interface Viewer3DSurfaceProps {
   className?: string;
   /* host controls (save state, reset) — rendered into the toolbar's right end */
   actions?: React.ReactNode;
+  /* hide the built-in toolbar (a hosting workspace provides its own chrome) */
+  toolbar?: boolean;
+  /* CONTROLLED hotspot card: the host owns which pin is open (list↔pin sync) */
+  activeHotspotId?: string | null;
+  onHotspotOpen?: (id: string | null) => void;
+  /* annotate mode: a click on the model reports the picked world point
+     (model-space, same space as hotspot positions) instead of opening pins */
+  annotateMode?: boolean;
+  onStagePick?: (point: [number, number, number]) => void;
   "data-testid"?: string;
 }
 
@@ -107,7 +116,10 @@ const PLAN_VIEWS: { id: PlanView; label: string }[] = [
   { id: "axon", label: "Axon" },
 ];
 
-export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, actions, ...rest }: Viewer3DSurfaceProps) {
+export function Viewer3DSurface({
+  value, onChange, reloadNonce = 0, className, actions, toolbar = true,
+  activeHotspotId, onHotspotOpen, annotateMode = false, onStagePick, ...rest
+}: Viewer3DSurfaceProps) {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const overlayRef = React.useRef<HTMLDivElement>(null);
   const engineRef = React.useRef<Engine | null>(null);
@@ -140,7 +152,22 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
   const [layers, setLayers] = React.useState<Viewer3DLayers>(snap.layers ?? {});
   const [apronOpen, setApronOpen] = React.useState(snap.apron !== false);
   const [geomNonce, setGeomNonce] = React.useState(0); // bump: floorplan geometry changed → rebuild engine
-  const [openHotspot, setOpenHotspot] = React.useState<Viewer3DHotspot | null>(null);
+  const [openHotspotU, setOpenHotspotU] = React.useState<Viewer3DHotspot | null>(null);
+  /* controlled (host list↔pin sync) vs uncontrolled hotspot card */
+  const controlled = activeHotspotId !== undefined;
+  const openHotspot = controlled
+    ? (snap.hotspots.find((h) => h.id === activeHotspotId) ?? null)
+    : openHotspotU;
+  const setOpenHotspot = React.useCallback((v: Viewer3DHotspot | null | ((cur: Viewer3DHotspot | null) => Viewer3DHotspot | null)) => {
+    const next = typeof v === "function" ? v(openHotspot) : v;
+    if (controlled) onHotspotOpen?.(next?.id ?? null);
+    else setOpenHotspotU(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlled, onHotspotOpen, openHotspot]);
+  const annotateRef = React.useRef(annotateMode);
+  annotateRef.current = annotateMode;
+  const pickRef = React.useRef(onStagePick);
+  pickRef.current = onStagePick;
   const [importPct, setImportPct] = React.useState<number | null | false>(false); // false = idle
   const [importedName, setImportedName] = React.useState<string | null>(null);
   const [dragOver, setDragOver] = React.useState(false);
@@ -333,6 +360,32 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       model.add(buildSedan(pal));
       engine.refit();
     }
+
+    /* annotate-mode pick: a CLICK (not an orbit drag) on the model reports the
+       hit point in model space — the same space hotspot positions live in */
+    let downPos: [number, number] | null = null;
+    const onPickDown = (ev: PointerEvent) => { downPos = [ev.clientX, ev.clientY]; };
+    const onPickUp = (ev: PointerEvent) => {
+      const dp = downPos;
+      downPos = null;
+      if (!dp || !annotateRef.current || !pickRef.current) return;
+      if (Math.hypot(ev.clientX - dp[0], ev.clientY - dp[1]) > 5) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      const nd = new THREE.Vector2(
+        ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+        -((ev.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      engine.raycaster.setFromCamera(nd, engine.camera as THREE.PerspectiveCamera);
+      const hit = engine.raycaster.intersectObject(engine.model, true).find((h) => h.object.visible);
+      if (!hit) return;
+      pickRef.current([
+        +(hit.point.x - model.position.x).toFixed(3),
+        +hit.point.y.toFixed(3),
+        +(hit.point.z - model.position.z).toFixed(3),
+      ]);
+    };
+    renderer.domElement.addEventListener("pointerdown", onPickDown);
+    renderer.domElement.addEventListener("pointerup", onPickUp);
 
     const ro = new ResizeObserver(() => {
       const w = host.clientWidth, h = host.clientHeight;
@@ -903,7 +956,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
 
   return (
     <div className={["nxV3", className].filter(Boolean).join(" ")} {...rest}>
-      <div className="nxV3Bar" data-testid="viewer3d-toolbar">
+      {toolbar && <div className="nxV3Bar" data-testid="viewer3d-toolbar">
         <div className="nxV3BarTitle">
           <span className="nxV3Kicker">{mode === "object" ? "3D object" : "Floor plan"}</span>
           {snap.title && <span className="nxV3Title">{snap.title}</span>}
@@ -992,7 +1045,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
           )}
           {actions}
         </div>
-      </div>
+      </div>}
 
       {/* contextual sub-toolbar per floorplan view */}
       {mode === "floorplan" && (planView === "plan" || planView === "elevation" || planView === "section" || planView === "render") && (

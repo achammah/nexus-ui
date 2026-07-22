@@ -131,6 +131,83 @@ export type Viewer3DSelection =
   | { kind: "wall"; level: string; a: [number, number]; b: [number, number] }
   | null;
 
+/* ---- claims workspace (object mode + claim config) ----
+   The 3D/photo stage is ONE pane of a decision workspace: an activity/audit
+   rail and machine assessment on the left, the multi-modal stage in the centre
+   (model · photos · documents, switchable), and the DECISION surface on the
+   right — the human adjudicates, adjusts the amount, and submits. */
+
+export type ClaimSeverity = "minor" | "moderate" | "severe";
+
+/* damage annotation ANCHORED to the geometry — authored + verifiable */
+export interface ClaimAnnotation {
+  id: string;
+  label: string;
+  part?: string;            // body panel / component
+  severity: ClaimSeverity;
+  note?: string;
+  author?: string;          // "Agent" | adjuster name
+  verified?: boolean;
+  position: [number, number, number];
+  photoRef?: string;        // attachment id backing this finding
+}
+
+export interface ClaimAttachment {
+  id: string;
+  name: string;
+  kind: "photo" | "pdf" | "model";
+  url?: string;             // bundled/self-hosted/data URI (strict CSP)
+  status?: "verified" | "flagged" | "pending";
+  caption?: string;
+}
+
+export interface ClaimActivityEvent {
+  id: string;
+  time: string;             // printed as-is (HH:MM:SS)
+  text: string;
+  tone?: "ok" | "info" | "warn" | "danger";
+}
+
+export interface ClaimCheck { id: string; label: string; status: "pass" | "warn" | "fail" }
+
+export interface ClaimAssessment {
+  verdict: string;          // "Recommend Partial Approval"
+  rationale?: string;
+  checks: ClaimCheck[];
+  reasoning?: string;       // the model's prose justification
+}
+
+export interface ClaimDecision {
+  choice?: "approve" | "partial" | "deny";
+  amount?: number;
+  reason?: string;
+  note?: string;
+  submittedAt?: string;     // set on submit
+}
+
+export interface ClaimSummaryMeta {
+  claimant?: string;
+  policy?: string;
+  type?: string;
+  incidentDate?: string;
+  location?: string;
+  claimedAmount?: number;
+  deductible?: number;
+  currency?: string;        // "EUR"
+  vehicle?: string;         // "2022 Ford Mustang"
+  vin?: string;
+  adjuster?: string;
+}
+
+export interface Viewer3DClaimConfig {
+  summary?: ClaimSummaryMeta;
+  activity?: ClaimActivityEvent[];
+  assessment?: ClaimAssessment;
+  attachments?: ClaimAttachment[];
+  annotations?: ClaimAnnotation[];
+  decision?: ClaimDecision;
+}
+
 export interface Viewer3DSnapshot {
   version: 1;
   kind: "viewer3d";
@@ -138,6 +215,8 @@ export interface Viewer3DSnapshot {
   title?: string;
   object?: Viewer3DObjectConfig;
   floorplan?: Viewer3DFloorplanConfig;
+  /* present → the object viewer hosts the full claims workspace */
+  claim?: Viewer3DClaimConfig;
   hotspots: Viewer3DHotspot[];
   /* persisted viewer state */
   autoRotate?: boolean;
@@ -177,6 +256,67 @@ export function isViewer3dSnapshot(x: unknown): x is Viewer3DSnapshot {
    (no external asset, CSP-safe) with three damage hotspots.
    seedScene("floorplan") — a two-level house with doors/windows, room schedule
    data and a title block. Both double as the deterministic journey fixtures. */
+/* tiny inline SVG "photo" placeholders — CSP-safe demo attachments */
+const demoPhoto = (label: string, hue: number): string =>
+  `data:image/svg+xml;utf8,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420"><rect width="640" height="420" fill="hsl(${hue},14%,88%)"/><rect x="60" y="120" width="520" height="180" rx="90" fill="hsl(${hue},22%,62%)"/><circle cx="180" cy="300" r="46" fill="hsl(${hue},18%,30%)"/><circle cx="460" cy="300" r="46" fill="hsl(${hue},18%,30%)"/><text x="320" y="70" text-anchor="middle" font-family="sans-serif" font-size="26" fill="hsl(${hue},20%,35%)">${label}</text></svg>`,
+  )}`;
+
+/* seedScene("claim") — the full claims workspace over the vehicle stage */
+export function seedClaim(): Viewer3DSnapshot {
+  const base = seedScene("vehicle");
+  return {
+    ...base,
+    title: "Claim CLM-2026-4821",
+    hotspots: [],
+    claim: {
+      summary: {
+        claimant: "Sarah Chen",
+        policy: "POL-2026-8841",
+        type: "Auto Collision",
+        incidentDate: "2026-03-28",
+        location: "Munich, Germany",
+        claimedAmount: 3600,
+        deductible: 500,
+        currency: "EUR",
+        vehicle: "2022 sedan",
+        vin: "1FA6P8TH4N5100482",
+        adjuster: "You",
+      },
+      activity: [
+        { id: "a1", time: "10:42:22", text: "Claim received from Sarah Chen", tone: "info" },
+        { id: "a2", time: "10:42:25", text: "Policy lookup complete — full comprehensive coverage", tone: "ok" },
+        { id: "a3", time: "10:42:28", text: "4 attachments ingested — 3 photos verified, 1 estimate", tone: "ok" },
+        { id: "a4", time: "10:42:30", text: "Repair estimate flagged — EUR 3,600 is 40% above regional benchmark", tone: "warn" },
+        { id: "a5", time: "10:42:36", text: "Flagged for human review", tone: "warn" },
+      ],
+      assessment: {
+        verdict: "Recommend Partial Approval",
+        rationale: "Damage is consistent with the reported incident; the estimate exceeds the regional benchmark.",
+        checks: [
+          { id: "c1", label: "Coverage confirmed", status: "pass" },
+          { id: "c2", label: "Incident date matches report", status: "pass" },
+          { id: "c3", label: "Estimate EUR 3,600 vs 2,500 benchmark", status: "warn" },
+          { id: "c4", label: "Prior claims: none / 24 mo", status: "pass" },
+        ],
+        reasoning: "Photos corroborate a single front-quarter impact. Parts and labour rates in the submitted estimate run 40% above the regional average for this damage class; a partial approval at the benchmark amount is consistent with policy terms.",
+      },
+      attachments: [
+        { id: "att-model", name: "3D inspection model", kind: "model", status: "verified", caption: "Interactive model" },
+        { id: "att-front", name: "front_damage_IMG_4281.jpg", kind: "photo", url: demoPhoto("Front damage", 12), status: "verified" },
+        { id: "att-rear", name: "rear_check_IMG_4290.jpg", kind: "photo", url: demoPhoto("Rear — no impact", 140), status: "verified" },
+        { id: "att-est", name: "repair_estimate.pdf", kind: "pdf", status: "flagged", caption: "EUR 3,600 — above regional avg" },
+      ],
+      annotations: [
+        { id: "an-1", label: "Front impact damage", part: "Bumper cover", severity: "severe", note: "Cover cracked, grille displaced. Replace cover + respray.", author: "Agent", verified: true, position: [2.28, 0.62, 0.42], photoRef: "att-front" },
+        { id: "an-2", label: "Door dent", part: "LF door", severity: "moderate", note: "~12 cm dent, paint intact — PDR candidate.", author: "Agent", verified: true, position: [0.55, 0.86, 0.98] },
+        { id: "an-3", label: "Windshield chip", part: "Windshield", severity: "minor", note: "Stone chip, no crack propagation. Resin fill.", author: "Agent", verified: false, position: [0.7, 1.28, -0.42] },
+      ],
+      decision: { choice: "partial", amount: 2500, reason: "Estimate above regional benchmark" },
+    },
+  };
+}
+
 export function seedScene(kind: "vehicle" | "floorplan" = "vehicle"): Viewer3DSnapshot {
   if (kind === "floorplan") {
     return {

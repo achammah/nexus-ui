@@ -196,3 +196,18 @@ eased camera move, not a hard cut: perspective↔orthographic runs a dolly-zoom
 ortho↔ortho orbits between facades, and entering a section SWEEPS the clip plane
 in from outside the building. The SVG plan cross-fades against the canvas.
 `prefers-reduced-motion` snaps every one of these.
+
+## Claims workspace (`LazyClaimWorkspace`)
+
+`seedClaim()` → a snapshot whose `claim` config turns the object viewer into a
+three-column DECISION workspace: activity feed + agent assessment (verdict,
+checks, reasoning) · a multi-modal stage (3D model / photos / documents via
+attachment cards with verification chips) · the decision panel (approve /
+partial / deny, adjusted amount vs claimed, reason, adjuster note, Submit).
+Submit writes `claim.decision.submittedAt`, appends an activity event and fires
+`onDecision(decision)` — wire that to a Nexus workflow in the host. Damage
+findings are ANNOTATIONS anchored to the geometry: "Add annotation" + click the
+model raycasts the exact point; each finding carries part, severity, note,
+author and a verified flag, editable in the findings pane, pins and list kept
+in sync. All `claim.*` shapes are exported types; every pane is optional (omit
+`assessment` and the rail shrinks, etc.).

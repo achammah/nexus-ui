@@ -10,6 +10,7 @@ export {
   viewer3dStoreKey,
   isViewer3dSnapshot,
   seedScene,
+  seedClaim,
 } from "./scene";
 export type {
   Viewer3DSnapshot,
@@ -25,6 +26,16 @@ export type {
   Viewer3DPlanMeta,
   Viewer3DUnits,
   PlanView,
+  Viewer3DLayers,
+  Viewer3DSelection,
+  Viewer3DClaimConfig,
+  ClaimAnnotation,
+  ClaimAttachment,
+  ClaimActivityEvent,
+  ClaimAssessment,
+  ClaimDecision,
+  ClaimSummaryMeta,
+  ClaimSeverity,
 } from "./scene";
 
 /* plan measurement math (areas, dimensions, unit formatting) — light, reusable
@@ -42,3 +53,8 @@ export type { Viewer3DLook, ScenePalette, Preset } from "./look";
 
 /* the lazy surface — host renders it under a Suspense fallback */
 export const LazyViewer3DSurface = React.lazy(() => import("./Viewer3DSurface"));
+
+/* the claims DECISION workspace (activity/assessment rail · multi-modal stage ·
+   decision panel) — same lazy split, composes the surface as its centre pane */
+export const LazyClaimWorkspace = React.lazy(() => import("./ClaimWorkspace"));
+export type { ClaimWorkspaceProps } from "./ClaimWorkspace";

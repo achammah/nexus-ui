@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 140,
+  "count": 141,
   "items": [
     {
       "name": "accordion",
@@ -890,6 +890,13 @@
       "kind": "wrapper",
       "import": "src/blocks/viewer3d/plan-geometry.ts",
       "when": "pure floor-plan math shared by the 2D drawing, the room schedule and the 3D wall builder (a printed dimension and a built wall can never disagree): shoelace areas, bounds/envelopes, wall dedupe with interior/exterior tagging, opening projection + solid-span splitting, structural-grid dimension stops, metric/imperial formatting, standard-scale + scale-bar pickers. Light module — exported for hosts printing plan figures in reports",
+      "source": "ours"
+    },
+    {
+      "name": "ClaimWorkspace · LazyClaimWorkspace",
+      "kind": "wrapper",
+      "import": "src/blocks/viewer3d/ClaimWorkspace.tsx",
+      "when": "the claims DECISION workspace: three columns — activity/audit feed + machine assessment (verdict, per-criterion checks, reasoning) on the left; a MULTI-MODAL stage in the centre (the 3D model, photos and documents, switched via attachment cards with verification chips); the DECISION panel on the right (approve/partial/deny, adjusted amount vs claimed, reason, adjuster note, submit that WRITES into the snapshot + onDecision for the host workflow). Damage findings are authored annotations ANCHORED to the geometry (click the model to add, raycast-picked; severity/part/note/verified), synced pin↔list. seedClaim() ships the full demo. Both themes, tokens only",
       "source": "ours"
     },
     {
