@@ -140,15 +140,18 @@ export function applySky(map: MaplibreMap, globe: boolean, dark: boolean): void 
 
 function apply3dBuildings(map: MaplibreMap, on: boolean, color: string): void {
   const has = !!map.getLayer(BUILDINGS_LAYER);
-  const src = on ? buildingSource(map) : null;
-  if (!src) {
-    if (has) map.removeLayer(BUILDINGS_LAYER);
-    return;
-  }
+  /* Toggle VISIBILITY rather than add/remove. Removing and re-adding the layer
+     raced with the style-load handler (which re-applies augments on every
+     styledata event), so re-enabling "3D buildings" could leave no layer at all
+     and the toggle looked dead. Add once, then just show/hide. */
   if (has) {
-    map.setPaintProperty(BUILDINGS_LAYER, "fill-extrusion-color", color);
+    map.setLayoutProperty(BUILDINGS_LAYER, "visibility", on ? "visible" : "none");
+    if (on) map.setPaintProperty(BUILDINGS_LAYER, "fill-extrusion-color", color);
     return;
   }
+  if (!on) return; // nothing to hide yet
+  const src = buildingSource(map);
+  if (!src) return; // raster basemap — no building geometry to extrude
   map.addLayer(
     {
       id: BUILDINGS_LAYER,
@@ -158,14 +161,16 @@ function apply3dBuildings(map: MaplibreMap, on: boolean, color: string): void {
       minzoom: 14,
       paint: {
         "fill-extrusion-color": color,
-        // fade extrusions in between z14–16 so they don't pop; height reads the
-        // OpenMapTiles render_height (fallbacks keep it robust across schemas). A
-        // 8 m floor ("at least ~2 storeys") keeps buildings legible where OSM data
-        // lacks a height tag — most footprints — without inventing tall towers.
+        // Reach FULL height by z15 (not z16): the old 14→16 ramp meant that at the
+        // city zoom people actually browse at, extrusions were still near-zero and
+        // "3D buildings" looked like it did nothing. Height reads the OpenMapTiles
+        // render_height (fallbacks keep it robust across schemas); an 8 m floor
+        // ("at least ~2 storeys") keeps buildings legible where OSM lacks a height
+        // tag — most footprints — without inventing tall towers.
         "fill-extrusion-height": [
           "interpolate", ["linear"], ["zoom"],
           14, 0,
-          16, ["max", 8, ["coalesce", ["get", "render_height"], ["get", "height"], 8]],
+          15, ["max", 8, ["coalesce", ["get", "render_height"], ["get", "height"], 8]],
         ],
         "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], ["get", "min_height"], 0],
         "fill-extrusion-opacity": 0.85,
@@ -206,8 +211,13 @@ function applyRelief(map: MaplibreMap, a: Augments): void {
     if (map.getSource(DEM_SRC)) map.removeSource(DEM_SRC);
   }
 
-  // CSP-safe raster shaded relief (Esri) — the default hillshade when no DEM seam
-  if (wantRaster) {
+  /* CSP-safe raster shaded relief (Esri) — the default hillshade when no DEM seam.
+     Like the buildings layer this toggles VISIBILITY instead of add/remove, so
+     re-enabling it can't race the style-load re-apply and silently do nothing. */
+  if (map.getLayer(HILLSHADE_RASTER_LAYER)) {
+    map.setLayoutProperty(HILLSHADE_RASTER_LAYER, "visibility", wantRaster ? "visible" : "none");
+    if (wantRaster) map.setPaintProperty(HILLSHADE_RASTER_LAYER, "raster-opacity", a.hillshadeOpacity);
+  } else if (wantRaster) {
     if (!map.getSource(HILLSHADE_RASTER_SRC)) {
       map.addSource(HILLSHADE_RASTER_SRC, {
         type: "raster",
@@ -217,16 +227,9 @@ function applyRelief(map: MaplibreMap, a: Augments): void {
         maxzoom: 16,
       });
     }
-    if (!map.getLayer(HILLSHADE_RASTER_LAYER)) {
-      map.addLayer(
-        { id: HILLSHADE_RASTER_LAYER, type: "raster", source: HILLSHADE_RASTER_SRC, paint: { "raster-opacity": a.hillshadeOpacity } },
-        firstSymbolId(map),
-      );
-    } else {
-      map.setPaintProperty(HILLSHADE_RASTER_LAYER, "raster-opacity", a.hillshadeOpacity);
-    }
-  } else {
-    if (map.getLayer(HILLSHADE_RASTER_LAYER)) map.removeLayer(HILLSHADE_RASTER_LAYER);
-    if (map.getSource(HILLSHADE_RASTER_SRC)) map.removeSource(HILLSHADE_RASTER_SRC);
+    map.addLayer(
+      { id: HILLSHADE_RASTER_LAYER, type: "raster", source: HILLSHADE_RASTER_SRC, paint: { "raster-opacity": a.hillshadeOpacity } },
+      firstSymbolId(map),
+    );
   }
 }

@@ -433,6 +433,27 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     el.addEventListener("wheel", onWheel, { capture: true, passive: false });
     return () => el.removeEventListener("wheel", onWheel, { capture: true } as EventListenerOptions);
   }, []);
+  /* Turning on a 3D layer must SHOW something. From a top-down camera, extrusions
+     collapse to their footprints and relief is invisible, so enabling "3D buildings"
+     or "Terrain shading" looked broken. On enable we ease the camera into the pose
+     where the layer is actually legible: tilt to an oblique pitch, and for buildings
+     also close in to the zoom where the vector tiles carry building geometry (z14+).
+     Only ever applied when turning a layer ON, and only for the axes that need it. */
+  const revealFor = React.useCallback(
+    (kind: "buildings" | "hillshade") => {
+      const map = mapRef.current?.getMap();
+      if (!map) return;
+      const next: { pitch?: number; zoom?: number } = {};
+      if (map.getPitch() < 25) next.pitch = Math.min(60, map.getMaxPitch());
+      // buildings exist from z14, but most OSM footprints here carry no height tag
+      // and fall back to the ~8 m floor — which only reads as real mass from ~z16.
+      if (kind === "buildings" && map.getZoom() < 16) next.zoom = 16.2;
+      if (!Object.keys(next).length) return; // already in a pose that shows it
+      map.easeTo({ ...next, duration: reduceMotion ? 0 : 900, essential: true });
+    },
+    [reduceMotion],
+  );
+
   /* one-click fly toggle: level (top-down + north) when tilted/rotated, else ease
      into a 3D oblique pose. Works in flat AND globe (tilting a globe orbits it). */
   const flyActive = pitchAttr > 5;
@@ -1330,8 +1351,8 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
             onProjection={setProjection}
             earthActive={earthActive}
             onEarthPreset={applyEarthPreset}
-            onToggleBuildings={(on) => onViewState({ mapBuildings3d: on })}
-            onToggleHillshade={(on) => onViewState({ mapHillshade: on })}
+            onToggleBuildings={(on) => { onViewState({ mapBuildings3d: on }); if (on) revealFor("buildings"); }}
+            onToggleHillshade={(on) => { onViewState({ mapHillshade: on }); if (on) revealFor("hillshade"); }}
           />
           <Button
             size="sm"
