@@ -997,3 +997,24 @@
   .nxMapPopupActions { flex-wrap: wrap; gap: 6px; }
   .nxMapPopupActions button { min-height: 44px; padding: 0 12px; }
 }
+
+/* ── route options (only rendered when the engine returns alternatives) ───── */
+.nxMapRouteOptions { display: flex; gap: 6px; padding: 2px 0 8px; flex-wrap: wrap; }
+.nxMapRouteOption {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  background: var(--nx-bg);
+  color: var(--nx-fg-muted);
+  font: var(--nx-text-micro);
+  cursor: pointer;
+}
+.nxMapRouteOption strong { font: var(--nx-text-meta); color: var(--nx-fg); }
+.nxMapRouteOption[data-active] { border-color: var(--nx-accent); background: color-mix(in oklab, var(--nx-accent) 10%, transparent); }
+.nxMapRouteOption[data-active] strong { color: var(--nx-accent); }
+.nxMapRouteOptionTag { text-transform: uppercase; letter-spacing: 0.04em; color: var(--nx-fg-faint); }
+@media (max-width: 768px) { .nxMapRouteOption { min-height: 44px; } }

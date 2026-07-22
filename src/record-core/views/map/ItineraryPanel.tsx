@@ -203,6 +203,9 @@ export function ItineraryPanel({
   onStepClick,
   departAt,
   onDepartAt,
+  options,
+  choice,
+  onChoice,
 }: {
   stops: Stop[];
   profile: Profile;
@@ -222,6 +225,9 @@ export function ItineraryPanel({
   onStepClick: (at: LngLat) => void;
   departAt: string; // "" = leave now, else "HH:MM"
   onDepartAt: (v: string) => void;
+  options: RouteResult[]; // every route the engine offered, primary first
+  choice: number;
+  onChoice: (i: number) => void;
 }) {
   /* Arrival = departure + duration. OSRM's demo profile is not traffic-aware, so
      this is an honest "no traffic" estimate, labelled as such — never a live ETA.
@@ -361,6 +367,30 @@ export function ItineraryPanel({
           <Button size="sm" variant="secondary" data-testid="map-itinerary-clear" onClick={onClear}>
             Clear
           </Button>
+        </div>
+      )}
+
+      {/* Route options — only when the engine actually returned alternatives.
+          No alternatives is the honest normal case (OSRM offers them for some
+          pairs only, never multi-stop), and then this simply does not render. */}
+      {options.length > 1 && (
+        <div className="nxMapRouteOptions" role="radiogroup" aria-label="Route options" data-testid="map-route-options">
+          {options.map((r, i) => (
+            <button
+              key={i}
+              type="button"
+              role="radio"
+              aria-checked={i === choice}
+              className="nxMapRouteOption"
+              data-active={i === choice || undefined}
+              data-testid={`map-route-option-${i}`}
+              onClick={() => onChoice(i)}
+            >
+              <strong>{formatDuration(r.durationS)}</strong>
+              <span>{formatDistance(r.distanceM)}</span>
+              {i === 0 && <span className="nxMapRouteOptionTag">fastest</span>}
+            </button>
+          ))}
         </div>
       )}
 

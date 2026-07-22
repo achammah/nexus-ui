@@ -44,6 +44,10 @@ export interface RouteResult {
   steps: RouteStep[]; // flattened across legs — what the directions panel lists
   approximate?: boolean; // true = mock/derived (no road snapping or real ETA)
   provider: "custom" | "osrm" | "mock";
+  /* other routes the engine offered for the same waypoints, primary excluded.
+     Empty/absent is the honest normal case: OSRM only offers alternatives for
+     some point pairs, and never for multi-stop trips. */
+  alternatives?: RouteResult[];
 }
 
 export type RouteProvider = (waypoints: LngLat[], profile: Profile) => Promise<RouteResult>;
@@ -114,12 +118,16 @@ async function osrmRoute(base: string, waypoints: LngLat[], profile: Profile): P
   const coords = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
   // the public demo serves the driving profile; a self-hosted OSRM can serve others
   const p = base.includes("project-osrm.org") ? "driving" : profile;
-  const url = `${base.replace(/\/$/, "")}/route/v1/${p}/${coords}?overview=full&geometries=geojson&steps=true`;
+  // alternatives=true is advisory — OSRM returns extra routes only when it has
+  // genuinely distinct ones, and never for multi-stop trips
+  const url = `${base.replace(/\/$/, "")}/route/v1/${p}/${coords}?overview=full&geometries=geojson&steps=true&alternatives=true`;
   const res = await fetch(url, { headers: { accept: "application/json" } });
   if (!res.ok) throw new Error(`osrm ${res.status}`);
   const data = (await res.json()) as { code?: string; routes?: OsrmRoute[] };
   if (data.code !== "Ok" || !data.routes?.length) throw new Error(`osrm ${data.code ?? "no-route"}`);
-  return parseOsrm(data.routes[0], profile);
+  const primary = parseOsrm(data.routes[0], profile);
+  const alts = data.routes.slice(1, 3).map((r) => parseOsrm(r, profile)); // cap at 2, Google-style
+  return alts.length ? { ...primary, alternatives: alts } : primary;
 }
 
 /* ── mock provider (offline / CI / CSP-blocked fallback) ─────────────────── */

@@ -186,6 +186,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     "nx-bg-sunken",
     "nx-border",
     "nx-border-strong",
+    "nx-fg-muted",
     "nx-opt-blue",
     "nx-opt-teal",
     "nx-opt-yellow",
@@ -690,6 +691,17 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   const [itinOpen, setItinOpen] = React.useState(false);
   const [stops, setStops] = React.useState<Stop[]>([]);
   const [routeResult, setRouteResult] = React.useState<RouteResult | null>(null);
+  /* which of the engine's routes is chosen: 0 = the primary, 1..n = alternatives.
+     Reset whenever a new result arrives so a stale index never selects nothing. */
+  const [routeChoice, setRouteChoice] = React.useState(0);
+  /* every route the engine offered, primary first — one entry when there are no
+     alternatives, which is the honest normal case */
+  const routeOptions = React.useMemo<RouteResult[]>(
+    () => (routeResult ? [routeResult, ...(routeResult.alternatives ?? [])] : []),
+    [routeResult],
+  );
+  const activeRoute = routeOptions[routeChoice] ?? routeResult;
+  React.useEffect(() => { setRouteChoice(0); }, [routeResult]);
   const [routeLoading, setRouteLoading] = React.useState(false);
   const stopSeq = React.useRef(0);
   const stopFromRecord = (l: LocatedRow): Stop => ({ key: `r${l.row.id}`, lng: l.lng, lat: l.lat, label: String(l.row[titleField.key] ?? l.row.id), recordId: String(l.row.id) });
@@ -1095,7 +1107,8 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       data-map-measure={measureText ?? ""}
       data-map-area={shape?.kind === "polygon" || shape?.kind === "circle" ? "1" : ""}
       data-map-inarea={inArea ? inArea.count : ""}
-      data-map-route={routeResult ? Math.round(routeResult.distanceM) : ""}
+      data-map-route={activeRoute ? Math.round(activeRoute.distanceM) : ""}
+      data-map-routealts={routeOptions.length}
       data-map-stops={stops.length}
       data-map-dark={darkBasemap ? "1" : "0"}
       onKeyDown={(e) => {
@@ -1353,11 +1366,22 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
             );
           })}
 
+        {/* alternatives render UNDER the chosen route, dimmed — Google's look */}
+        {routeOptions.length > 1 &&
+          routeOptions.map((r, i) =>
+            i === routeChoice ? null : (
+              <Source key={`alt-${i}`} id={`map-route-alt-${i}`} type="geojson" data={{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: r.coordinates } }}>
+                <Layer id={`map-route-alt-casing-${i}`} type="line" layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": surface, "line-width": 7, "line-opacity": 0.7 }} />
+                <Layer id={`map-route-alt-line-${i}`} type="line" layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": colors["nx-fg-muted"] || "#8a8a8a", "line-width": 4, "line-opacity": 0.55 }} />
+              </Source>
+            ),
+          )}
+
         {/* route line: a casing under a colored top line (Google-Maps look) */}
-        {routeResult && (
-          <Source id="map-route" type="geojson" data={{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: routeResult.coordinates } }}>
+        {activeRoute && (
+          <Source id="map-route" type="geojson" data={{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: activeRoute.coordinates } }}>
             <Layer id="map-route-casing" type="line" layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": surface, "line-width": 8, "line-opacity": 0.9 }} />
-            <Layer id="map-route-line" type="line" layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": accent, "line-width": 5, "line-opacity": routeResult.approximate ? 0.7 : 0.95, ...(routeResult.approximate ? { "line-dasharray": [1.4, 1] } : {}) }} />
+            <Layer id="map-route-line" type="line" layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": accent, "line-width": 5, "line-opacity": activeRoute.approximate ? 0.7 : 0.95, ...(activeRoute.approximate ? { "line-dasharray": [1.4, 1] } : {}) }} />
           </Source>
         )}
 
@@ -1520,7 +1544,10 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
         <ItineraryPanel
           stops={stops}
           profile={profile}
-          result={routeResult}
+          result={activeRoute}
+          options={routeOptions}
+          choice={routeChoice}
+          onChoice={setRouteChoice}
           loading={routeLoading}
           addHint={pickingStop}
           onProfile={(p: Profile) => onViewState({ mapRouteProfile: p })}
