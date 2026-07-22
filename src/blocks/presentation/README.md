@@ -35,6 +35,18 @@ owns everything inside. Wiring recipe: `docs/RECIPES.md` → "Presentation".
 | `presentation.css` | All chrome (`--nx-*` tokens) + slide typography system (`--pres-*` vars) + present stage + animations + panels. |
 | `index.ts` | The barrel: eager exports + `LazyPresentationSurface`. |
 
+## BOUNDARY — what this folder does NOT own
+
+| Not here | Lives in |
+|---|---|
+| Persistence + the app-state key convention (`app_state`, debounce, reload) | the HOST app; wiring recipe in `docs/RECIPES.md` → "Presentation" |
+| The share ROUTE (mapping a slug to a URL and mounting the viewer) | the host router; this folder only exposes `PresentationViewer` + the `buildShareUrl` seam |
+| Cross-visitor analytics transport/storage | the host backend via `onAnalyticsEvent`; this folder owns only the event shapes + the pure fold |
+| The suggestion/review engine (tracked changes) | `src/record-core/useSuggestions.ts` + `SuggestionPanel.tsx` — consumed, never re-implemented here |
+| Design tokens (`--nx-*`) and the app skin | `src/tokens/tokens.css`; this folder only READS tokens |
+| Dropdown/tooltip/button primitives | `src/components/ui/*` (vendored) + `src/primitives/` via `chrome.tsx` adapters |
+| Page/tab wiring (`kind:"presentation"`) | the consuming app's page host |
+
 ## THE MODEL
 
 `DeckSnapshot` (types.ts) is the ONLY persisted object. It lives under
@@ -133,9 +145,10 @@ option list in `ElementControls.tsx` chart picker → `PPTX_CHART` mapping in ex
   has that class, so editing stays static; `data-anim` is set only when not `editable`.
   `prefers-reduced-motion` disables them — journeys therefore run with
   `reducedMotion:"no-preference"` (a reduced-motion browser hides this whole class of bugs).
-- **Notes/master are FLOATING panels, never full-width bands** (user-arbitrated twice; guard
-  journey `J2c-guard`). The surface has exactly ONE own header band at rest; text-format and
-  element bars are contextual. Don't add a band.
+- **Notes/master are FLOATING panels, never full-width bands.** The surface has exactly ONE
+  own header band at rest; text-format and element bars are contextual. Symptom of breaking
+  this: the stage loses height and the surface reads as a boxed widget instead of the page
+  (guard journey `J2c-guard` fails).
 - **Import parity is explicit**: `import.ts` reads text/shape geometry+fill/images/notes/theme
   colors; what it does NOT read (animations, masters, media, charts-as-charts…) surfaces in the
   returned `warnings` and is shown to the user in the import report — extend the parity, or
@@ -144,10 +157,10 @@ option list in `ElementControls.tsx` chart picker → `PPTX_CHART` mapping in ex
   the `video` branch).
 - **A seeded free-surface page shows STORED content.** The host serves the persisted snapshot,
   so shipping a better seed changes NOTHING for an existing install unless the seed is
-  versioned and adopted (`SEED_REV`/`isStaleSeed` here). This trap is shaped into EVERY
-  free-surface block in this repo (workbook, document, whiteboard…) — if you are building one
-  and your demo content will ever improve, copy this mechanism on day one. It cost this block
-  a full "nothing changed" rejection cycle before it was found.
+  versioned and adopted (`SEED_REV`/`isStaleSeed` here). Symptom: commits land, the deployed
+  page keeps showing day-one content, and every seed-side fix looks like it did nothing. The
+  trap is shaped into EVERY free-surface block in this repo (workbook, document, whiteboard…) —
+  copy this mechanism on day one if your demo content will ever improve.
 - **`seedDeck()` is also the journey fixture.** Changing it means updating `dev/journeys.mjs`
   (index-sensitive tests create their own BLANK slide for gestures — keep that pattern) and
   bumping `SEED_REV`.
@@ -176,3 +189,23 @@ option list in `ElementControls.tsx` chart picker → `PPTX_CHART` mapping in ex
   `useSuggestions` + `SuggestionPanel` (already on main) — adapt, don't rebuild.
 - **No structural undo inside a contentEditable burst** beyond coalescing; caret-level history
   is the browser's.
+
+## VERIFYING A CHANGE
+
+The journey suite is `dev/journeys.mjs` (repo-tracked): 114 scenarios asserting VISIBLE
+outcomes + the persisted snapshot — editor CRUD/gestures, rich text, present mode with REAL
+motion, themes, dark, share/gate/analytics/rooms, both exports + PPTX import round-trip, the
+parity layer (master/templates/text depth/anim/video), the seed-upgrade path, mobile 390px,
+and the never-a-band guard (`J2c-guard`).
+
+```sh
+# from the repo root (deps once: npm install --force, plus vite/playwright per dev/ tooling)
+cd dev && ../node_modules/.bin/vite --port 5342 --strictPort &   # the harness
+node journeys.mjs                                                # exits non-zero on any FAIL
+node audit.mjs                                                   # native-surface audit: selects / bands / fill ratios
+```
+
+Journeys run with `reducedMotion: "no-preference"` on purpose — a reduced-motion browser
+hides the entire animation bug class. NOT covered (state it, don't hide it): the OS print
+dialog itself (J14 stops at the print window's DOM), real video playback (only insert +
+render is asserted), and pptxgenjs output opened in real PowerPoint (size + structure only).
