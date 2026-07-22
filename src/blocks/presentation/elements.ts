@@ -2,7 +2,7 @@
    Array order IS z-order (index 0 paints first / sits at the back), which keeps
    the model small and makes reordering a splice rather than an index rewrite. */
 
-import type { ElementStyle, ShapeKind, Slide, SlideElement } from "./types";
+import type { ChartKind, ElementStyle, ShapeKind, Slide, SlideElement } from "./types";
 import { uid } from "./types";
 
 export const SLIDE_W = 1280;
@@ -83,6 +83,53 @@ export function createImageElement(src: string, at?: { x: number; y: number }): 
     h: 400,
     rot: 0,
     style: { opacity: 1, radius: 0 },
+  };
+}
+
+export function createChart(type: ChartKind = "bar", at?: { x: number; y: number }): SlideElement {
+  return {
+    id: `el-${uid()}`,
+    kind: "chart",
+    x: at?.x ?? 190,
+    y: at?.y ?? 170,
+    w: 900,
+    h: 420,
+    rot: 0,
+    style: { opacity: 1, fontSize: 13 },
+    chart: {
+      type,
+      series: ["This year", "Last year"],
+      rows: [
+        { label: "Q1", values: [32, 24] },
+        { label: "Q2", values: [41, 30] },
+        { label: "Q3", values: [38, 33] },
+        { label: "Q4", values: [52, 36] },
+      ],
+      showLegend: true,
+      showGrid: true,
+    },
+  };
+}
+
+export function createTable(at?: { x: number; y: number }): SlideElement {
+  const cell = (text: string) => ({ text });
+  return {
+    id: `el-${uid()}`,
+    kind: "table",
+    x: at?.x ?? 190,
+    y: at?.y ?? 200,
+    w: 900,
+    h: 300,
+    rot: 0,
+    style: { opacity: 1, fontSize: 20, color: "var(--pres-fg)" },
+    table: {
+      headerRow: true,
+      rows: [
+        [cell("Metric"), cell("Q1"), cell("Q2"), cell("Change")],
+        [cell("ARR"), cell("$3.6M"), cell("$4.2M"), cell("+18%")],
+        [cell("NRR"), cell("109%"), cell("117%"), cell("+8pts")],
+      ],
+    },
   };
 }
 

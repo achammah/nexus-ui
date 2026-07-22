@@ -734,6 +734,119 @@ async function p19() {
   await shot("pres-import-roundtrip.png");
 }
 
+/* J20 — charts + tables */
+{
+  await p20();
+}
+async function p20() {
+  await page.goto(URL0);
+  await page.evaluate((k) => localStorage.removeItem(k), KEY);
+  await page.goto(URL0);
+  await page.waitForSelector(".nxPresFilmItem");
+
+  /* the seeded deck ships a real chart + table slide */
+  const seeded = await page.evaluate(() => {
+    const items = [...document.querySelectorAll(".nxPresFilmItem")];
+    return items.findIndex((it) => it.querySelector(".nxPresEl-chart"));
+  });
+  ok("J20a seeded deck ships a chart slide", seeded >= 0, `slide ${seeded + 1}`);
+  await page.locator(".nxPresFilmItem").nth(seeded).click();
+  await page.waitForSelector(".nxPresCanvas .nxPresEl-chart svg");
+  const bars = await page.locator(".nxPresCanvas .nxPresEl-chart .recharts-bar-rectangle").count();
+  ok("J20b chart renders real marks", bars === 8, `${bars} bars for 4 categories x 2 series`);
+  const tRows = await page.locator(".nxPresCanvas .nxPresTable tr").count();
+  ok("J20c seeded table renders", tRows === 5, `${tRows} rows`);
+  await shot("pres-chart-table.png");
+
+  const slideWith = async (kind) => {
+    const d = await deck();
+    return d.slides.find((sl) => (sl.elements || []).some((e) => e.kind === kind));
+  };
+
+  /* insert a chart, switch its type, edit the data */
+  await page.locator(".nxPresFilmItem").first().click();
+  await page.locator('[data-testid="insert-chart"]').click();
+  await page.waitForSelector(".nxPresCanvas .nxPresEl-chart svg");
+  ok("J20d chart inserts", !!(await slideWith("chart")));
+
+  await page.locator('[data-testid="chart-type"]').selectOption("line");
+  await page.waitForTimeout(150);
+  const lines = await page.locator(".nxPresCanvas .nxPresEl-chart .recharts-line").count();
+  ok("J20e chart type switches to line", lines === 2, `${lines} lines`);
+  await page.locator('[data-testid="chart-type"]').selectOption("pie");
+  await page.waitForTimeout(150);
+  ok("J20f chart type switches to pie", (await page.locator(".nxPresCanvas .nxPresEl-chart .recharts-pie-sector").count()) > 0);
+  await page.locator('[data-testid="chart-type"]').selectOption("bar");
+  await page.waitForTimeout(150);
+
+  await page.locator('[data-testid="chart-data-btn"]').click();
+  await page.waitForSelector('[data-testid="chart-data-grid"]');
+  await page.locator('[data-testid="val-0-0"]').fill("99");
+  await page.locator('[data-testid="cat-0"]').fill("Renamed");
+  await page.waitForTimeout(200);
+  let sl = await slideWith("chart");
+  let spec = sl.elements.find((e) => e.kind === "chart").chart;
+  ok("J20g editing the data table writes through", spec.rows[0].values[0] === 99 && spec.rows[0].label === "Renamed", JSON.stringify(spec.rows[0]));
+
+  await page.locator('[data-testid="chart-add-row"]').click();
+  await page.locator('[data-testid="chart-add-series"]').click();
+  sl = await slideWith("chart");
+  spec = sl.elements.find((e) => e.kind === "chart").chart;
+  ok("J20h add category + series", spec.rows.length === 5 && spec.series.length === 3, `${spec.rows.length}x${spec.series.length}`);
+
+  /* a data edit is undoable like any other edit */
+  await page.locator('[data-testid="undo-btn"]').click();
+  sl = await slideWith("chart");
+  ok("J20i chart data edits are undoable", sl.elements.find((e) => e.kind === "chart").chart.series.length === 2);
+
+  /* tables: insert, edit a cell, add/remove rows and columns, header toggle */
+  await page.keyboard.press("Escape");
+  await page.locator('[data-testid="insert-table"]').click();
+  await page.waitForSelector(".nxPresCanvas .nxPresTable");
+  let tbl = (await slideWith("table")).elements.find((e) => e.kind === "table").table;
+  const cols0 = tbl.rows[0].length;
+  ok("J20j table inserts with a header row", tbl.rows.length === 3 && tbl.headerRow !== false);
+
+  await page.locator('[data-testid="table-add-row"]').click();
+  await page.locator('[data-testid="table-add-col"]').click();
+  tbl = (await slideWith("table")).elements.find((e) => e.kind === "table").table;
+  ok("J20k add row + column", tbl.rows.length === 4 && tbl.rows[0].length === cols0 + 1, `${tbl.rows.length}x${tbl.rows[0].length}`);
+
+  await page.locator('[data-testid="table-del-row"]').click();
+  await page.locator('[data-testid="table-del-col"]').click();
+  tbl = (await slideWith("table")).elements.find((e) => e.kind === "table").table;
+  ok("J20l remove row + column", tbl.rows.length === 3 && tbl.rows[0].length === cols0);
+
+  await page.locator('[data-testid="table-header-toggle"]').click();
+  tbl = (await slideWith("table")).elements.find((e) => e.kind === "table").table;
+  ok("J20m header row toggles off", tbl.headerRow === false);
+  await page.locator('[data-testid="table-header-toggle"]').click();
+
+  /* cell editing (double-click puts the table in edit mode, as with a text box) */
+  const tableEl = page.locator(".nxPresCanvas .nxPresEl-table").first();
+  await tableEl.dblclick();
+  const firstCell = page.locator(".nxPresCanvas .nxPresTable :is(th,td)").first();
+  await firstCell.click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type("Edited cell");
+  await page.keyboard.press("Escape");
+  await page.locator(".nxPresFilmItem").nth(1).click();
+  await page.waitForTimeout(200);
+  tbl = (await slideWith("table")).elements.find((e) => e.kind === "table").table;
+  ok("J20n cell editing persists", tbl.rows[0][0].text === "Edited cell", tbl.rows[0][0].text);
+
+  /* charts and tables render in present mode too */
+  await page.locator(".nxPresFilmItem").nth(seeded).click();
+  await page.locator('[data-testid="present-btn"]').click();
+  await page.waitForSelector('[data-testid="present-mode"]');
+  await page.waitForTimeout(400);
+  const presentBars = await page.locator('[data-testid="present-mode"] .recharts-bar-rectangle').count();
+  const presentTable = await page.locator('[data-testid="present-mode"] .nxPresTable tr').count();
+  ok("J20o chart + table render in present mode", presentBars === 8 && presentTable === 5, `${presentBars} bars / ${presentTable} rows`);
+  await shot("pres-chart-present.png");
+  await page.keyboard.press("Escape");
+}
+
 const fails = results.filter((r) => !r.pass);
 console.log(`\n${results.length - fails.length}/${results.length} passed`);
 await browser.close();

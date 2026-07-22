@@ -681,3 +681,59 @@
 .nxPresImportHead { display: flex; align-items: center; justify-content: space-between; gap: var(--nx-gap-3); font: 600 var(--nx-text-body) var(--nx-font-sans); }
 .nxPresImportSub { font: 600 var(--nx-text-micro) var(--nx-font-sans); text-transform: var(--nx-label-transform, uppercase); letter-spacing: var(--nx-label-tracking); color: var(--nx-fg-faint); }
 .nxPresImportList { margin: 0; padding-left: 1.1em; font: 400 var(--nx-text-meta) var(--nx-font-sans); color: var(--nx-fg-muted); display: flex; flex-direction: column; gap: 3px; max-height: 180px; overflow-y: auto; }
+
+/* ---- charts + tables on a slide ---- */
+.nxPresChartLoading { display: grid; place-items: center; height: 100%; font: 500 var(--nx-text-meta) var(--nx-font-sans); color: var(--pres-muted, var(--nx-fg-muted)); }
+.nxPresEl-chart > svg { overflow: visible; }
+
+.nxPresTable {
+  width: 100%;
+  height: 100%;
+  border-collapse: collapse;
+  color: var(--pres-fg);
+  table-layout: fixed;
+}
+.nxPresTable :is(th, td) {
+  border: 1px solid color-mix(in srgb, var(--pres-fg) 22%, transparent);
+  padding: 0.5em 0.7em;
+  text-align: left;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+.nxPresTable tr.isHeader :is(th, td) {
+  background: color-mix(in srgb, var(--pres-accent) 16%, transparent);
+  border-bottom-width: 2px;
+}
+.nxPresElLayer.isEditable .nxPresTable :is(th, td)[contenteditable="true"]:focus {
+  box-shadow: inset 0 0 0 2px var(--nx-accent);
+}
+
+/* chart data editor */
+.nxPresDataGrid {
+  flex-basis: 100%;
+  order: 99;
+  margin-top: 6px;
+  padding: var(--nx-gap-2);
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.nxPresDataGrid table { border-collapse: collapse; }
+.nxPresDataGrid :is(th, td) { padding: 2px; }
+.nxPresDataGrid th { font: 600 var(--nx-text-micro) var(--nx-font-sans); color: var(--nx-fg-faint); text-align: left; }
+.nxPresDataGrid input {
+  width: 104px;
+  border: 1px solid var(--nx-border);
+  background: var(--nx-bg);
+  color: var(--nx-fg);
+  font: 500 var(--nx-text-meta) var(--nx-font-sans);
+  padding: 3px 6px;
+  border-radius: var(--nx-radius-s);
+}
+.nxPresDataGrid input[type="number"] { font-family: var(--nx-font-mono); width: 84px; }

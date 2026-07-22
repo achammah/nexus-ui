@@ -8,7 +8,9 @@ import { ElementBar, InsertBar } from "./ElementControls";
 import {
   addElement,
   createImageElement,
+  createChart,
   createShape,
+  createTable,
   createTextBox,
   duplicateElements,
   els,
@@ -556,6 +558,8 @@ export function PresentationSurface({
                 onInsertText={() => insertElement(() => addElement(slide, createTextBox()))}
                 onInsertShape={(k) => insertElement(() => addElement(slide, createShape(k)))}
                 onInsertImage={() => pickImage("element")}
+                onInsertChart={(t) => insertElement(() => addElement(slide, createChart(t)))}
+                onInsertTable={() => insertElement(() => addElement(slide, createTable()))}
               />
               <div className="nxPresToolGroup">
                 <button type="button" className={`nxPresToolBtn${notesOpen ? " isOn" : ""}`} onClick={() => setNotesOpen((v) => !v)} aria-pressed={notesOpen}>

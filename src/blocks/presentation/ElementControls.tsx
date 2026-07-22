@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { ShapeKind, Slide, SlideElement } from "./types";
+import type { ChartKind, ShapeKind, Slide, SlideElement, TableSpec } from "./types";
 import {
   alignElements,
   distributeElements,
@@ -7,11 +7,13 @@ import {
   groupElements,
   reorder,
   ungroupElements,
+  updateElement,
   updateStyle,
   type AlignOp,
   type ZOp,
 } from "./elements";
 import { SHAPE_LABELS, ShapeGlyph } from "./ShapeRender";
+import { addColumn, addRow, removeColumn, removeRow } from "./TableElement";
 
 const SHAPES: ShapeKind[] = ["rect", "roundRect", "ellipse", "triangle", "arrow", "line", "star", "callout"];
 
@@ -21,11 +23,15 @@ export function InsertBar({
   onInsertShape,
   onInsertText,
   onInsertImage,
+  onInsertChart,
+  onInsertTable,
   extra,
 }: {
   onInsertShape: (s: ShapeKind) => void;
   onInsertText: () => void;
   onInsertImage: () => void;
+  onInsertChart: (t: ChartKind) => void;
+  onInsertTable: () => void;
   extra?: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -79,6 +85,12 @@ export function InsertBar({
       <button type="button" className="nxPresToolBtn" onClick={onInsertImage} title="Insert an image" data-testid="insert-image">
         Image
       </button>
+      <button type="button" className="nxPresToolBtn" onClick={() => onInsertChart("bar")} title="Insert a chart" data-testid="insert-chart">
+        Chart
+      </button>
+      <button type="button" className="nxPresToolBtn" onClick={onInsertTable} title="Insert a table" data-testid="insert-table">
+        Table
+      </button>
       {extra}
     </div>
   );
@@ -110,6 +122,7 @@ export function ElementBar({
   onSelect: (ids: string[]) => void;
 }) {
   const list = els(slide);
+  const [dataOpen, setDataOpen] = React.useState(false);
   const sel = list.filter((e) => selected.includes(e.id));
   if (!sel.length) return null;
   const first: SlideElement = sel[0];
@@ -198,6 +211,62 @@ export function ElementBar({
         </label>
       )}
 
+      {first.kind === "chart" && first.chart && (
+        <>
+          <label className="nxPresToolLabel">
+            Type
+            <select
+              className="nxPresSelect"
+              value={first.chart.type}
+              onChange={(e) => onSlide(updateElement(slide, first.id, { chart: { ...first.chart!, type: e.target.value as ChartKind } }))}
+              aria-label="Chart type"
+              data-testid="chart-type"
+            >
+              {(["bar", "line", "area", "pie", "scatter"] as ChartKind[]).map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className={`nxPresToolBtn${dataOpen ? " isOn" : ""}`}
+            onClick={() => setDataOpen((v) => !v)}
+            aria-expanded={dataOpen}
+            data-testid="chart-data-btn"
+          >
+            Edit data
+          </button>
+        </>
+      )}
+
+      {first.kind === "table" && first.table && (
+        <>
+          <button type="button" className="nxPresToolBtn" data-testid="table-add-row" onClick={() => onSlide(updateElement(slide, first.id, { table: addRow(first.table as TableSpec) }))}>
+            + Row
+          </button>
+          <button type="button" className="nxPresToolBtn" data-testid="table-add-col" onClick={() => onSlide(updateElement(slide, first.id, { table: addColumn(first.table as TableSpec) }))}>
+            + Col
+          </button>
+          <button type="button" className="nxPresToolBtn" data-testid="table-del-row" onClick={() => onSlide(updateElement(slide, first.id, { table: removeRow(first.table as TableSpec, first.table!.rows.length - 1) }))}>
+            − Row
+          </button>
+          <button type="button" className="nxPresToolBtn" data-testid="table-del-col" onClick={() => onSlide(updateElement(slide, first.id, { table: removeColumn(first.table as TableSpec, (first.table!.rows[0]?.length ?? 1) - 1) }))}>
+            − Col
+          </button>
+          <button
+            type="button"
+            className={`nxPresToolBtn${first.table.headerRow !== false ? " isOn" : ""}`}
+            data-testid="table-header-toggle"
+            aria-pressed={first.table.headerRow !== false}
+            onClick={() => onSlide(updateElement(slide, first.id, { table: { ...first.table!, headerRow: first.table!.headerRow === false } }))}
+          >
+            Header
+          </button>
+        </>
+      )}
+
       <div className="nxPresElBarSep" />
       <button type="button" className="nxPresToolBtn" onClick={() => z("front")} title="Bring to front" data-testid="z-front">⤒</button>
       <button type="button" className="nxPresToolBtn" onClick={() => z("forward")} title="Bring forward">↑</button>
@@ -235,6 +304,13 @@ export function ElementBar({
             </button>
           )}
         </>
+      )}
+
+      {dataOpen && first.kind === "chart" && first.chart && (
+        <ChartDataGrid
+          spec={first.chart}
+          onChange={(next) => onSlide(updateElement(slide, first.id, { chart: next }))}
+        />
       )}
 
       <div className="nxPresElBarSep" />
@@ -310,6 +386,100 @@ function ColorWell({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---- chart data table ----
+   The numbers behind a chart are editable in place: add/remove rows (categories)
+   and series (columns), rename either, and type values. Every edit is a history
+   step, so ⌘Z walks back through data changes like any other edit. */
+function ChartDataGrid({ spec, onChange }: { spec: import("./types").ChartSpec; onChange: (s: import("./types").ChartSpec) => void }) {
+  const setSeries = (i: number, name: string) =>
+    onChange({ ...spec, series: spec.series.map((s, x) => (x === i ? name : s)) });
+  const setLabel = (r: number, label: string) =>
+    onChange({ ...spec, rows: spec.rows.map((row, x) => (x === r ? { ...row, label } : row)) });
+  const setValue = (r: number, c: number, v: string) =>
+    onChange({
+      ...spec,
+      rows: spec.rows.map((row, x) =>
+        x === r ? { ...row, values: row.values.map((val, y) => (y === c ? Number(v) || 0 : val)) } : row,
+      ),
+    });
+
+  return (
+    <div className="nxPresDataGrid" data-testid="chart-data-grid">
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th>
+            {spec.series.map((s, i) => (
+              <th key={i}>
+                <input value={s} onChange={(e) => setSeries(i, e.target.value)} aria-label={`Series ${i + 1} name`} data-testid={`series-name-${i}`} />
+              </th>
+            ))}
+            <th>
+              <button
+                type="button"
+                className="nxPresToolBtn"
+                data-testid="chart-add-series"
+                onClick={() =>
+                  onChange({
+                    ...spec,
+                    series: [...spec.series, `Series ${spec.series.length + 1}`],
+                    rows: spec.rows.map((r) => ({ ...r, values: [...r.values, 0] })),
+                  })
+                }
+              >
+                + Series
+              </button>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {spec.rows.map((row, r) => (
+            <tr key={r}>
+              <td>
+                <input value={row.label} onChange={(e) => setLabel(r, e.target.value)} aria-label={`Category ${r + 1}`} data-testid={`cat-${r}`} />
+              </td>
+              {row.values.map((v, c) => (
+                <td key={c}>
+                  <input
+                    type="number"
+                    value={v}
+                    onChange={(e) => setValue(r, c, e.target.value)}
+                    aria-label={`${spec.series[c] ?? "value"} for ${row.label}`}
+                    data-testid={`val-${r}-${c}`}
+                  />
+                </td>
+              ))}
+              <td>
+                <button
+                  type="button"
+                  className="nxPresToolBtn"
+                  aria-label={`Remove ${row.label}`}
+                  onClick={() => onChange({ ...spec, rows: spec.rows.filter((_, x) => x !== r) })}
+                >
+                  ✕
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button
+        type="button"
+        className="nxPresToolBtn"
+        data-testid="chart-add-row"
+        onClick={() =>
+          onChange({
+            ...spec,
+            rows: [...spec.rows, { label: `Item ${spec.rows.length + 1}`, values: spec.series.map(() => 0) }],
+          })
+        }
+      >
+        + Category
+      </button>
     </div>
   );
 }

@@ -132,6 +132,29 @@ export async function exportDeckToPptx(deck: DeckSnapshot): Promise<void> {
             valign: st.valign ?? "middle",
           });
         }
+      } else if (el.kind === "chart" && el.chart) {
+        /* a NATIVE PowerPoint chart (editable in PowerPoint), not a picture */
+        const c = el.chart;
+        slide.addChart(
+          PPTX_CHART[c.type] ?? "bar",
+          c.series.map((name, i) => ({
+            name,
+            labels: c.rows.map((r) => r.label),
+            values: c.rows.map((r) => r.values[i] ?? 0),
+          })),
+          { ...geo, showLegend: c.showLegend !== false, legendPos: "b" },
+        );
+      } else if (el.kind === "table" && el.table) {
+        const header = el.table.headerRow !== false;
+        slide.addTable(
+          el.table.rows.map((row, r) =>
+            row.map((cell) => ({
+              text: cell.text,
+              options: { bold: cell.bold || (header && r === 0), align: cell.align ?? "left", fontSize: Math.round((st.fontSize ?? 20) * 0.75) },
+            })),
+          ),
+          { ...geo, border: { pt: 1, color: "CCCCCC" }, fontFace: "Helvetica" },
+        );
       } else if (el.kind === "text" && el.html) {
         slide.addText(htmlToRuns(el.html), {
           ...geo,
@@ -159,6 +182,8 @@ interface PptxSlideLike {
   addText: (runs: TextRun[], opts: Record<string, unknown>) => void;
   addImage: (o: Record<string, unknown>) => void;
   addShape: (shape: string, opts: Record<string, unknown>) => void;
+  addChart: (type: string, data: unknown[], opts: Record<string, unknown>) => void;
+  addTable: (rows: unknown[][], opts: Record<string, unknown>) => void;
   addNotes: (s: string) => void;
 }
 
@@ -172,6 +197,15 @@ const PPTX_SHAPE: Record<string, string> = {
   line: "line",
   star: "star5",
   callout: "wedgeRectCallout",
+};
+
+/* our chart kinds -> pptxgenjs chart types */
+const PPTX_CHART: Record<string, string> = {
+  bar: "bar",
+  line: "line",
+  area: "area",
+  pie: "pie",
+  scatter: "scatter",
 };
 
 /* PPTX wants bare RRGGBB. A token (var(--pres-accent)) has no literal value at

@@ -12,6 +12,7 @@ import {
   type Guide,
 } from "./elements";
 import { ShapeSvg } from "./ShapeRender";
+import { TableRender, setCell } from "./TableElement";
 import { sanitizeHtml } from "./SlideView";
 
 export interface ElementLayerProps {
@@ -285,13 +286,28 @@ export function ElementLayer({ slide, editable, selected = [], onSelect, onDraft
             onPointerDown={(e) => onElementPointerDown(e, el)}
             onDoubleClick={() => {
               if (!editable || el.locked) return;
-              if (el.kind === "text" || el.kind === "shape") setEditingId(el.id);
+              if (el.kind === "text" || el.kind === "shape" || el.kind === "table") setEditingId(el.id);
             }}
             role={editable ? "button" : undefined}
             tabIndex={editable ? 0 : undefined}
             aria-label={ariaFor(el)}
           >
             {el.kind === "shape" && <ShapeSvg el={el} />}
+            {el.kind === "chart" && (
+              <React.Suspense fallback={<div className="nxPresChartLoading">Chart…</div>}>
+                <LazyChart el={el} />
+              </React.Suspense>
+            )}
+            {el.kind === "table" && (
+              <TableRender
+                el={el}
+                editable={editable && editingId === el.id}
+                onCell={(r, c, text) => {
+                  if (!el.table) return;
+                  onCommit?.(updateElement(currentRef.current, el.id, { table: setCell(el.table, r, c, text) }));
+                }}
+              />
+            )}
             {el.kind === "image" && (
               <img
                 className="nxPresElImg"
@@ -372,8 +388,14 @@ export function ElementLayer({ slide, editable, selected = [], onSelect, onDraft
 function ariaFor(el: SlideElement): string {
   if (el.kind === "shape") return `${el.shape ?? "shape"} element`;
   if (el.kind === "image") return el.alt || "Image element";
+  if (el.kind === "chart") return `${el.chart?.type ?? "bar"} chart`;
+  if (el.kind === "table") return `Table, ${el.table?.rows.length ?? 0} rows`;
   return "Text box";
 }
+
+/* recharts is ~100 kB gz — a deck with no chart must not pay for it, so the
+   renderer sits behind its own chunk and only loads when a chart is on screen. */
+const LazyChart = React.lazy(() => import("./ChartElement"));
 
 /* Text inside a text box or a shape label. Uncontrolled while editing (caret
    safety), seeded from the model otherwise — same contract as the layout regions. */

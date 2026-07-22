@@ -173,6 +173,46 @@ export function seedDeck(): DeckSnapshot {
       ],
     ),
     s(
+      "title-body",
+      { title: "Revenue by quarter", body: "<b>+35% YoY</b> on average — Q4 is a forecast, not a close." },
+      "The bar chart is live data on the slide — the table under it is the same numbers, exactly as finance sent them.",
+      "fade",
+      [
+        el({
+          kind: "chart",
+          x: 76, y: 246, w: 700, h: 350, rot: 0,
+          style: { opacity: 1, fontSize: 13 },
+          chart: {
+            type: "bar",
+            series: ["2025", "2026"],
+            rows: [
+              { label: "Q1", values: [2.9, 3.6] },
+              { label: "Q2", values: [3.1, 4.2] },
+              { label: "Q3", values: [3.4, 4.6] },
+              { label: "Q4", values: [3.5, 5.1] },
+            ],
+            showLegend: true,
+            showGrid: true,
+          },
+        }),
+        el({
+          kind: "table",
+          x: 812, y: 262, w: 400, h: 300, rot: 0,
+          style: { opacity: 1, fontSize: 19, color: "var(--pres-fg)" },
+          table: {
+            headerRow: true,
+            rows: [
+              [{ text: "Quarter" }, { text: "ARR" }, { text: "YoY" }],
+              [{ text: "Q1" }, { text: "$3.6M" }, { text: "+24%" }],
+              [{ text: "Q2" }, { text: "$4.2M" }, { text: "+35%" }],
+              [{ text: "Q3" }, { text: "$4.6M" }, { text: "+35%" }],
+              [{ text: "Q4e" }, { text: "$5.1M" }, { text: "+46%" }],
+            ],
+          },
+        }),
+      ],
+    ),
+    s(
       "two-column",
       {
         title: "Asks",

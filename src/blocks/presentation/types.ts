@@ -47,7 +47,40 @@ export type ShapeKind =
   | "star"
   | "callout";
 
-export type ElementKind = "text" | "shape" | "image";
+export type ElementKind = "text" | "shape" | "image" | "chart" | "table";
+
+export type ChartKind = "bar" | "line" | "pie" | "area" | "scatter";
+
+/* A chart carries its own DATA — a deck is self-contained, so a slide never
+   depends on a live query to render. The editable data table writes straight
+   into this shape. */
+export interface ChartSpec {
+  type: ChartKind;
+  /* one name per numeric column */
+  series: string[];
+  /* one row per category; `values` is parallel to `series` */
+  rows: Array<{ label: string; values: number[] }>;
+  showLegend?: boolean;
+  showGrid?: boolean;
+  /* axis labels (bar/line/area/scatter) */
+  xLabel?: string;
+  yLabel?: string;
+}
+
+export interface TableCell {
+  text: string;
+  bold?: boolean;
+  align?: "left" | "center" | "right";
+  bg?: string;
+}
+
+export interface TableSpec {
+  /* row 0 is the header row when headerRow is true */
+  rows: TableCell[][];
+  headerRow?: boolean;
+  /* relative column widths; defaults to equal */
+  colWidths?: number[];
+}
 
 export interface ElementStyle {
   /* any CSS color, or "none" for no fill/stroke */
@@ -90,6 +123,10 @@ export interface SlideElement {
   /* kind:"image" — data URL or href */
   src?: string;
   alt?: string;
+  /* kind:"chart" */
+  chart?: ChartSpec;
+  /* kind:"table" */
+  table?: TableSpec;
 }
 
 export interface Slide {
