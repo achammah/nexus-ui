@@ -26,6 +26,12 @@ export interface TaskFieldKeys {
   parent: string;
   blockedBy: string;
   repeat: string;
+  /* time tracking (see ./timeTracking.ts) */
+  timeEntries: string;
+  timeSpent: string;
+  /* today/focus planning */
+  plannedFor: string;
+  focusOrder: string;
 }
 
 export const TASK_KEYS: TaskFieldKeys = {
@@ -42,6 +48,10 @@ export const TASK_KEYS: TaskFieldKeys = {
   parent: "parent",
   blockedBy: "blockedBy",
   repeat: "repeat",
+  timeEntries: "timeEntries",
+  timeSpent: "timeSpent",
+  plannedFor: "plannedFor",
+  focusOrder: "focusOrder",
 };
 
 export interface TaskConfigOptions {
@@ -102,11 +112,18 @@ export function taskObjectConfig(opts: TaskConfigOptions = {}): ObjectConfig {
     { key: TASK_KEYS.startDate, label: "Start", type: "date", width: 110 },
     { key: TASK_KEYS.dueDate, label: "Due", type: "date", width: 110 },
     { key: TASK_KEYS.estimate, label: "Estimate (h)", type: "number", width: 90 },
+    { key: TASK_KEYS.timeSpent, label: "Time spent (h)", type: "number", width: 100 },
     { key: TASK_KEYS.progress, label: "Progress %", type: "number", width: 90 },
     { key: TASK_KEYS.repeat, label: "Repeat", type: "select", options: ["None", "Daily", "Weekly", "Biweekly", "Monthly"], width: 100 },
     { key: TASK_KEYS.parent, label: "Parent task", type: "relation", relation: key, inverseLabel: "Subtasks" },
     { key: TASK_KEYS.blockedBy, label: "Blocked by", type: "relation", relation: key, multiple: true, inverseLabel: "Blocks" },
     { key: TASK_KEYS.description, label: "Description", type: "richText" },
+    /* time log + day plan — the timer and focus view own these. They stay ACTIVE
+       (both surfaces write them) but out of `columns`, so the table hides them by
+       default while the Columns menu can still bring "Planned for" in. */
+    { key: TASK_KEYS.timeEntries, label: "Time log", type: "json" },
+    { key: TASK_KEYS.plannedFor, label: "Planned for", type: "date", width: 110 },
+    { key: TASK_KEYS.focusOrder, label: "Focus order", type: "number" },
     ...(opts.extraFields ?? []),
   ];
   return {
@@ -118,12 +135,13 @@ export function taskObjectConfig(opts: TaskConfigOptions = {}): ObjectConfig {
     stageField: TASK_KEYS.status,
     columns: [TASK_KEYS.status, TASK_KEYS.assignee, TASK_KEYS.priority, TASK_KEYS.dueDate, TASK_KEYS.labels],
     views: opts.views ?? [
+      { type: "focus" },
       { type: "table" },
       { type: "kanban", groupField: TASK_KEYS.status },
       { type: "timeline" },
       { type: "calendar", startDateField: TASK_KEYS.startDate, endDateField: TASK_KEYS.dueDate },
     ],
-    defaultView: opts.defaultView ?? "timeline",
+    defaultView: opts.defaultView ?? "focus",
   };
 }
 
@@ -297,8 +315,21 @@ export function seedTasks(today = new Date()): RecordRow[] {
       parent: null,
       blockedBy: [],
       description: null,
+      timeEntries: [],
+      timeSpent: null,
+      plannedFor: null,
+      focusOrder: null,
       ...rest,
     };
+  };
+
+  /* a closed time entry `hoursAgo` back, lasting `hours` — realistic sessions so
+     the timer UI, the day total and the spent-vs-estimate meters have real data */
+  const session = (dayOffset: number, atHour: number, hours: number) => {
+    const s = addDays(today, dayOffset);
+    s.setHours(atHour, 0, 0, 0);
+    const e = new Date(s.getTime() + hours * 3_600_000);
+    return { id: `te-${dayOffset}-${atHour}-${Math.round(hours * 10)}`, start: s.toISOString(), end: e.toISOString() };
   };
 
   const rows: RecordRow[] = [];
@@ -340,13 +371,43 @@ export function seedTasks(today = new Date()): RecordRow[] {
   push(T("Go live + monitor", { start: 23, due: 24, assignee: "Tom", priority: "Urgent", labels: ["launch"], parent: e4 }));
 
   // ---- Ongoing / overdue strays (health styling has something to show)
-  push(T("Fix OAuth token refresh bug", { start: -5, due: -1, status: "In progress", assignee: "Ines", priority: "Urgent", labels: ["backend", "bug"], progress: 60 }));
+  const bug = push(T("Fix OAuth token refresh bug", { start: -5, due: -1, status: "In progress", assignee: "Ines", priority: "Urgent", labels: ["backend", "bug"], progress: 60, estimate: 6 }));
   push(T("Update security policy page", { start: -8, due: -2, assignee: "Sara", labels: ["legal"] }));
-  push(T("Triage support inbox", { start: 0, due: 1, assignee: "Tom", labels: ["support"], repeat: "Daily" }));
+  const triage = push(T("Triage support inbox", { start: 0, due: 1, assignee: "Tom", labels: ["support"], repeat: "Daily", estimate: 1 }));
   push(T("Sprint retro notes", { start: 2, due: 2, assignee: "Ravi", repeat: "Biweekly" }));
   push(T("Blog: beta learnings", { start: 5, due: 12, assignee: "Maya", labels: ["marketing", "content"] }));
   push(T("Accessibility audit", { start: 7, due: 14, assignee: "Leo", labels: ["design", "qa"], estimate: 12 }));
   push(T("Load test checkout path", { start: 14, due: 17, assignee: "Tom", labels: ["backend", "qa"], blockedBy: [stripe] }));
+
+  /* ---- time log + today's plan, so the focus view and the timer open populated
+     rather than on an empty state the reviewer has to build by hand */
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const track = (id: string, entries: ReturnType<typeof session>[]) => {
+    const r = byId.get(id);
+    if (!r) return;
+    r.timeEntries = entries;
+    r.timeSpent = Math.round((entries.reduce((s, e) => s + (Date.parse(e.end) - Date.parse(e.start)), 0) / 3_600_000) * 100) / 100;
+  };
+  const plan = (id: string, order: number) => {
+    const r = byId.get(id);
+    if (!r) return;
+    r.plannedFor = isoDay(today);
+    r.focusOrder = order;
+  };
+
+  track(bug, [session(-2, 14, 1.5), session(-1, 9, 2), session(0, 9, 1.25)]);
+  track(onboard, [session(-3, 10, 3), session(-1, 14, 2.5), session(0, 11, 0.75)]);
+  track(copy, [session(-1, 16, 1.25)]);
+  track(telem, [session(-1, 11, 2), session(0, 13, 1)]);
+  track(wire, [session(-4, 9, 4), session(-3, 9, 3.5)]);
+  track(triage, [session(0, 8, 0.5)]);
+  track(msg, [session(-9, 9, 6), session(-8, 10, 5)]);
+
+  plan(bug, 0);
+  plan(triage, 1);
+  plan(onboard, 2);
+  plan(copy, 3);
+  plan(telem, 4);
 
   return rows;
 }

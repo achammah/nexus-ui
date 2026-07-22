@@ -53,6 +53,10 @@ export function resolveKeys(object: ViewProps["object"], cfg: Record<string, unk
     parent: pick("parentField", def(TASK_KEYS.parent, "")),
     blockedBy: pick("dependenciesField", def(TASK_KEYS.blockedBy, "")),
     repeat: def(TASK_KEYS.repeat, ""),
+    timeEntries: def(TASK_KEYS.timeEntries, ""),
+    timeSpent: def(TASK_KEYS.timeSpent, ""),
+    plannedFor: def(TASK_KEYS.plannedFor, ""),
+    focusOrder: def(TASK_KEYS.focusOrder, ""),
   };
 }
 
