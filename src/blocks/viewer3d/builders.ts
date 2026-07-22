@@ -3,17 +3,9 @@
    the floor plan extrudes walls from room polygons. */
 import * as THREE from "three";
 import type { Viewer3DLevel } from "./scene";
+import { LOOK, type ScenePalette } from "./look";
 
-export interface ScenePalette {
-  paint: string;      // car body
-  glass: string;
-  dark: string;       // tires, trim
-  metal: string;      // hubs, mirrors
-  wall: string;
-  wallEdge: string;
-  floor: string;
-  floorAlt: string;
-}
+export type { ScenePalette } from "./look";
 
 /* ---- sedan ---- */
 
@@ -60,14 +52,11 @@ function extrudeCentered(shape: THREE.Shape, width: number, bevel: number): THRE
 
 export function buildSedan(pal: ScenePalette): THREE.Group {
   const g = new THREE.Group();
-  const paintMat = new THREE.MeshPhysicalMaterial({
-    color: pal.paint, metalness: 0.55, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.18,
-  });
-  const glassMat = new THREE.MeshPhysicalMaterial({
-    color: pal.glass, metalness: 0.2, roughness: 0.08, transparent: true, opacity: 0.88,
-  });
-  const darkMat = new THREE.MeshStandardMaterial({ color: pal.dark, roughness: 0.85 });
-  const metalMat = new THREE.MeshStandardMaterial({ color: pal.metal, metalness: 0.85, roughness: 0.3 });
+  const M = LOOK.materials;
+  const paintMat = new THREE.MeshPhysicalMaterial({ color: pal.paint, ...M.paint });
+  const glassMat = new THREE.MeshPhysicalMaterial({ color: pal.glass, ...M.glass, transparent: true });
+  const darkMat = new THREE.MeshStandardMaterial({ color: pal.dark, ...M.tire });
+  const metalMat = new THREE.MeshStandardMaterial({ color: pal.metal, ...M.metal });
 
   const body = new THREE.Mesh(extrudeCentered(bodyShape(), 1.82, 0.07), paintMat);
   body.castShadow = true;
@@ -101,11 +90,11 @@ export function buildSedan(pal: ScenePalette): THREE.Group {
 
   // light bars (emissive so they read at any exposure)
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.44),
-    new THREE.MeshStandardMaterial({ color: "#ffffff", emissive: "#cfd8e8", emissiveIntensity: 0.7 }));
+    new THREE.MeshStandardMaterial({ color: "#ffffff", emissive: pal.headEmissive, ...M.lampHead }));
   head.position.set(2.28, 0.72, 0.55);
   const head2 = head.clone(); head2.position.z = -0.55;
   const tail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.5),
-    new THREE.MeshStandardMaterial({ color: "#7a1420", emissive: "#a11326", emissiveIntensity: 0.6 }));
+    new THREE.MeshStandardMaterial({ color: pal.tailColor, emissive: pal.tailEmissive, ...M.lampTail }));
   tail.position.set(-2.29, 0.78, 0.52);
   const tail2 = tail.clone(); tail2.position.z = -0.52;
   g.add(head, head2, tail, tail2);
@@ -129,14 +118,14 @@ export function polyCentroid(poly: [number, number][]): [number, number] {
 export function buildLevel(level: Viewer3DLevel, pal: ScenePalette, index: number): BuiltLevel {
   const group = new THREE.Group();
   const anchors: RoomAnchor[] = [];
-  const wallMat = new THREE.MeshStandardMaterial({ color: pal.wall, roughness: 0.95 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: pal.wall, ...LOOK.materials.wall });
   const t = 0.12; // wall thickness
   level.rooms.forEach((room, ri) => {
     const shape = new THREE.Shape(room.poly.map(([x, z]) => new THREE.Vector2(x, z)));
     const floorGeo = new THREE.ShapeGeometry(shape);
     floorGeo.rotateX(Math.PI / 2); // shape y -> world -z; flip below via scale
     const floorMat = new THREE.MeshStandardMaterial({
-      color: (ri + index) % 2 === 0 ? pal.floor : pal.floorAlt, roughness: 1,
+      color: (ri + index) % 2 === 0 ? pal.floor : pal.floorAlt, ...LOOK.materials.floor,
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.scale.z = -1; // undo the mirror from rotateX so (x,z) match the input
@@ -180,7 +169,7 @@ export function setLevelGhost(group: THREE.Group, ghost: boolean): void {
     for (const m of mats) {
       if (!m) continue;
       m.transparent = ghost;
-      m.opacity = ghost ? 0.07 : 1;
+      m.opacity = ghost ? LOOK.materials.ghostOpacity : 1;
       m.depthWrite = !ghost;
       m.needsUpdate = true;
     }

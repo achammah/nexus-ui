@@ -10,8 +10,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { isDarkTheme, resolveCssColor, useThemeNonce } from "../workbook/workbook-theme";
-import { buildLevel, buildSedan, setLevelGhost, type BuiltLevel, type ScenePalette } from "./builders";
+import { useThemeNonce } from "../workbook/workbook-theme";
+import { buildLevel, buildSedan, setLevelGhost, type BuiltLevel } from "./builders";
+import { derivePalette, envIntensity, groundShadowOpacity, EASE, LOOK, PRESET_DIRS, type Preset } from "./look";
 import { seedScene, type Viewer3DHotspot, type Viewer3DSnapshot } from "./scene";
 import "./viewer3d.css";
 
@@ -27,15 +28,6 @@ export interface Viewer3DSurfaceProps {
   actions?: React.ReactNode;
   "data-testid"?: string;
 }
-
-type Preset = "front" | "side" | "top" | "iso";
-const PRESET_DIRS: Record<Preset, [number, number, number]> = {
-  front: [1, 0.3, 0.12],
-  side: [0.03, 0.26, 1],
-  top: [0.02, 1, 0.02],
-  iso: [1, 0.62, 1],
-};
-const EASE = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 
 type Anim =
   | { kind: "fly"; t0: number; ms: number; fromP: THREE.Vector3; fromT: THREE.Vector3; toP: THREE.Vector3; toT: THREE.Vector3 }
@@ -58,22 +50,6 @@ interface Engine {
 
 const prefersReducedMotion = (): boolean =>
   typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-/* token -> material palette, resolved for the CURRENT theme (three paints real
-   colors; the canvas is transparent so the page background stays pure CSS) */
-function derivePalette(paint?: string): ScenePalette {
-  const r = resolveCssColor;
-  return {
-    paint: r(paint || "var(--nx-accent)"),
-    glass: r("color-mix(in srgb, #0d1320 90%, var(--nx-accent))"),
-    dark: "#1a1b1e",
-    metal: "#b9bdc6",
-    wall: r("color-mix(in srgb, var(--nx-bg-raised) 88%, var(--nx-fg))"),
-    wallEdge: r("var(--nx-border-strong)"),
-    floor: r("var(--nx-bg-sunken)"),
-    floorAlt: r("color-mix(in srgb, var(--nx-accent) 7%, var(--nx-bg-sunken))"),
-  };
-}
 
 function disposeObject(root: THREE.Object3D): void {
   root.traverse((o) => {
@@ -124,33 +100,34 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     setOpenHotspot(null);
     const s = snapRef.current;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    const renderer = new THREE.WebGLRenderer({ antialias: LOOK.renderer.antialias, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, LOOK.renderer.pixelRatioCap));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = LOOK.renderer.toneMappingExposure;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     host.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 500);
+    const camera = new THREE.PerspectiveCamera(LOOK.camera.fov, 1, LOOK.camera.near, LOOK.camera.far);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.autoRotateSpeed = 1.4;
-    controls.maxPolarAngle = Math.PI * 0.495;
+    controls.dampingFactor = LOOK.feel.damping;
+    controls.autoRotateSpeed = LOOK.feel.autoRotateSpeed;
+    controls.maxPolarAngle = LOOK.camera.maxPolarAngle;
 
     const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = isDarkTheme() ? 0.75 : 1.0;
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), LOOK.env.blur).texture;
+    scene.environmentIntensity = envIntensity();
 
-    const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8578, 0.5);
-    const key = new THREE.DirectionalLight(0xffffff, 1.6);
-    key.position.set(5, 13, 3);
+    const L = LOOK.lights;
+    const hemi = new THREE.HemisphereLight(L.hemi.sky, L.hemi.ground, L.hemi.intensity);
+    const key = new THREE.DirectionalLight(L.key.color, L.key.intensity);
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    key.shadow.radius = 6;
-    key.shadow.bias = -0.0004;
+    key.shadow.mapSize.set(LOOK.renderer.shadowMapSize, LOOK.renderer.shadowMapSize);
+    key.shadow.radius = LOOK.renderer.shadowRadius;
+    key.shadow.bias = LOOK.renderer.shadowBias;
     scene.add(hemi, key);
 
     const pal = derivePalette(s.object?.paint);
@@ -182,25 +159,30 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       const box = new THREE.Box3().setFromObject(model);
       box.getBoundingSphere(engine.sphere);
       const r = Math.max(engine.sphere.radius, 1);
+      const G = LOOK.ground, C = LOOK.camera;
       const groundY = Math.min(box.min.y, 0) - 0.001;
       const ground = new THREE.Mesh(
-        new THREE.CircleGeometry(r * 4, 48),
-        new THREE.ShadowMaterial({ opacity: isDarkTheme() ? 0.42 : 0.24 }),
+        new THREE.CircleGeometry(r * G.radiusMul, 48),
+        new THREE.ShadowMaterial({ opacity: groundShadowOpacity() }),
       );
       ground.rotation.x = -Math.PI / 2;
       ground.position.y = groundY;
       ground.receiveShadow = true;
       ground.name = "nx-ground";
       scene.add(ground);
-      key.shadow.camera.left = key.shadow.camera.bottom = -r * 2.2;
-      key.shadow.camera.right = key.shadow.camera.top = r * 2.2;
-      key.shadow.camera.far = r * 12;
+      // key light rides the model scale so shadow softness reads the same at any size
+      key.position.copy(engine.sphere.center).add(new THREE.Vector3(...L.key.dir).multiplyScalar(r * 2));
+      key.target.position.copy(engine.sphere.center);
+      key.target.updateMatrixWorld();
+      key.shadow.camera.left = key.shadow.camera.bottom = -r * G.frustumMul;
+      key.shadow.camera.right = key.shadow.camera.top = r * G.frustumMul;
+      key.shadow.camera.far = r * G.farMul;
       key.shadow.camera.updateProjectionMatrix();
-      controls.minDistance = r * 0.7;
-      controls.maxDistance = r * 6;
+      controls.minDistance = r * C.minDistanceMul;
+      controls.maxDistance = r * C.maxDistanceMul;
       controls.target.copy(engine.sphere.center);
-      const dir = new THREE.Vector3(...PRESET_DIRS[s.mode === "floorplan" ? "iso" : "iso"]).normalize();
-      camera.position.copy(engine.sphere.center).addScaledVector(dir, r * 2.6);
+      const dir = new THREE.Vector3(...PRESET_DIRS.iso).normalize();
+      camera.position.copy(engine.sphere.center).addScaledVector(dir, r * C.fitMul);
       camera.lookAt(engine.sphere.center);
       controls.update();
       setPhase("ready");
@@ -342,7 +324,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     setOpenHotspot(null);
   }, [activeLevel, mode, phase]);
 
-  const flyTo = React.useCallback((dir: [number, number, number], distMul = 2.6, ms = 700) => {
+  const flyTo = React.useCallback((dir: [number, number, number], distMul = LOOK.camera.fitMul, ms = LOOK.feel.flyMs) => {
     const e = engineRef.current;
     if (!e) return;
     const r = e.sphere.radius;
@@ -358,7 +340,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
   // top-down ↔ perspective
   React.useEffect(() => {
     if (mode !== "floorplan" || phase !== "ready") return;
-    flyTo(topDown ? PRESET_DIRS.top : PRESET_DIRS.iso, topDown ? 2.2 : 2.6);
+    flyTo(topDown ? PRESET_DIRS.top : PRESET_DIRS.iso, topDown ? LOOK.camera.topMul : LOOK.camera.fitMul);
   }, [topDown, mode, phase, flyTo]);
 
   // re-theme materials + env when the app theme flips or a skin lands
@@ -366,9 +348,9 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     const e = engineRef.current;
     if (!e || phase !== "ready") return;
     const pal = derivePalette(snapRef.current.object?.paint);
-    e.scene.environmentIntensity = isDarkTheme() ? 0.75 : 1.0;
+    e.scene.environmentIntensity = envIntensity();
     const ground = e.scene.getObjectByName("nx-ground") as THREE.Mesh | undefined;
-    if (ground) (ground.material as THREE.ShadowMaterial).opacity = isDarkTheme() ? 0.42 : 0.24;
+    if (ground) (ground.material as THREE.ShadowMaterial).opacity = groundShadowOpacity();
     if (mode === "floorplan") {
       e.levels.forEach((built) => built.group.traverse((o) => {
         const m = o as THREE.Mesh;
@@ -393,10 +375,10 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
   const spin360 = () => {
     const e = engineRef.current;
     if (!e || prefersReducedMotion()) return;
-    e.anim = { kind: "spin", t0: performance.now(), ms: 2600, last: 0 };
+    e.anim = { kind: "spin", t0: performance.now(), ms: LOOK.feel.spinMs, last: 0 };
   };
 
-  const resetView = () => flyTo(PRESET_DIRS.iso, 2.6);
+  const resetView = () => flyTo(PRESET_DIRS.iso, LOOK.camera.fitMul);
 
   /* keyboard camera controls on the canvas host */
   const onKeyDown = (ev: React.KeyboardEvent) => {
@@ -406,16 +388,16 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     const Y = new THREE.Vector3(0, 1, 0);
     let handled = true;
     switch (ev.key) {
-      case "ArrowLeft": off.applyAxisAngle(Y, 0.12); break;
-      case "ArrowRight": off.applyAxisAngle(Y, -0.12); break;
+      case "ArrowLeft": off.applyAxisAngle(Y, LOOK.feel.keyOrbitStep); break;
+      case "ArrowRight": off.applyAxisAngle(Y, -LOOK.feel.keyOrbitStep); break;
       case "ArrowUp": case "ArrowDown": {
         const sph = new THREE.Spherical().setFromVector3(off);
-        sph.phi = THREE.MathUtils.clamp(sph.phi + (ev.key === "ArrowUp" ? -0.1 : 0.1), 0.05, Math.PI * 0.49);
+        sph.phi = THREE.MathUtils.clamp(sph.phi + (ev.key === "ArrowUp" ? -1 : 1) * LOOK.feel.keyPolarStep, 0.05, LOOK.camera.maxPolarAngle);
         off.setFromSpherical(sph);
         break;
       }
-      case "+": case "=": off.multiplyScalar(0.88); break;
-      case "-": case "_": off.multiplyScalar(1.14); break;
+      case "+": case "=": off.multiplyScalar(LOOK.feel.keyZoomIn); break;
+      case "-": case "_": off.multiplyScalar(LOOK.feel.keyZoomOut); break;
       case "r": case "R": case "0": resetView(); ev.preventDefault(); return;
       default: handled = false;
     }
@@ -461,7 +443,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
             <div className="nxV3Seg" role="group" aria-label="Camera angle">
               {(Object.keys(PRESET_DIRS) as Preset[]).map((p) => (
                 <button key={p} type="button" className="nxV3SegBtn" data-testid={`viewer3d-preset-${p}`}
-                  onClick={() => flyTo(PRESET_DIRS[p], p === "top" ? 2.2 : 2.6)}>
+                  onClick={() => flyTo(PRESET_DIRS[p], p === "top" ? LOOK.camera.topMul : LOOK.camera.fitMul)}>
                   {p[0].toUpperCase() + p.slice(1)}
                 </button>
               ))}
