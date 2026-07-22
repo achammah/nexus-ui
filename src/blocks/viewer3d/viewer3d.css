@@ -235,8 +235,152 @@
 .nxV3PosterBody { max-width: 360px; }
 .nxV3Poster--error .nxV3Btn { margin-top: var(--nx-gap-2); }
 
-/* mobile: tighter toolbar */
+/* ---- imported-model badge ---- */
+.nxV3Badge {
+  font: var(--nx-text-micro);
+  color: var(--nx-fg-muted);
+  border: 1px solid var(--nx-border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- contextual sub-toolbar (measure / elevation dir / section cut / sun) ---- */
+.nxV3SubBar {
+  display: flex;
+  align-items: center;
+  gap: var(--nx-gap-3);
+  padding: var(--nx-gap-1) var(--nx-gap-4);
+  border-bottom: 1px solid var(--nx-border);
+  background: var(--nx-bg-raised);
+  flex-wrap: wrap;
+  min-height: 34px;
+}
+.nxV3SubHint { font: var(--nx-text-meta); color: var(--nx-fg-muted); }
+.nxV3Slider {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--nx-gap-2);
+  font: var(--nx-text-meta);
+  color: var(--nx-fg-muted);
+}
+.nxV3Slider input[type="range"] { width: 180px; accent-color: var(--nx-accent); }
+
+/* ---- 2D technical plan sheet ---- */
+.nxV3PlanWrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--nx-gap-3);
+  overflow: auto;
+  background: var(--nx-bg-sunken);
+}
+.nxV3Plan {
+  width: 100%;
+  height: 100%;
+  max-width: 1400px;
+  box-shadow: var(--nx-shadow-2);
+  border: 1px solid var(--nx-border);
+  border-radius: 2px;
+}
+.nxV3Plan--measure { cursor: crosshair; }
+
+/* ---- drag-drop overlay + import progress ---- */
+.nxV3Drop {
+  position: absolute;
+  inset: var(--nx-gap-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--nx-accent);
+  border-radius: var(--nx-radius-m);
+  background: color-mix(in srgb, var(--nx-accent) 10%, transparent);
+  color: var(--nx-fg);
+  font: var(--nx-text-body);
+  pointer-events: none;
+  z-index: 4;
+}
+.nxV3Progress {
+  width: min(260px, 70%);
+  height: 4px;
+  border-radius: 999px;
+  background: var(--nx-border);
+  overflow: hidden;
+}
+.nxV3Progress > div {
+  height: 100%;
+  background: var(--nx-accent);
+  border-radius: 999px;
+  transition: width var(--nx-t-fast) var(--nx-ease);
+}
+
+/* ---- room schedule ---- */
+.nxV3Schedule {
+  position: absolute;
+  top: var(--nx-gap-3);
+  right: var(--nx-gap-3);
+  bottom: var(--nx-gap-3);
+  width: min(460px, calc(100% - 2 * var(--nx-gap-3)));
+  overflow: auto;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-2);
+  z-index: 5;
+}
+.nxV3ScheduleHead {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--nx-gap-2) var(--nx-gap-3);
+  font: var(--nx-text-title);
+  color: var(--nx-fg);
+  background: var(--nx-bg-raised);
+  border-bottom: 1px solid var(--nx-border);
+}
+.nxV3Schedule table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--nx-text-meta);
+  color: var(--nx-fg);
+}
+.nxV3Schedule th {
+  text-align: left;
+  font: var(--nx-text-micro);
+  letter-spacing: var(--nx-tracking-micro);
+  text-transform: uppercase;
+  color: var(--nx-fg-faint);
+  padding: var(--nx-gap-2) var(--nx-gap-3) var(--nx-gap-1);
+  border-bottom: 1px solid var(--nx-border);
+}
+.nxV3Schedule td {
+  padding: 5px var(--nx-gap-3);
+  border-bottom: 1px solid color-mix(in srgb, var(--nx-border) 55%, transparent);
+  white-space: nowrap;
+}
+.nxV3SchedLevel td {
+  font: var(--nx-text-micro);
+  letter-spacing: var(--nx-tracking-micro);
+  text-transform: uppercase;
+  color: var(--nx-accent);
+  background: color-mix(in srgb, var(--nx-accent) 6%, transparent);
+}
+.nxV3SchedTotal td { color: var(--nx-fg-muted); font-weight: 600; }
+.nxV3SchedGrand td { color: var(--nx-fg); border-top: 2px solid var(--nx-border-strong); }
+
+/* mobile: tighter toolbar; the plan sheet scrolls, the schedule goes full-bleed */
 @media (max-width: 640px) {
   .nxV3Bar { padding: var(--nx-gap-2) var(--nx-gap-3); }
   .nxV3Title { display: none; }
+  .nxV3Plan { min-width: 560px; height: auto; }
+  .nxV3PlanWrap { align-items: flex-start; }
+  .nxV3Schedule { inset: var(--nx-gap-2); width: auto; }
+  .nxV3Slider input[type="range"] { width: 120px; }
 }

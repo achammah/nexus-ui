@@ -1,25 +1,37 @@
-// Viewer3D surface — the heavy chunk (three.js). Renders an OBJECT viewer
-// (glTF or procedural model: orbit/zoom/pan, 360° spin, auto-rotate, camera
-// presets, wireframe, env lighting + soft shadow) or a FLOORPLAN viewer
-// (extruded walls per level, level switcher, room labels, top-down ↔ 3D),
-// both with data-driven clickable hotspots. Free-surface contract: host owns
-// the snapshot (value/onChange/reloadNonce), this component owns the WebGL
-// lifecycle, token-derived materials and the dark/light re-theme.
+// Viewer3D surface — the heavy chunk (three.js). Two modes:
+//   OBJECT — real model import (glTF/GLB/OBJ via URL, file picker or drag-drop)
+//   or a procedural fallback; orbit/zoom/pan, presets, 360° spin, auto-rotate,
+//   wireframe, PNG export, IBL + soft shadows, data-driven hotspots.
+//   FLOORPLAN — an architect-grade drawing set: 2D technical PLAN (SVG with
+//   chain dimensions, door swings, scale bar, north arrow, title block), 3D
+//   perspective, sun-lit RENDER mode, orthographic ELEVATION / SECTION / AXON
+//   views, a room SCHEDULE, an interactive measure tool and metric/imperial
+//   units — all derived from one rooms+openings config.
+// Free-surface contract: host owns the snapshot (value/onChange/reloadNonce),
+// this component owns the WebGL lifecycle, token-derived materials and the
+// dark/light re-theme.
 import * as React from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { useThemeNonce } from "../workbook/workbook-theme";
 import { buildLevel, buildSedan, setLevelGhost, type BuiltLevel } from "./builders";
-import { derivePalette, envIntensity, fitDistance, fitFor, groundShadowOpacity, EASE, LOOK, PRESET_DIRS, type Preset } from "./look";
-import { seedScene, type Viewer3DHotspot, type Viewer3DSnapshot } from "./scene";
+import { loadFromFiles, loadFromSource, normalizeModel, ModelError, type LoadedModel } from "./loaders";
+import {
+  AXON_DIR, derivePalette, derivePlanPalette, ELEV_DIRS, envIntensity, EASE, fitDistance, fitFor,
+  groundShadowOpacity, LOOK, ORTHO, PRESET_DIRS, SUN, sunFor, type ElevationDir, type Preset,
+} from "./look";
+import { formatArea, formatLen, levelArea, polyArea, roomDims } from "./plan-geometry";
+import { Plan2D, type Plan2DHandle } from "./Plan2D";
+import {
+  seedScene, type PlanView, type Viewer3DHotspot, type Viewer3DSnapshot, type Viewer3DUnits,
+} from "./scene";
 import "./viewer3d.css";
 
 export interface Viewer3DSurfaceProps {
   /* the scene to load; null seeds the vehicle demo */
   value: Viewer3DSnapshot | null;
-  /* fired when persisted viewer state changes (auto-rotate, active level) */
+  /* fired when persisted viewer state changes (auto-rotate, active level, view, units) */
   onChange?: (snapshot: Viewer3DSnapshot) => void;
   /* bump to force a fresh mount from the current `value` */
   reloadNonce?: number;
@@ -36,15 +48,25 @@ type Anim =
 interface Engine {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera;
+  persp: THREE.PerspectiveCamera;
+  ortho: THREE.OrthographicCamera;
+  camera: THREE.Camera;           // the ACTIVE camera (persp or ortho)
   controls: OrbitControls;
+  key: THREE.DirectionalLight;
+  sun: THREE.DirectionalLight;
   model: THREE.Group;             // object model OR all levels
   levels: Map<string, BuiltLevel>;
   sphere: THREE.Sphere;           // fit sphere of the ACTIVE content
+  box: THREE.Box3;
   raycaster: THREE.Raycaster;
   pmrem: THREE.PMREMGenerator;
+  clip: THREE.Plane;
   anim: Anim | null;
   frame: number;
+  /* re-run framing/ground/shadow fit after the model content changed */
+  refit: () => void;
+  /* blob-URL release for a user-imported model */
+  userRelease: (() => void) | null;
   dispose: () => void;
 }
 
@@ -56,14 +78,32 @@ function disposeObject(root: THREE.Object3D): void {
     const m = o as THREE.Mesh;
     if (m.geometry) m.geometry.dispose();
     const mats = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
-    mats.forEach((mat) => mat.dispose());
+    mats.forEach((mat) => {
+      /* imported models carry textures — release them with the material */
+      const sm = mat as THREE.MeshStandardMaterial;
+      for (const k of ["map", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "emissiveMap", "alphaMap"] as const) {
+        (sm[k] as THREE.Texture | null)?.dispose();
+      }
+      mat.dispose();
+    });
   });
 }
+
+const PLAN_VIEWS: { id: PlanView; label: string }[] = [
+  { id: "plan", label: "Plan" },
+  { id: "3d", label: "3D" },
+  { id: "render", label: "Render" },
+  { id: "elevation", label: "Elevation" },
+  { id: "section", label: "Section" },
+  { id: "axon", label: "Axon" },
+];
 
 export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, actions, ...rest }: Viewer3DSurfaceProps) {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const overlayRef = React.useRef<HTMLDivElement>(null);
   const engineRef = React.useRef<Engine | null>(null);
+  const planRef = React.useRef<Plan2DHandle>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
   const snapRef = React.useRef<Viewer3DSnapshot>(value ?? seedScene());
   const [phase, setPhase] = React.useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = React.useState("");
@@ -79,10 +119,26 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
   const [wireframe, setWireframe] = React.useState(false);
   const [activeLevel, setActiveLevel] = React.useState(
     snap.activeLevel ?? snap.floorplan?.levels[0]?.id ?? "");
-  const [topDown, setTopDown] = React.useState(false);
+  const [planView, setPlanView] = React.useState<PlanView>(
+    mode === "floorplan" ? (snap.planView ?? "plan") : "3d");
+  const [units, setUnits] = React.useState<Viewer3DUnits>(snap.units ?? "metric");
+  const [elevDir, setElevDir] = React.useState<ElevationDir>("south");
+  const [sectionAxis, setSectionAxis] = React.useState<"x" | "z">("x");
+  const [sectionPos, setSectionPos] = React.useState(0.5);
+  const [sunHour, setSunHour] = React.useState(SUN.hourDefault);
+  const [measuring, setMeasuring] = React.useState(false);
+  const [scheduleOpen, setScheduleOpen] = React.useState(false);
   const [openHotspot, setOpenHotspot] = React.useState<Viewer3DHotspot | null>(null);
+  const [importPct, setImportPct] = React.useState<number | null | false>(false); // false = idle
+  const [importedName, setImportedName] = React.useState<string | null>(null);
+  const [dragOver, setDragOver] = React.useState(false);
   const onChangeRef = React.useRef(onChange);
   onChangeRef.current = onChange;
+
+  /* the WebGL engine exists except in the pure-2D plan view */
+  const engineOn = mode === "object" || planView !== "plan";
+  const showOverlay = mode === "object" || planView === "3d" || planView === "render";
+  const allowImport = mode === "object" && snap.object?.allowImport !== false;
 
   const visibleHotspots = React.useMemo(
     () => snap.hotspots.filter((h) => mode === "object" || !h.level || h.level === activeLevel),
@@ -91,27 +147,36 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
   const anchorsRef = React.useRef<{ label: string; roomId: string; pos: THREE.Vector3 }[]>([]);
   const [labelIds, setLabelIds] = React.useState<{ roomId: string; label: string }[]>([]);
 
+  const persist = (patch: Partial<Viewer3DSnapshot>) => {
+    const next = { ...snapRef.current, ...patch };
+    snapRef.current = next;
+    onChangeRef.current?.(next);
+  };
+
   /* ---- mount the engine ---- */
   React.useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    if (!host || !engineOn) { setPhase("ready"); return; }
     let cancelled = false;
     setPhase("loading");
     setOpenHotspot(null);
+    setImportedName(null);
     const s = snapRef.current;
 
     const renderer = new THREE.WebGLRenderer({ antialias: LOOK.renderer.antialias, alpha: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, LOOK.renderer.pixelRatioCap));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.VSMShadowMap; // radius-blurred soft shadows
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = LOOK.renderer.toneMappingExposure;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.localClippingEnabled = true;
     host.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(LOOK.camera.fov, 1, LOOK.camera.near, LOOK.camera.far);
-    const controls = new OrbitControls(camera, renderer.domElement);
+    const persp = new THREE.PerspectiveCamera(LOOK.camera.fov, 1, LOOK.camera.near, LOOK.camera.far);
+    const ortho = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.01, 500);
+    const controls = new OrbitControls(persp, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = LOOK.feel.damping;
     controls.autoRotateSpeed = LOOK.feel.autoRotateSpeed;
@@ -128,7 +193,13 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     key.shadow.mapSize.set(LOOK.renderer.shadowMapSize, LOOK.renderer.shadowMapSize);
     key.shadow.radius = LOOK.renderer.shadowRadius;
     key.shadow.bias = LOOK.renderer.shadowBias;
-    scene.add(hemi, key);
+    const sun = new THREE.DirectionalLight("#ffffff", 0);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(LOOK.renderer.shadowMapSize, LOOK.renderer.shadowMapSize);
+    sun.shadow.radius = LOOK.renderer.shadowRadius * 0.5;
+    sun.shadow.bias = LOOK.renderer.shadowBias;
+    sun.visible = false;
+    scene.add(hemi, key, sun);
 
     const pal = derivePalette(s.object?.paint);
     const model = new THREE.Group();
@@ -136,14 +207,17 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     const levels = new Map<string, BuiltLevel>();
 
     const engine: Engine = {
-      renderer, scene, camera, controls, model, levels,
-      sphere: new THREE.Sphere(new THREE.Vector3(), 3),
-      raycaster: new THREE.Raycaster(), pmrem, anim: null, frame: 0,
+      renderer, scene, persp, ortho, camera: persp, controls, key, sun, model, levels,
+      sphere: new THREE.Sphere(new THREE.Vector3(), 3), box: new THREE.Box3(),
+      raycaster: new THREE.Raycaster(), pmrem, clip: new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0),
+      anim: null, frame: 0, userRelease: null,
+      refit: () => {},
       dispose: () => {
         cancelAnimationFrame(engine.frame);
         ro.disconnect();
         controls.dispose();
         disposeObject(scene);
+        engine.userRelease?.();
         scene.environment?.dispose();
         pmrem.dispose();
         renderer.dispose();
@@ -157,18 +231,20 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     // test hook: journeys assert engine state (ghosting, camera) through this
     (host as HTMLDivElement & { __nxV3?: Engine }).__nxV3 = engine;
 
-    const finishSetup = () => {
+    engine.refit = () => {
       if (cancelled) return;
       // size the camera from the host FIRST — framing is aspect-dependent and the
       // ResizeObserver has not fired yet, so camera.aspect is still its 1:1 default
       const hw = host.clientWidth, hh = host.clientHeight;
       if (hw && hh) {
         renderer.setSize(hw, hh, false);
-        camera.aspect = hw / hh;
-        camera.updateProjectionMatrix();
+        persp.aspect = hw / hh;
+        persp.updateProjectionMatrix();
       }
       // fit sphere + ground under the content
+      scene.getObjectByName("nx-ground")?.removeFromParent();
       const box = new THREE.Box3().setFromObject(model);
+      engine.box.copy(box);
       box.getBoundingSphere(engine.sphere);
       const r = Math.max(engine.sphere.radius, 1);
       const G = LOOK.ground, C = LOOK.camera, fit0 = fitFor(s.mode);
@@ -186,12 +262,14 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       key.position.copy(engine.sphere.center).add(new THREE.Vector3(...L.key.dir).multiplyScalar(r * 2));
       key.target.position.copy(engine.sphere.center);
       key.target.updateMatrixWorld();
-      key.shadow.camera.left = key.shadow.camera.bottom = -r * G.frustumMul;
-      key.shadow.camera.right = key.shadow.camera.top = r * G.frustumMul;
-      key.shadow.camera.far = r * G.farMul;
-      key.shadow.camera.updateProjectionMatrix();
+      for (const light of [key, sun]) {
+        light.shadow.camera.left = light.shadow.camera.bottom = -r * G.frustumMul;
+        light.shadow.camera.right = light.shadow.camera.top = r * G.frustumMul;
+        light.shadow.camera.far = r * G.farMul;
+        light.shadow.camera.updateProjectionMatrix();
+      }
       controls.minDistance = r * C.minDistanceMul;
-      controls.maxDistance = Math.max(r * C.maxDistanceMul, fitDistance(r, camera.aspect, fit0.mul) * 1.6);
+      controls.maxDistance = Math.max(r * C.maxDistanceMul, fitDistance(r, persp.aspect, fit0.mul) * 1.6);
       controls.target.copy(engine.sphere.center);
       if (s.mode === "floorplan") {
         // aim low: the ghosted upper level pulls the fit sphere up and would sit
@@ -201,9 +279,9 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       }
       const fit = fitFor(s.mode);
       const dir = new THREE.Vector3(...fit.dir).normalize();
-      camera.position.copy(engine.sphere.center)
-        .addScaledVector(dir, fitDistance(r, camera.aspect, fit.mul));
-      camera.lookAt(engine.sphere.center);
+      persp.position.copy(engine.sphere.center)
+        .addScaledVector(dir, fitDistance(r, persp.aspect, fit.mul));
+      persp.lookAt(engine.sphere.center);
       controls.update();
       setPhase("ready");
     };
@@ -215,43 +293,44 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       const minZ = Math.min(...all.map((p) => p[1])), maxZ = Math.max(...all.map((p) => p[1]));
       model.position.set(-(minX + maxX) / 2, 0, -(minZ + maxZ) / 2);
       s.floorplan.levels.forEach((lvl, i) => {
-        const built = buildLevel(lvl, pal, i);
+        const built = buildLevel(lvl, pal, i, s.floorplan?.wallThickness ?? 0.15);
         levels.set(lvl.id, built);
         model.add(built.group);
       });
-      finishSetup();
-    } else if (s.object?.source.type === "gltf") {
-      new GLTFLoader().load(
-        s.object.source.url,
-        (gltf) => {
+      engine.refit();
+    } else if (s.object && s.object.source.type !== "procedural") {
+      setImportPct(null);
+      loadFromSource(s.object.source, (pct) => { if (!cancelled) setImportPct(pct); })
+        .then((loaded: LoadedModel) => {
+          if (cancelled) { loaded.release(); disposeObject(loaded.object); return; }
+          normalizeModel(loaded.object, s.object?.scale ?? 1, s.object?.up ?? "y");
+          model.add(loaded.object);
+          engine.userRelease = loaded.release;
+          setImportedName(loaded.name);
+          setImportPct(false);
+          engine.refit();
+        })
+        .catch((e: unknown) => {
           if (cancelled) return;
-          const obj = gltf.scene;
-          // normalize: center on origin, rest on the floor, ~4.5m max dimension
-          const box = new THREE.Box3().setFromObject(obj);
-          const size = box.getSize(new THREE.Vector3());
-          const scale = 4.5 / Math.max(size.x, size.y, size.z, 0.001);
-          obj.scale.setScalar(scale);
-          box.setFromObject(obj);
-          const c = box.getCenter(new THREE.Vector3());
-          obj.position.sub(c).setY(obj.position.y - box.min.y);
-          obj.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
-          model.add(obj);
-          finishSetup();
-        },
-        undefined,
-        () => { if (!cancelled) { setErrorMsg("The 3D model could not be loaded."); setPhase("error"); } },
-      );
+          setImportPct(false);
+          setErrorMsg(e instanceof ModelError ? e.message : "The 3D model could not be loaded.");
+          setPhase("error");
+        });
     } else {
       model.add(buildSedan(pal));
-      finishSetup();
+      engine.refit();
     }
 
     const ro = new ResizeObserver(() => {
       const w = host.clientWidth, h = host.clientHeight;
       if (!w || !h) return;
       renderer.setSize(w, h, false);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
+      persp.aspect = w / h;
+      persp.updateProjectionMatrix();
+      const halfH = engine.sphere.radius * ORTHO.fitMul;
+      const halfW = halfH * (w / h);
+      ortho.left = -halfW; ortho.right = halfW; ortho.top = halfH; ortho.bottom = -halfH;
+      ortho.updateProjectionMatrix();
     });
     ro.observe(host);
 
@@ -265,30 +344,30 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
         const p = Math.min((now - a.t0) / a.ms, 1);
         if (a.kind === "fly") {
           const e = EASE(p);
-          camera.position.lerpVectors(a.fromP, a.toP, e);
+          persp.position.lerpVectors(a.fromP, a.toP, e);
           controls.target.lerpVectors(a.fromT, a.toT, e);
         } else {
           const e = EASE(p);
           const delta = (e - a.last) * Math.PI * 2;
           a.last = e;
-          camera.position.sub(controls.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), delta).add(controls.target);
+          persp.position.sub(controls.target).applyAxisAngle(new THREE.Vector3(0, 1, 0), delta).add(controls.target);
         }
         if (p >= 1) engine.anim = null;
       }
       controls.update();
-      renderer.render(scene, camera);
+      renderer.render(scene, engine.camera);
 
       const overlay = overlayRef.current;
       if (overlay) {
         const w = host.clientWidth, h = host.clientHeight;
         const project = (el: HTMLElement, pos: THREE.Vector3, occludable: boolean) => {
-          v.copy(pos).project(camera);
+          v.copy(pos).project(engine.camera);
           const behind = v.z > 1;
           el.style.transform = `translate(-50%, -50%) translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px)`;
           el.style.visibility = behind ? "hidden" : "visible";
           if (occludable) {
-            engine.raycaster.set(camera.position, v.copy(pos).sub(camera.position).normalize());
-            const dist = camera.position.distanceTo(pos);
+            engine.raycaster.set((engine.camera as THREE.PerspectiveCamera).position, v.copy(pos).sub((engine.camera as THREE.PerspectiveCamera).position).normalize());
+            const dist = (engine.camera as THREE.PerspectiveCamera).position.distanceTo(pos);
             const hits = engine.raycaster.intersectObject(engine.model, true);
             el.classList.toggle("nxV3Pin--occluded", hits.length > 0 && hits[0].distance < dist - 0.18);
             v.copy(pos); // restore (v was reused)
@@ -311,15 +390,50 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       engineRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadNonce, innerNonce]);
+  }, [reloadNonce, innerNonce, engineOn]);
+
+  /* ---- model import (object mode) ---- */
+
+  const importFiles = React.useCallback(async (files: File[]) => {
+    const e = engineRef.current;
+    if (!e || snapRef.current.mode !== "object") return;
+    setImportPct(5);
+    try {
+      const loaded = await loadFromFiles(files, (pct) => setImportPct(pct));
+      /* replace: dispose + release the previous content, keep the group */
+      const eng = engineRef.current;
+      if (!eng) { loaded.release(); disposeObject(loaded.object); return; }
+      [...eng.model.children].forEach((c) => { disposeObject(c); c.removeFromParent(); });
+      eng.userRelease?.();
+      normalizeModel(loaded.object, snapRef.current.object?.scale ?? 1);
+      eng.model.add(loaded.object);
+      eng.userRelease = loaded.release;
+      setImportedName(loaded.name);
+      setImportPct(false);
+      setPhase("ready");
+      eng.refit();
+    } catch (err) {
+      setImportPct(false);
+      setErrorMsg(err instanceof ModelError ? err.message : "The model could not be imported.");
+      setPhase("error");
+    }
+  }, []);
+
+  const onDrop = (ev: React.DragEvent) => {
+    if (!allowImport) return;
+    ev.preventDefault();
+    setDragOver(false);
+    const files = [...ev.dataTransfer.files];
+    if (files.length) void importFiles(files);
+  };
 
   /* ---- reactive engine state (no remount) ---- */
 
   // auto-rotate (forced off under prefers-reduced-motion)
   React.useEffect(() => {
     const e = engineRef.current;
-    if (e) e.controls.autoRotate = autoRotate && !reduced && phase === "ready";
-  }, [autoRotate, reduced, phase]);
+    if (e) e.controls.autoRotate = autoRotate && !reduced && phase === "ready" && (mode === "object" || planView === "3d" || planView === "render");
+  }, [autoRotate, reduced, phase, mode, planView]);
 
   // wireframe
   React.useEffect(() => {
@@ -337,12 +451,15 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
   React.useEffect(() => {
     const e = engineRef.current;
     if (!e || mode !== "floorplan" || phase !== "ready") return;
-    e.levels.forEach((built, id) => setLevelGhost(built.group, id !== activeLevel));
+    /* level ghosting is a NAVIGATION aid for the interactive 3D view; whole-
+       building views (elevation/section/axon/render) show every level solid */
+    const ghosting = planView === "3d";
+    e.levels.forEach((built, id) => setLevelGhost(built.group, ghosting && id !== activeLevel));
     const built = e.levels.get(activeLevel);
     anchorsRef.current = built ? built.anchors.map((a) => ({ ...a, pos: a.pos })) : [];
     setLabelIds(anchorsRef.current.map((a) => ({ roomId: a.roomId, label: a.label })));
     setOpenHotspot(null);
-  }, [activeLevel, mode, phase]);
+  }, [activeLevel, mode, phase, engineOn, planView]);
 
   const flyTo = React.useCallback((dir: [number, number, number], distMul = LOOK.camera.fitMul, ms = LOOK.feel.flyMs) => {
     const e = engineRef.current;
@@ -350,27 +467,101 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     const r = e.sphere.radius;
     const toT = e.sphere.center.clone();
     const toP = toT.clone().addScaledVector(
-      new THREE.Vector3(...dir).normalize(), fitDistance(r, e.camera.aspect, distMul));
+      new THREE.Vector3(...dir).normalize(), fitDistance(r, e.persp.aspect, distMul));
     if (prefersReducedMotion()) {
-      e.camera.position.copy(toP); e.controls.target.copy(toT); e.controls.update();
+      e.persp.position.copy(toP); e.controls.target.copy(toT); e.controls.update();
       return;
     }
-    e.anim = { kind: "fly", t0: performance.now(), ms, fromP: e.camera.position.clone(), fromT: e.controls.target.clone(), toP, toT };
+    e.anim = { kind: "fly", t0: performance.now(), ms, fromP: e.persp.position.clone(), fromT: e.controls.target.clone(), toP, toT };
   }, []);
 
-  // top-down ↔ perspective
+  /* floorplan view rig: camera type, clipping, sun — all in one effect */
   React.useEffect(() => {
-    if (mode !== "floorplan" || phase !== "ready") return;
-    const f = fitFor(mode);
-    flyTo(topDown ? PRESET_DIRS.top : f.dir, topDown ? LOOK.camera.topMul : f.mul);
-  }, [topDown, mode, phase, flyTo]);
+    const e = engineRef.current;
+    if (!e || mode !== "floorplan" || phase !== "ready") return;
+    const host = hostRef.current;
+    const aspect = host && host.clientHeight ? host.clientWidth / host.clientHeight : 1.6;
+    const r = Math.max(e.sphere.radius, 1);
+    const c = e.sphere.center;
+    const orthoView = planView === "elevation" || planView === "section" || planView === "axon";
+
+    if (orthoView) {
+      const dir = planView === "axon" ? AXON_DIR : ELEV_DIRS[sectionOrElevDir(planView, elevDir, sectionAxis)];
+      /* frame the BOX for flat views: fit the facade's width AND height, and aim
+         at the box center (the nav target sits low for perspective framing) */
+      const bc = e.box.getCenter(new THREE.Vector3());
+      const bs = e.box.getSize(new THREE.Vector3());
+      const facadeW = planView === "axon" ? r * 2 : (Math.abs(dir[0]) > 0.5 ? bs.z : bs.x);
+      const facadeH = planView === "axon" ? r * 2 : bs.y;
+      const halfH = Math.max(facadeH / 2, facadeW / (2 * aspect)) * ORTHO.fitMul;
+      e.ortho.left = -halfH * aspect; e.ortho.right = halfH * aspect;
+      e.ortho.top = halfH; e.ortho.bottom = -halfH;
+      e.ortho.near = 0.01; e.ortho.far = r * 20;
+      e.ortho.zoom = 1;
+      e.ortho.position.copy(bc).addScaledVector(new THREE.Vector3(...dir).normalize(), r * ORTHO.camDistMul);
+      e.ortho.up.set(0, 1, 0);
+      e.ortho.lookAt(bc);
+      e.controls.target.copy(bc);
+      e.ortho.updateProjectionMatrix();
+      e.camera = e.ortho;
+      e.controls.object = e.ortho;
+      e.controls.enableRotate = planView === "axon";
+      e.controls.minZoom = ORTHO.zoomMin; e.controls.maxZoom = ORTHO.zoomMax;
+    } else {
+      e.camera = e.persp;
+      e.controls.object = e.persp;
+      e.controls.enableRotate = true;
+    }
+    e.controls.update();
+
+    /* section: one global clipping plane, positioned along the chosen axis */
+    if (planView === "section") {
+      const bb = e.box;
+      const world = e.model.position;
+      if (sectionAxis === "x") {
+        const cut = bb.min.x + (bb.max.x - bb.min.x) * sectionPos;
+        e.clip.normal.set(-1, 0, 0);
+        e.clip.constant = cut;
+        void world;
+      } else {
+        const cut = bb.min.z + (bb.max.z - bb.min.z) * sectionPos;
+        e.clip.normal.set(0, 0, -1);
+        e.clip.constant = cut;
+      }
+      e.renderer.clippingPlanes = [e.clip];
+    } else {
+      e.renderer.clippingPlanes = [];
+    }
+
+    /* render mode: sun on, environment eased down so shadows read */
+    if (planView === "render") {
+      const sd = sunFor(sunHour);
+      e.sun.visible = true;
+      e.sun.intensity = sd.intensity;
+      e.sun.color.set(sd.color);
+      e.sun.position.copy(c).addScaledVector(new THREE.Vector3(...sd.dir).normalize(), r * 3);
+      e.sun.target.position.copy(c);
+      e.sun.target.updateMatrixWorld();
+      e.key.intensity = LOOK.lights.key.intensity * 0.25;
+      e.scene.environmentIntensity = envIntensity() * SUN.envMul;
+    } else {
+      e.sun.visible = false;
+      e.key.intensity = LOOK.lights.key.intensity;
+      e.scene.environmentIntensity = envIntensity();
+    }
+
+    /* render mode earns a real contact shadow; nav/technical views keep it airy */
+    const ground = e.scene.getObjectByName("nx-ground") as THREE.Mesh | undefined;
+    if (ground) (ground.material as THREE.ShadowMaterial).opacity =
+      planView === "render" ? groundShadowOpacity(false) : groundShadowOpacity(true);
+  }, [planView, elevDir, sectionAxis, sectionPos, sunHour, mode, phase]);
 
   // re-theme materials + env when the app theme flips or a skin lands
   React.useEffect(() => {
     const e = engineRef.current;
     if (!e || phase !== "ready") return;
     const pal = derivePalette(snapRef.current.object?.paint);
-    e.scene.environmentIntensity = envIntensity();
+    e.scene.environmentIntensity = envIntensity() * (planView === "render" ? SUN.envMul : 1);
     const ground = e.scene.getObjectByName("nx-ground") as THREE.Mesh | undefined;
     if (ground) (ground.material as THREE.ShadowMaterial).opacity = groundShadowOpacity(mode === "floorplan");
     if (mode === "floorplan") {
@@ -379,7 +570,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
         if (m.isMesh) {
           const mat = m.material as THREE.MeshStandardMaterial;
           if (m.geometry.type === "ShapeGeometry") mat.color.set(pal.floor);
-          else mat.color.set(pal.wall);
+          else if (!mat.userData.baseTransparent) mat.color.set(pal.wall);
         } else if ((o as THREE.LineSegments).isLineSegments) {
           ((o as THREE.LineSegments).material as THREE.LineBasicMaterial).color.set(pal.wallEdge);
         }
@@ -387,12 +578,6 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nonce, phase]);
-
-  const persist = (patch: Partial<Viewer3DSnapshot>) => {
-    const next = { ...snapRef.current, ...patch };
-    snapRef.current = next;
-    onChangeRef.current?.(next);
-  };
 
   const spin360 = () => {
     const e = engineRef.current;
@@ -402,11 +587,33 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
 
   const resetView = () => { const f = fitFor(mode); flyTo(f.dir, f.mul); };
 
+  /* PNG export: plan view rasterizes the SVG sheet; 3D views re-render at 3× */
+  const exportPng = async () => {
+    const project = (snap.floorplan?.meta?.project ?? snap.title ?? "viewer3d").replace(/[^\w-]+/g, "-").toLowerCase();
+    let dataUrl: string | null = null;
+    if (mode === "floorplan" && planView === "plan") {
+      dataUrl = (await planRef.current?.exportPng()) ?? null;
+    } else {
+      const e = engineRef.current;
+      if (!e) return;
+      const prev = e.renderer.getPixelRatio();
+      e.renderer.setPixelRatio(3);
+      e.renderer.render(e.scene, e.camera);
+      dataUrl = e.renderer.domElement.toDataURL("image/png");
+      e.renderer.setPixelRatio(prev);
+    }
+    if (!dataUrl) return;
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `${project}-${mode === "floorplan" ? `${activeLevel}-${planView}` : "view"}.png`;
+    a.click();
+  };
+
   /* keyboard camera controls on the canvas host */
   const onKeyDown = (ev: React.KeyboardEvent) => {
     const e = engineRef.current;
-    if (!e) return;
-    const off = e.camera.position.clone().sub(e.controls.target);
+    if (!e || e.camera !== e.persp) return;
+    const off = e.persp.position.clone().sub(e.controls.target);
     const Y = new THREE.Vector3(0, 1, 0);
     let handled = true;
     switch (ev.key) {
@@ -427,14 +634,24 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
     ev.preventDefault();
     const len = THREE.MathUtils.clamp(off.length(), e.controls.minDistance, e.controls.maxDistance);
     off.setLength(len);
-    e.camera.position.copy(e.controls.target).add(off);
+    e.persp.position.copy(e.controls.target).add(off);
     e.controls.update();
   };
 
   const levels = snap.floorplan?.levels ?? [];
+  const activeLevelObj = levels.find((l) => l.id === activeLevel) ?? levels[0];
   const showPresets = mode === "object" && snap.controls?.presets !== false;
   const showWireframe = mode === "object" && snap.controls?.wireframe !== false;
+  const showExport = snap.controls?.export !== false;
+  const showSchedule = mode === "floorplan" && snap.controls?.schedule !== false;
   const toneClass = (t?: string) => `nxV3Pin--${t || "accent"}`;
+  const planPalette = React.useMemo(() => derivePlanPalette(), [nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setView = (v: PlanView) => {
+    setPlanView(v);
+    setMeasuring(false);
+    persist({ planView: v });
+  };
 
   return (
     <div className={["nxV3", className].filter(Boolean).join(" ")} {...rest}>
@@ -442,10 +659,19 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
         <div className="nxV3BarTitle">
           <span className="nxV3Kicker">{mode === "object" ? "3D object" : "Floor plan"}</span>
           {snap.title && <span className="nxV3Title">{snap.title}</span>}
+          {importedName && <span className="nxV3Badge" data-testid="viewer3d-modelname" title={`Imported model: ${importedName}`}>{importedName}</span>}
         </div>
         <div className="nxV3BarActions">
           {mode === "floorplan" && (
             <>
+              <div className="nxV3Seg" role="group" aria-label="Drawing view">
+                {PLAN_VIEWS.map((v) => (
+                  <button key={v.id} type="button" className="nxV3SegBtn" aria-pressed={planView === v.id}
+                    data-testid={`viewer3d-view-${v.id}`} onClick={() => setView(v.id)}>
+                    {v.label}
+                  </button>
+                ))}
+              </div>
               <div className="nxV3Seg" role="group" aria-label="Floor level">
                 {levels.map((l) => (
                   <button key={l.id} type="button" className="nxV3SegBtn" aria-pressed={activeLevel === l.id}
@@ -455,10 +681,28 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
                   </button>
                 ))}
               </div>
-              <button type="button" className="nxV3Btn" aria-pressed={topDown} data-testid="viewer3d-topdown"
-                onClick={() => setTopDown((t) => !t)}>
-                {topDown ? "3D view" : "Top-down"}
+              <button type="button" className="nxV3Btn" aria-pressed={units === "imperial"} data-testid="viewer3d-units"
+                onClick={() => { const u = units === "metric" ? "imperial" : "metric"; setUnits(u); persist({ units: u }); }}>
+                {units === "metric" ? "m" : "ft"}
               </button>
+              {showSchedule && (
+                <button type="button" className="nxV3Btn" aria-pressed={scheduleOpen} data-testid="viewer3d-schedule-toggle"
+                  onClick={() => setScheduleOpen((o) => !o)}>
+                  Schedule
+                </button>
+              )}
+            </>
+          )}
+          {allowImport && (
+            <>
+              <button type="button" className="nxV3Btn" data-testid="viewer3d-import"
+                onClick={() => fileRef.current?.click()}>
+                Import model
+              </button>
+              <input ref={fileRef} type="file" multiple hidden
+                accept=".glb,.gltf,.obj,.mtl,.bin,.png,.jpg,.jpeg,.webp"
+                data-testid="viewer3d-file"
+                onChange={(ev) => { const f = [...(ev.target.files ?? [])]; ev.target.value = ""; if (f.length) void importFiles(f); }} />
             </>
           )}
           {showPresets && (
@@ -476,7 +720,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
               360°
             </button>
           )}
-          {!reduced && (
+          {!reduced && (mode === "object" || planView === "3d" || planView === "render") && (
             <button type="button" className="nxV3Btn" aria-pressed={autoRotate} data-testid="viewer3d-autorotate"
               onClick={() => { const next = !autoRotate; setAutoRotate(next); persist({ autoRotate: next }); }}>
               Auto-rotate
@@ -488,50 +732,128 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
               Wireframe
             </button>
           )}
-          <button type="button" className="nxV3Btn" data-testid="viewer3d-reset" onClick={resetView}>
-            Reset
-          </button>
+          {showExport && (
+            <button type="button" className="nxV3Btn" data-testid="viewer3d-export" onClick={() => void exportPng()}>
+              PNG
+            </button>
+          )}
+          {engineOn && (
+            <button type="button" className="nxV3Btn" data-testid="viewer3d-reset" onClick={resetView}>
+              Reset
+            </button>
+          )}
           {actions}
         </div>
       </div>
 
-      <div className="nxV3Stage">
-        <div
-          ref={hostRef}
-          className="nxV3Canvas"
-          data-testid="viewer3d-host"
-          role="application"
-          tabIndex={0}
-          aria-label={`3D ${mode === "object" ? "object" : "floor plan"} viewer. Drag to orbit, scroll to zoom, arrow keys rotate, plus and minus zoom, R resets the view.`}
-          onKeyDown={onKeyDown}
-        />
-        {/* hotspots + room labels project over the canvas */}
-        <div ref={overlayRef} className="nxV3Overlay" aria-hidden={phase !== "ready"}>
-          {phase === "ready" && visibleHotspots.map((h) => (
-            <button
-              key={h.id}
-              type="button"
-              className={`nxV3Pin ${toneClass(h.tone)} ${openHotspot?.id === h.id ? "nxV3Pin--open" : ""}`}
-              data-world={h.position.join(",")}
-              data-occlude={mode === "object" ? "1" : "0"}
-              data-testid={`viewer3d-hotspot-${h.id}`}
-              aria-label={`Marker: ${h.label}`}
-              onClick={() => setOpenHotspot((cur) => (cur?.id === h.id ? null : h))}
-            >
-              <span className="nxV3PinDot" />
-              <span className="nxV3PinLabel">{h.label}</span>
-            </button>
-          ))}
-          {phase === "ready" && mode === "floorplan" && labelIds.map(({ roomId, label }) => {
-            const a = anchorsRef.current.find((x) => x.roomId === roomId);
-            if (!a) return null;
-            return (
-              <span key={roomId} className="nxV3RoomLabel" data-world={`${a.pos.x},${a.pos.y},${a.pos.z}`} data-testid={`viewer3d-room-${roomId}`}>
-                {label}
-              </span>
-            );
-          })}
+      {/* contextual sub-toolbar per floorplan view */}
+      {mode === "floorplan" && (planView === "plan" || planView === "elevation" || planView === "section" || planView === "render") && (
+        <div className="nxV3SubBar" data-testid="viewer3d-subbar">
+          {planView === "plan" && (
+            <>
+              <button type="button" className="nxV3Btn" aria-pressed={measuring} data-testid="viewer3d-measure"
+                onClick={() => setMeasuring((m) => !m)}>
+                Measure
+              </button>
+              <span className="nxV3SubHint">{measuring ? "Click two points on the plan to measure." : `Gross internal area ${activeLevelObj ? formatArea(levelArea(activeLevelObj), units) : ""} · total ${formatArea(levels.reduce((s, l) => s + levelArea(l), 0), units)}`}</span>
+            </>
+          )}
+          {planView === "elevation" && (
+            <div className="nxV3Seg" role="group" aria-label="Elevation direction">
+              {(Object.keys(ELEV_DIRS) as ElevationDir[]).map((d) => (
+                <button key={d} type="button" className="nxV3SegBtn" aria-pressed={elevDir === d}
+                  data-testid={`viewer3d-elev-${d}`} onClick={() => setElevDir(d)}>
+                  {d[0].toUpperCase() + d.slice(1)}
+                </button>
+              ))}
+            </div>
+          )}
+          {planView === "section" && (
+            <>
+              <div className="nxV3Seg" role="group" aria-label="Section axis">
+                {(["x", "z"] as const).map((ax) => (
+                  <button key={ax} type="button" className="nxV3SegBtn" aria-pressed={sectionAxis === ax}
+                    data-testid={`viewer3d-section-${ax}`} onClick={() => setSectionAxis(ax)}>
+                    {ax === "x" ? "Long section" : "Cross section"}
+                  </button>
+                ))}
+              </div>
+              <label className="nxV3Slider">
+                <span>Cut</span>
+                <input type="range" min={2} max={98} value={Math.round(sectionPos * 100)} data-testid="viewer3d-section-pos"
+                  onChange={(ev) => setSectionPos(Number(ev.target.value) / 100)} aria-label="Section cut position" />
+              </label>
+            </>
+          )}
+          {planView === "render" && (
+            <label className="nxV3Slider">
+              <span>Sun {String(Math.floor(sunHour)).padStart(2, "0")}:{sunHour % 1 ? "30" : "00"}</span>
+              <input type="range" min={SUN.hourMin * 2} max={SUN.hourMax * 2} value={sunHour * 2} data-testid="viewer3d-sun"
+                onChange={(ev) => setSunHour(Number(ev.target.value) / 2)} aria-label="Sun time of day" />
+            </label>
+          )}
         </div>
+      )}
+
+      <div className="nxV3Stage"
+        onDragOver={allowImport ? (ev) => { ev.preventDefault(); setDragOver(true); } : undefined}
+        onDragLeave={allowImport ? () => setDragOver(false) : undefined}
+        onDrop={allowImport ? onDrop : undefined}
+      >
+        {mode === "floorplan" && planView === "plan" && snap.floorplan && activeLevelObj ? (
+          <div className="nxV3PlanWrap" data-testid="viewer3d-planwrap">
+            <Plan2D
+              ref={planRef}
+              floorplan={snap.floorplan}
+              level={activeLevelObj}
+              units={units}
+              palette={planPalette}
+              hotspots={visibleHotspots}
+              measuring={measuring}
+              onHotspot={(h) => setOpenHotspot((cur) => (cur?.id === h.id ? null : h))}
+            />
+          </div>
+        ) : (
+          <div
+            ref={hostRef}
+            className="nxV3Canvas"
+            data-testid="viewer3d-host"
+            role="application"
+            tabIndex={0}
+            aria-label={`3D ${mode === "object" ? "object" : "floor plan"} viewer. Drag to orbit, scroll to zoom, arrow keys rotate, plus and minus zoom, R resets the view.`}
+            onKeyDown={onKeyDown}
+          />
+        )}
+
+        {/* hotspots + room labels project over the canvas */}
+        {engineOn && (
+          <div ref={overlayRef} className="nxV3Overlay" aria-hidden={phase !== "ready" || !showOverlay} style={showOverlay ? undefined : { display: "none" }}>
+            {phase === "ready" && showOverlay && visibleHotspots.map((h) => (
+              <button
+                key={h.id}
+                type="button"
+                className={`nxV3Pin ${toneClass(h.tone)} ${openHotspot?.id === h.id ? "nxV3Pin--open" : ""}`}
+                data-world={h.position.join(",")}
+                data-occlude={mode === "object" ? "1" : "0"}
+                data-testid={`viewer3d-hotspot-${h.id}`}
+                aria-label={`Marker: ${h.label}`}
+                onClick={() => setOpenHotspot((cur) => (cur?.id === h.id ? null : h))}
+              >
+                <span className="nxV3PinDot" />
+                <span className="nxV3PinLabel">{h.label}</span>
+              </button>
+            ))}
+            {phase === "ready" && showOverlay && mode === "floorplan" && labelIds.map(({ roomId, label }) => {
+              const a = anchorsRef.current.find((x) => x.roomId === roomId);
+              if (!a) return null;
+              return (
+                <span key={roomId} className="nxV3RoomLabel" data-world={`${a.pos.x},${a.pos.y},${a.pos.z}`} data-testid={`viewer3d-room-${roomId}`}>
+                  {label}
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         {openHotspot && (
           <div className="nxV3Card nx-rise-in-sm" role="dialog" aria-label={openHotspot.label} data-testid="viewer3d-detail">
@@ -544,24 +866,84 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
           </div>
         )}
 
-        <div className="nxV3Hint" aria-hidden="true">Drag to orbit · Scroll to zoom · ⇧drag to pan</div>
+        {/* room schedule */}
+        {scheduleOpen && showSchedule && snap.floorplan && (
+          <aside className="nxV3Schedule nx-rise-in-sm" data-testid="viewer3d-schedule" aria-label="Room schedule">
+            <div className="nxV3ScheduleHead">
+              <span>Room schedule</span>
+              <button type="button" className="nxV3CardClose" aria-label="Close schedule" onClick={() => setScheduleOpen(false)}>×</button>
+            </div>
+            <table>
+              <thead>
+                <tr><th>Room</th><th>Area</th><th>W × D</th><th>Ceil.</th><th>Type</th><th>Finish</th></tr>
+              </thead>
+              {levels.map((l) => (
+                <tbody key={l.id}>
+                  <tr className="nxV3SchedLevel"><td colSpan={6}>{l.name}</td></tr>
+                  {l.rooms.map((r) => {
+                    const { w, d } = roomDims(r);
+                    return (
+                      <tr key={r.id} data-testid={`schedule-row-${r.id}`}>
+                        <td>{r.label}</td>
+                        <td>{formatArea(polyArea(r.poly), units)}</td>
+                        <td>{formatLen(w, units)} × {formatLen(d, units)}</td>
+                        <td>{formatLen(r.ceiling ?? l.height, units)}</td>
+                        <td>{r.roomType ?? "—"}</td>
+                        <td>{r.finish ?? "—"}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="nxV3SchedTotal">
+                    <td>Level total</td>
+                    <td data-testid={`schedule-total-${l.id}`}>{formatArea(levelArea(l), units)}</td>
+                    <td colSpan={4} />
+                  </tr>
+                </tbody>
+              ))}
+              <tbody>
+                <tr className="nxV3SchedTotal nxV3SchedGrand">
+                  <td>Gross internal area</td>
+                  <td data-testid="schedule-grand-total">{formatArea(levels.reduce((s, l) => s + levelArea(l), 0), units)}</td>
+                  <td colSpan={4} />
+                </tr>
+              </tbody>
+            </table>
+          </aside>
+        )}
 
-        {phase === "loading" && (
+        {engineOn && <div className="nxV3Hint" aria-hidden="true">Drag to orbit · Scroll to zoom · ⇧drag to pan</div>}
+
+        {dragOver && allowImport && (
+          <div className="nxV3Drop" data-testid="viewer3d-drop" aria-hidden="true">
+            <span>Drop a .glb / .gltf / .obj model (with its .mtl, .bin and textures)</span>
+          </div>
+        )}
+
+        {(phase === "loading" || importPct !== false) && phase !== "error" && (
           <div className="nxV3Poster" data-testid="viewer3d-loading">
             <div className="nxV3PosterGlyph" aria-hidden="true" />
-            <span>Preparing 3D scene…</span>
+            <span>{typeof importPct === "number" ? `Loading model… ${importPct}%` : importPct === null ? "Loading model…" : "Preparing 3D scene…"}</span>
+            {typeof importPct === "number" && (
+              <div className="nxV3Progress"><div style={{ width: `${importPct}%` }} /></div>
+            )}
           </div>
         )}
         {phase === "error" && (
           <div className="nxV3Poster nxV3Poster--error" role="alert" data-testid="viewer3d-error">
             <span className="nxV3PosterTitle">Couldn’t load the model</span>
             <span className="nxV3PosterBody">{errorMsg || "The 3D model could not be loaded."}</span>
-            <button type="button" className="nxV3Btn" onClick={() => setInnerNonce((n) => n + 1)}>Try again</button>
+            <button type="button" className="nxV3Btn" onClick={() => { setErrorMsg(""); setInnerNonce((n) => n + 1); }}>Try again</button>
           </div>
         )}
       </div>
     </div>
   );
+}
+
+/* elevation dir for a section cut: look along the cut axis */
+function sectionOrElevDir(view: PlanView, elevDir: ElevationDir, sectionAxis: "x" | "z"): ElevationDir {
+  if (view === "elevation") return elevDir;
+  return sectionAxis === "x" ? "east" : "south";
 }
 
 export default Viewer3DSurface;

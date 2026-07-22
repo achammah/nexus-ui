@@ -21,7 +21,17 @@ export type {
   Viewer3DFloorplanConfig,
   Viewer3DLevel,
   Viewer3DRoom,
+  Viewer3DOpening,
+  Viewer3DPlanMeta,
+  Viewer3DUnits,
+  PlanView,
 } from "./scene";
+
+/* plan measurement math (areas, dimensions, unit formatting) — light, reusable
+   by hosts that print plan figures outside the viewer (reports, cards) */
+export {
+  polyArea, polyBounds, roomDims, levelArea, formatLen, formatArea,
+} from "./plan-geometry";
 export type { Viewer3DSurfaceProps } from "./Viewer3DSurface";
 
 /* the look/feel dial-board: lighting, exposure, shadow, material response and

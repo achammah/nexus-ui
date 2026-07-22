@@ -94,6 +94,8 @@ export interface Viewer3DLook {
   materials: {
     paint: { metalness: number; roughness: number; clearcoat: number; clearcoatRoughness: number };
     glass: { metalness: number; roughness: number; opacity: number };
+    /* window glazing in the floor plan — pale + see-through, not car glass */
+    glassPlan: { metalness: number; roughness: number; opacity: number };
     tire: { roughness: number };
     metal: { metalness: number; roughness: number };
     lampHead: { emissiveIntensity: number };
@@ -152,6 +154,7 @@ export const LOOK: Viewer3DLook = {
   materials: {
     paint: { metalness: 0.55, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.18 },
     glass: { metalness: 0.2, roughness: 0.08, opacity: 0.88 },
+    glassPlan: { metalness: 0.05, roughness: 0.12, opacity: 0.5 },
     tire: { roughness: 0.85 },
     metal: { metalness: 0.85, roughness: 0.3 },
     lampHead: { emissiveIntensity: 0.7 },
@@ -169,6 +172,7 @@ export const LOOK: Viewer3DLook = {
 export interface ScenePalette {
   paint: string;      // car body
   glass: string;
+  glassPlan: string;  // pale glazing for plan windows
   dark: string;       // tires, trim
   metal: string;      // hubs, mirrors
   headEmissive: string;
@@ -187,6 +191,7 @@ export function derivePalette(paint?: string): ScenePalette {
   return {
     paint: r(paint || "var(--nx-accent)"),
     glass: r("color-mix(in srgb, #0d1320 90%, var(--nx-accent))"),
+    glassPlan: r("color-mix(in srgb, var(--nx-accent) 42%, #9fb9cc)"),
     dark: "#1a1b1e",
     metal: "#b9bdc6",
     headEmissive: "#cfd8e8",
@@ -198,6 +203,91 @@ export function derivePalette(paint?: string): ScenePalette {
     floorAlt: r(`color-mix(in srgb, var(--nx-accent) ${LOOK.materials.floorAltMixPct}%, var(--nx-bg-sunken))`),
   };
 }
+
+/* ---- 2D technical-plan palette (explicit hex so the SVG serializes to PNG
+   without a stylesheet) — re-derived on every theme flip ---- */
+
+export interface PlanPalette {
+  paper: string;      // sheet background
+  ink: string;        // walls, title block rules
+  muted: string;      // secondary text
+  dims: string;       // dimension lines + text
+  floorA: string;
+  floorB: string;
+  accent: string;
+  glass: string;      // window glazing line
+  grid: string;       // faint background grid
+  tones: { accent: string; danger: string; warn: string; ok: string };
+}
+
+export function derivePlanPalette(): PlanPalette {
+  const r = resolveCssColor;
+  return {
+    paper: r("var(--nx-bg)"),
+    ink: r("var(--nx-fg)"),
+    muted: r("var(--nx-fg-muted)"),
+    dims: r("color-mix(in srgb, var(--nx-fg) 72%, var(--nx-bg))"),
+    floorA: r("color-mix(in srgb, var(--nx-fg) 3%, var(--nx-bg))"),
+    floorB: r("color-mix(in srgb, var(--nx-accent) 6%, var(--nx-bg))"),
+    accent: r("var(--nx-accent)"),
+    glass: r("color-mix(in srgb, var(--nx-accent) 55%, var(--nx-fg))"),
+    grid: r("color-mix(in srgb, var(--nx-fg) 7%, var(--nx-bg))"),
+    tones: {
+      accent: r("var(--nx-accent)"),
+      danger: r("var(--nx-danger)"),
+      warn: r("var(--nx-warn)"),
+      ok: r("var(--nx-ok)"),
+    },
+  };
+}
+
+/* ---- render-mode sun: hour (6..20) -> direction, warmth, intensity ---- */
+export const SUN = {
+  hourMin: 6,
+  hourMax: 20,
+  hourDefault: 14,
+  intensityNoon: 2.6,
+  intensityEdge: 1.2,
+  /* environment gets slightly dimmer in render mode so the sun reads */
+  envMul: 0.75,
+  warmEdge: "#ffb268",
+  coolNoon: "#fff4e0",
+};
+
+export function sunFor(hour: number): { dir: [number, number, number]; color: string; intensity: number } {
+  const t = (hour - SUN.hourMin) / (SUN.hourMax - SUN.hourMin); // 0..1
+  const az = (-100 + 200 * t) * (Math.PI / 180);
+  const el = (12 + 53 * Math.sin(Math.PI * t)) * (Math.PI / 180);
+  const edge = Math.abs(t - 0.5) * 2; // 0 noon, 1 edges
+  const mix = (a: number, b: number, k: number) => Math.round(a + (b - a) * k);
+  const pc = (h: string) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const [r1, g1, b1] = pc(SUN.coolNoon), [r2, g2, b2] = pc(SUN.warmEdge);
+  const color = `rgb(${mix(r1, r2, edge)},${mix(g1, g2, edge)},${mix(b1, b2, edge)})`;
+  return {
+    dir: [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)],
+    color,
+    intensity: SUN.intensityNoon + (SUN.intensityEdge - SUN.intensityNoon) * edge,
+  };
+}
+
+/* ---- orthographic views (elevation / section / axonometric) ---- */
+export const ORTHO = {
+  /* frustum half-height in model radii (fit margin) */
+  fitMul: 1.12,
+  camDistMul: 4,
+  zoomMin: 0.4,
+  zoomMax: 8,
+};
+
+export type ElevationDir = "north" | "south" | "east" | "west";
+export const ELEV_DIRS: Record<ElevationDir, [number, number, number]> = {
+  /* the camera stands ON that side looking at the building */
+  north: [0, 0.0001, -1],
+  south: [0, 0.0001, 1],
+  east: [1, 0.0001, 0],
+  west: [-1, 0.0001, 0],
+};
+export const AXON_DIR: [number, number, number] = [1, 0.82, 1];
 
 /* the theme-dependent scalars, in one place */
 export const envIntensity = (): number => (isDarkTheme() ? LOOK.env.intensityDark : LOOK.env.intensityLight);
