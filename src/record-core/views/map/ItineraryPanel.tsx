@@ -235,8 +235,56 @@ export function ItineraryPanel({
     return d;
   }, [departAt]);
   const arrival = result ? new Date(depart.getTime() + result.durationS * 1000) : null;
+
+  /* ── mobile bottom sheet ───────────────────────────────────────────────────
+     On a phone the panel is a real sheet: a drag handle with three snap points
+     (peek = the headline only, half, full = the whole turn-by-turn list) and the
+     map stays interactive above it. Dragging picks the nearest snap; tapping the
+     handle cycles. Desktop ignores all of this (the grip is display:none). */
+  const [snap, setSnap] = React.useState<"peek" | "half" | "full">("half");
+  const dragRef = React.useRef<{ y: number; snap: typeof snap } | null>(null);
+  const ORDER = ["peek", "half", "full"] as const;
+  const onGripDown = (e: React.PointerEvent) => {
+    dragRef.current = { y: e.clientY, snap };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onGripMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const dy = d.y - e.clientY; // up = grow
+    if (Math.abs(dy) < 28) return;
+    const i = ORDER.indexOf(d.snap);
+    const next = ORDER[Math.min(ORDER.length - 1, Math.max(0, i + (dy > 0 ? 1 : -1)))];
+    if (next !== snap) setSnap(next);
+  };
+  const onGripUp = () => { dragRef.current = null; };
+  const cycleSnap = () => setSnap((c) => ORDER[(ORDER.indexOf(c) + 1) % ORDER.length]);
+
   return (
-    <div className="nxMapItinerary" role="region" aria-label="Directions" data-testid="map-itinerary">
+    <div className="nxMapItinerary" role="region" aria-label="Directions" data-testid="map-itinerary" data-snap={snap}>
+      <div
+        className="nxMapSheetGrip"
+        data-testid="map-sheet-grip"
+        role="button"
+        tabIndex={0}
+        aria-label={`Resize directions sheet (${snap})`}
+        onPointerDown={onGripDown}
+        onPointerMove={onGripMove}
+        onPointerUp={onGripUp}
+        onPointerCancel={onGripUp}
+        onClick={cycleSnap}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cycleSnap(); } }}
+      >
+        <span className="nxMapSheetGripBar" aria-hidden />
+      </div>
+      {/* visible even at the peek snap, so the sheet always answers "how long?" */}
+      {result && (
+        <div className="nxMapSheetPeek" data-testid="map-sheet-peek">
+          <strong>{formatDuration(result.durationS)}</strong>
+          <span>{formatDistance(result.distanceM)}</span>
+          {arrival && <span className="nxMapSheetPeekArrive">arrive {clockTime(arrival)}</span>}
+        </div>
+      )}
       <div className="nxMapItinHeader">
         <span className="nxMapItinTitle">
           <Navigation size={15} /> Directions

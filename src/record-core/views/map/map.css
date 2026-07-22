@@ -687,7 +687,8 @@
 @media (max-width: 768px) {
   .nxMapView { height: clamp(380px, 64dvh, 640px); border-radius: var(--nx-radius-m); }
   .nxMapTopLeft { max-width: calc(100% - 20px); right: 10px; }
-  .nxMapTool { width: 40px; height: 40px; } /* bigger touch targets; rail stays vertical + centred */
+  .nxMapTool { width: 44px; height: 44px; } /* 44px minimum touch target; rail stays vertical + centred */
+  .nxMapTool--labelled { width: 44px; min-width: 44px; height: 44px; }
   .nxMapLegend { gap: 10px; padding: 7px 8px; font-size: 11px; max-width: 55%; }
   .nxMapReadouts { bottom: 8px; }
   .nxMapTypePanel { width: min(272px, calc(100vw - 40px)); }
@@ -840,3 +841,62 @@
 .nxMapStepRow { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .nxMapStepRow:hover:not(:disabled) { background: var(--nx-bg-sunken); }
 .nxMapStepRow:disabled { cursor: default; }
+
+/* ── directions bottom sheet (mobile) ──────────────────────────────────────
+   Desktop keeps the docked panel: the grip and the peek bar are hidden and the
+   snap attribute is inert. */
+.nxMapSheetGrip, .nxMapSheetPeek { display: none; }
+
+@media (max-width: 768px) {
+  .nxMapSheetGrip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    margin: -4px 0 2px;
+    border: 0;
+    background: transparent;
+    cursor: grab;
+    touch-action: none; /* the grip owns the vertical drag */
+    flex: none;
+  }
+  .nxMapSheetGripBar { width: 40px; height: 4px; border-radius: 2px; background: var(--nx-border-strong); }
+  .nxMapSheetGrip:active { cursor: grabbing; }
+  .nxMapSheetPeek {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 0 2px 8px;
+    font: var(--nx-text-meta);
+    color: var(--nx-fg-muted);
+    flex: none;
+  }
+  .nxMapSheetPeek strong { font: var(--nx-text-title); color: var(--nx-fg); }
+  .nxMapSheetPeekArrive { color: var(--nx-fg); font-weight: 600; }
+
+  /* snap points — the map stays interactive above the sheet at every one */
+  .nxMapItinerary {
+    display: flex;
+    flex-direction: column;
+    max-height: none;
+    transition: height var(--nx-t-med) var(--nx-ease);
+  }
+  /* heights resolve against the MAP container (the sheet is absolutely
+     positioned inside it), never the viewport — a dvh-sized sheet overflowed
+     above the map and pushed its own drag handle off-screen. */
+  .nxMapItinerary[data-snap="peek"] { height: 128px; }
+  .nxMapItinerary[data-snap="half"] { height: 55%; }
+  .nxMapItinerary[data-snap="full"] { height: 92%; }
+  /* everything under the grip + peek bar scrolls */
+  .nxMapItinerary > .nxMapItinHeader { flex: none; }
+  .nxMapItinerary > .nxMapStops,
+  .nxMapItinerary > .nxMapSteps { overflow-y: auto; }
+  .nxMapItinerary > .nxMapSteps { flex: 1 1 auto; min-height: 0; }
+  /* touch targets */
+  .nxMapStopInput, .nxMapDepartInput { min-height: 44px; }
+  .nxMapAddStop, .nxMapStopSuggestRow { min-height: 44px; }
+  .nxMapProfileBtn { min-width: 44px; min-height: 44px; }
+  .nxMapStepRow { min-height: 44px; }
+  /* the legend must not eat a phone screen while the sheet is open */
+  .nxMapLegend { max-width: 42%; }
+}
