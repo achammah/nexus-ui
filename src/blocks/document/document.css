@@ -1,11 +1,12 @@
 /* DocumentSurface chrome — token-driven, both themes, mobile-aware. The editor itself
    carries its own styles (NotionEditor's inline <style>); this dresses the page shell. */
 
-.nxDoc { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--nx-bg); color: var(--nx-fg); font-family: var(--nx-font-sans); }
+/* transparent so an embedded mount inherits the host surface — see page-workspace.css */
+.nxDoc { display: flex; flex-direction: column; height: 100%; min-height: 0; background: transparent; color: var(--nx-fg); font-family: var(--nx-font-sans); }
 
-/* toolbar */
-.nxDoc-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--nx-gap-3); padding: 8px 14px; border-bottom: 1px solid var(--nx-border); background: var(--nx-bg); position: sticky; top: 0; z-index: 20; }
-.nxDoc-bar-l { display: flex; align-items: baseline; gap: var(--nx-gap-3); min-width: 0; }
+/* the ONE header row: host breadcrumbs (or the doc title) left, controls right */
+.nxDoc-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--nx-gap-3); padding: 6px 14px; border-bottom: 1px solid var(--nx-border); background: var(--nx-bg); position: sticky; top: 0; z-index: 20; min-height: 42px; }
+.nxDoc-bar-l { display: flex; align-items: center; gap: var(--nx-gap-3); flex: 1; min-width: 0; }
 .nxDoc-bar-r { display: flex; align-items: center; gap: 4px; }
 .nxDoc-crumb { display: inline-flex; align-items: center; gap: 6px; font: var(--nx-text-title); color: var(--nx-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42vw; }
 .nxDoc-crumb-ic { font-size: 15px; }
@@ -43,12 +44,19 @@
 /* body */
 .nxDoc-body { display: flex; flex: 1; min-height: 0; }
 .nxDoc-main { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; }
-.nxDoc-page { margin: 0 auto; padding: 0 26px 8vh; }
-.nxDoc.is-narrow .nxDoc-page { max-width: 720px; }
-.nxDoc.is-wide .nxDoc-page { max-width: 940px; }
+/* the trailing runway lets the LAST heading still scroll to the fold line — without it an
+   outline click on a late section cannot land (the container is already at its scroll end)
+   and the jump reads as "stuck". */
+/* SYMMETRIC 72px gutters: the text column stays centred (720/940) and the hover handles
+   (+ / grip / delete) live inside the left gutter, so they render within the scroll
+   container instead of being clipped by its overflow-x. */
+.nxDoc-page { margin: 0 auto; padding: 0 72px 55vh; }
+.nxDoc.is-narrow .nxDoc-page { max-width: 864px; }
+.nxDoc.is-wide .nxDoc-page { max-width: 1084px; }
 .nxDoc-page.has-cover .nxDoc-head { margin-top: -34px; }
 /* the editor fills the page column (its own 760px cap is released inside the surface) */
-.nxDoc .ne-root { max-width: none; min-height: 40vh; padding-left: 8px; }
+.nxDoc .ne-root { max-width: none; min-height: 40vh; padding-left: 0; }
+.nxDoc .ne-handle { left: -70px; }
 
 /* cover */
 .nxDoc-cover { position: relative; height: 190px; width: 100%; }
@@ -57,8 +65,8 @@
 .nxDoc-cover-ctl button { height: 26px; padding: 0 10px; border: 0; background: color-mix(in oklab, #0b0b0b 55%, transparent); color: #fff; border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-meta); backdrop-filter: blur(4px); }
 .nxDoc-cover-ctl button:hover { background: color-mix(in oklab, #0b0b0b 72%, transparent); }
 
-/* header: icon + title */
-.nxDoc-head { padding: 30px 8px 6px; }
+/* header: icon + title — the page's own gutters already align it to the text column */
+.nxDoc-head { padding: 30px 8px 6px 0; }
 .nxDoc-head-ctl { display: flex; align-items: center; gap: 10px; min-height: 34px; }
 .nxDoc-icon { font-size: 46px; line-height: 1; width: 64px; height: 64px; display: grid; place-items: center; border: 0; background: none; cursor: pointer; border-radius: var(--nx-radius-m); transition: background var(--nx-t-fast); }
 .nxDoc-icon:hover { background: var(--nx-bg-sunken); }
@@ -66,7 +74,11 @@
 .nxDoc-addcover { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 0; background: none; color: var(--nx-fg-faint); border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-meta); opacity: 0; transition: opacity var(--nx-t-fast), background var(--nx-t-fast); }
 .nxDoc-head:hover .nxDoc-addcover { opacity: 1; }
 .nxDoc-addcover:hover { background: var(--nx-bg-sunken); color: var(--nx-fg-muted); }
-.nxDoc-title { display: block; width: 100%; border: 0; background: none; color: var(--nx-fg); font: 800 40px/1.15 var(--nx-font-sans); letter-spacing: -.03em; outline: none; padding: 6px 0 2px; margin-top: 4px; }
+/* the title is a real inline-edit field (Notion muscle memory: click it and type) — the
+   hover wash is the affordance that says so; focus drops it and shows the caret. */
+.nxDoc-title { display: block; width: 100%; border: 0; background: none; color: var(--nx-fg); font: 800 40px/1.15 var(--nx-font-sans); letter-spacing: -.03em; outline: none; padding: 6px 8px 2px; margin: 4px 0 0 -8px; border-radius: var(--nx-radius-s); cursor: text; transition: background var(--nx-t-fast) var(--nx-ease); }
+.nxDoc-title:hover { background: var(--nx-bg-sunken); }
+.nxDoc-title:focus { background: none; }
 .nxDoc-title::placeholder { color: var(--nx-fg-faint); }
 
 /* outline rail */
@@ -78,10 +90,23 @@
   .nxDoc-crumb { max-width: 34vw; }
   .nxDoc-count { display: none; }
 }
+/* at the editor's mobile breakpoint the handles go static (NotionEditor's own rule), so the
+   reserved gutter column is released */
 @media (max-width: 640px) {
-  .nxDoc-bar { padding: 7px 10px; }
+  .nxDoc-page { padding-inline: 14px; }
+  /* the handles go in-flow at this width (editor's own touch rule) and eat the reading
+     column — the destructive one leaves the thumb rail; add + reorder stay */
+  .nxDoc .ne-h-del { display: none; }
+  .nxDoc.is-narrow .nxDoc-page { max-width: 720px; }
+  .nxDoc.is-wide .nxDoc-page { max-width: 940px; }
+}
+@media (max-width: 640px) {
+  .nxDoc-bar { padding: 7px 10px; gap: 4px; }
+  .nxDoc-bar-l { flex: 1 1 0; overflow: hidden; }
+  .nxDoc-bar-r { flex: none; }
+  .nxDoc-count { display: none; }
   .nxDoc-btn { padding: 0 7px; }
-  .nxDoc-page { padding: 0 14px 8vh; }
+  .nxDoc-page { padding: 0 14px 45vh; }
   .nxDoc-title { font-size: 30px; }
   .nxDoc-icon { font-size: 38px; width: 52px; height: 52px; }
   .nxDoc-io-pop { position: fixed; left: 8px; right: 8px; top: auto; min-width: 0; }

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronRight, Plus, MoreHorizontal, Star, Copy, Trash2, FileText, Search } from "lucide-react";
+import { ChevronRight, Plus, MoreHorizontal, Star, Copy, Trash2, FileText, Search, PencilLine, PanelLeft } from "lucide-react";
 import { childrenOf, favorites, type PageStore, type PageNode } from "./page-store";
 
 /* PageTree — the workspace sidebar. Renders the page hierarchy (derived live from the flat
@@ -17,16 +17,19 @@ export interface PageTreeProps {
   onFavorite: (id: string) => void;
   onMove: (id: string, newParentId: string | null, afterId?: string | null) => void;
   onToggleExpand: (id: string, open: boolean) => void;
-  onSearch?: () => void; // opens the quick-switcher
+  onRename?: (id: string, title: string) => void;  // double-click a row, or the ••• menu
+  onSearch?: () => void;    // opens the quick-switcher
+  onCollapse?: () => void;  // hides the sidebar (rendered in the tree head, not a panel bar)
   className?: string;
 }
 
 type DropPos = "before" | "after" | "inside";
 
-export function PageTree({ store, activeId, onOpen, onCreate, onDuplicate, onDelete, onFavorite, onMove, onToggleExpand, onSearch, className }: PageTreeProps) {
+export function PageTree({ store, activeId, onOpen, onCreate, onDuplicate, onDelete, onFavorite, onMove, onToggleExpand, onRename, onSearch, onCollapse, className }: PageTreeProps) {
   const [dragId, setDragId] = React.useState<string | null>(null);
   const [drop, setDrop] = React.useState<{ id: string; pos: DropPos } | null>(null);
   const [menuFor, setMenuFor] = React.useState<string | null>(null);
+  const [renaming, setRenaming] = React.useState<string | null>(null);
   const roots = childrenOf(store, null);
   const favs = favorites(store);
 
@@ -48,18 +51,23 @@ export function PageTree({ store, activeId, onOpen, onCreate, onDuplicate, onDel
     else onMove(id, target.parentId, targetId);
   };
 
-  const Node: React.FC<{ page: PageNode; depth: number }> = ({ page, depth }) => {
+  /* a render FUNCTION, not a nested component: a component declared inside the render body
+     is a NEW type on every render, so React unmounts and remounts the whole tree on each
+     state change — which tears down an in-flight rename input (and every focus/drag state)
+     the instant it opens. */
+  const renderNode = (page: PageNode, depth: number): React.ReactNode => {
     const kids = childrenOf(store, page.id);
     const open = store.expanded?.[page.id] ?? false;
     const isDrop = drop?.id === page.id;
     return (
-      <div className="nxTree-branch">
+      <div className="nxTree-branch" key={page.id}>
         <div
           className={`nxTree-row${activeId === page.id ? " is-active" : ""}${dragId === page.id ? " is-dragging" : ""}${isDrop ? " drop-" + drop!.pos : ""}`}
           style={{ paddingInlineStart: 6 + depth * 14 }}
           data-testid={`tree-row-${page.id}`}
           draggable
-          onClick={() => onOpen(page.id)}
+          onClick={() => { if (renaming !== page.id) onOpen(page.id); }}
+          onDoubleClick={(e) => { if (onRename) { e.stopPropagation(); setRenaming(page.id); } }}
           onDragStart={(e) => { setDragId(page.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", page.id); } catch { /* noop */ } }}
           onDragEnd={() => { setDragId(null); setDrop(null); }}
           onDragOver={(e) => {
@@ -76,7 +84,17 @@ export function PageTree({ store, activeId, onOpen, onCreate, onDuplicate, onDel
             {kids.length ? <ChevronRight size={13} /> : <span className="nxTree-dot" />}
           </button>
           <span className="nxTree-ic">{page.icon || <FileText size={14} />}</span>
-          <span className="nxTree-title">{page.title || "Untitled"}</span>
+          {renaming === page.id && onRename ? (
+            <input className="nxTree-rename" autoFocus defaultValue={page.title} data-testid={`tree-rename-${page.id}`}
+              onClick={(e) => e.stopPropagation()}
+              onBlur={(e) => { onRename(page.id, e.currentTarget.value); setRenaming(null); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); onRename(page.id, e.currentTarget.value); setRenaming(null); }
+                else if (e.key === "Escape") { e.preventDefault(); setRenaming(null); }
+              }} />
+          ) : (
+            <span className="nxTree-title">{page.title || "Untitled"}</span>
+          )}
           {page.favorite && <Star size={11} className="nxTree-fav" />}
           <span className="nxTree-actions">
             <button className="nxTree-add" title="Add a page inside" data-testid={`tree-add-${page.id}`} onClick={(e) => { e.stopPropagation(); onCreate(page.id); onToggleExpand(page.id, true); }}><Plus size={13} /></button>
@@ -84,25 +102,27 @@ export function PageTree({ store, activeId, onOpen, onCreate, onDuplicate, onDel
           </span>
           {menuFor === page.id && (
             <div className="nxTree-menu nx-pop-in" data-testid={`tree-menu-${page.id}`} onClick={(e) => e.stopPropagation()}>
+              {onRename && <button onClick={() => { setMenuFor(null); setRenaming(page.id); }} data-testid={`tree-rename-open-${page.id}`}><PencilLine size={14} /> Rename</button>}
               <button onClick={() => { onFavorite(page.id); setMenuFor(null); }} data-testid={`tree-favorite-${page.id}`}><Star size={14} /> {page.favorite ? "Remove favorite" : "Favorite"}</button>
               <button onClick={() => { onDuplicate(page.id); setMenuFor(null); }} data-testid={`tree-dup-${page.id}`}><Copy size={14} /> Duplicate</button>
               <button className="is-danger" onClick={() => { onDelete(page.id); setMenuFor(null); }} data-testid={`tree-del-${page.id}`}><Trash2 size={14} /> Delete</button>
             </div>
           )}
         </div>
-        {open && kids.map((k) => <Node key={k.id} page={k} depth={depth + 1} />)}
+        {open && kids.map((k) => renderNode(k, depth + 1))}
       </div>
     );
   };
 
   return (
     <nav className={`nxTree${className ? " " + className : ""}`} aria-label="Pages" data-testid="page-tree">
+      {/* the tree's own head IS the sidebar head — no separate panel bar above it */}
       <div className="nxTree-head">
-        <span className="nxTree-h">Pages</span>
         <span className="nxTree-head-actions">
           {onSearch && <button className="nxTree-hbtn" title="Search (⌘K)" data-testid="tree-search" onClick={onSearch}><Search size={14} /></button>}
           <button className="nxTree-hbtn" title="New page" data-testid="tree-new-root" onClick={() => onCreate(null)}><Plus size={15} /></button>
         </span>
+        {onCollapse && <button className="nxTree-hbtn" title="Hide sidebar" data-testid="ws-hide-sidebar" onClick={onCollapse}><PanelLeft size={15} /></button>}
       </div>
       {favs.length > 0 && (
         <div className="nxTree-section">
@@ -117,8 +137,8 @@ export function PageTree({ store, activeId, onOpen, onCreate, onDuplicate, onDel
         </div>
       )}
       <div className="nxTree-section">
-        {favs.length > 0 && <div className="nxTree-section-h">Workspace</div>}
-        {roots.map((p) => <Node key={p.id} page={p} depth={0} />)}
+        <div className="nxTree-section-h">Pages</div>
+        {roots.map((p) => renderNode(p, 0))}
         {roots.length === 0 && <button className="nxTree-empty" onClick={() => onCreate(null)}><Plus size={14} /> New page</button>}
         {/* a drop zone to move a page back to the top level */}
         {dragId && (

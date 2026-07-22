@@ -28,6 +28,24 @@ export function outlineFromBlocks(blocks: Block[]): OutlineHeading[] {
   return out;
 }
 
+/* The heading's REAL scroll container. The outline is mounted inside surfaces that may
+   themselves be embedded in a host that owns the scroll, so the container is resolved from
+   the live DOM at use time — never assumed to be `containerRef`. Returns null when the
+   document itself scrolls. */
+function scrollParentOf(el: HTMLElement | null): HTMLElement | null {
+  let n = el?.parentElement ?? null;
+  while (n && n !== document.body && n !== document.documentElement) {
+    const s = getComputedStyle(n);
+    if (/(auto|scroll|overlay)/.test(s.overflowY) && n.scrollHeight > n.clientHeight + 2) return n;
+    n = n.parentElement;
+  }
+  return null;
+}
+
+/* distance from the viewport top at which a heading counts as "the current section" —
+   also the resting offset a jump scrolls to, so click and highlight agree. */
+const FOLD = 24;
+
 export function DocumentOutline({ blocks, containerRef, className, defaultCollapsed, onNavigate }: {
   blocks: Block[];
   containerRef: React.RefObject<HTMLElement | null>;
@@ -38,19 +56,26 @@ export function DocumentOutline({ blocks, containerRef, className, defaultCollap
   const headings = React.useMemo(() => outlineFromBlocks(blocks), [blocks]);
   const [active, setActive] = React.useState<string | null>(null);
   const [collapsed, setCollapsed] = React.useState(!!defaultCollapsed);
+  // a jump pins its target until the smooth scroll settles — otherwise the scroll listener
+  // immediately re-derives the section mid-flight and the highlight snaps back
+  const pinnedUntil = React.useRef(0);
   const findEl = React.useCallback(
     (id: string) => (containerRef.current?.querySelector(`[data-testid="block-${id}"]`) as HTMLElement | null),
     [containerRef],
   );
 
-  // active-section tracking: on scroll, the last heading whose top has crossed the fold line
+  // active-section tracking: the last heading whose top has crossed the fold line. The
+  // scroll listener is CAPTURE-phase on the document, so it hears the scroll whichever
+  // element actually scrolls (scroll events do not bubble, but they do capture).
   React.useEffect(() => {
     if (!headings.length) return;
-    const scroller = containerRef.current;
     let raf = 0;
     const compute = () => {
       raf = 0;
-      const foldTop = (scroller?.getBoundingClientRect().top ?? 0) + 96;
+      if (Date.now() < pinnedUntil.current) return;
+      const first = findEl(headings[0].id);
+      const sc = scrollParentOf(first);
+      const foldTop = (sc ? sc.getBoundingClientRect().top : 0) + FOLD;
       let cur: string | null = headings[0]?.id ?? null;
       for (const h of headings) {
         const el = findEl(h.id); if (!el) continue;
@@ -60,17 +85,26 @@ export function DocumentOutline({ blocks, containerRef, className, defaultCollap
     };
     const onScroll = () => { if (!raf) raf = requestAnimationFrame(compute); };
     compute();
-    const scrolls = scroller && scroller.scrollHeight > scroller.clientHeight + 4;
-    const target: Window | HTMLElement = scrolls ? scroller : window;
-    target.addEventListener("scroll", onScroll, { passive: true } as AddEventListenerOptions);
+    document.addEventListener("scroll", onScroll, { passive: true, capture: true } as AddEventListenerOptions);
     window.addEventListener("resize", onScroll);
-    return () => { cancelAnimationFrame(raf); target.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); };
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener("scroll", onScroll, { capture: true } as AddEventListenerOptions);
+      window.removeEventListener("resize", onScroll);
+    };
   }, [headings, containerRef, findEl]);
 
   const jump = (id: string) => {
     const el = findEl(id);
     if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    const sc = scrollParentOf(el);
+    if (sc) {
+      const top = sc.scrollTop + (el.getBoundingClientRect().top - sc.getBoundingClientRect().top) - FOLD;
+      sc.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    } else {
+      window.scrollTo({ top: Math.max(0, window.scrollY + el.getBoundingClientRect().top - FOLD), behavior: "smooth" });
+    }
+    pinnedUntil.current = Date.now() + 700;
     setActive(id);
     onNavigate?.(id);
   };

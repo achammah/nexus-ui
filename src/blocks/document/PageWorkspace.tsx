@@ -26,10 +26,14 @@ export interface PageWorkspaceProps {
   className?: string;
   readOnly?: boolean;
   documentConfig?: DocumentConfig;   // forwarded to the per-page DocumentSurface
+  /* Set false when the HOST already renders a breadcrumb for this page — the workspace then
+     renders no trail of its own, so the surface never stacks two of them. */
+  breadcrumbs?: boolean;
   "data-testid"?: string;
 }
 
-export function PageWorkspace({ value, onChange, reloadNonce = 0, className, readOnly, documentConfig, ...rest }: PageWorkspaceProps) {
+export function PageWorkspace({ value, onChange, reloadNonce = 0, className, readOnly, documentConfig, breadcrumbs = true, ...rest }: PageWorkspaceProps) {
+  const showCrumbs = breadcrumbs !== false;
   const [store, setStore] = React.useState<PageStore>(() => value ?? seedPageStore());
   const storeRef = React.useRef(store); storeRef.current = store;
   const onChangeRef = React.useRef(onChange); onChangeRef.current = onChange;
@@ -40,7 +44,8 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
     const next = fn(storeRef.current); storeRef.current = next; setStore(next); onChangeRef.current?.(next);
   }, []);
 
-  const [sidebar, setSidebar] = React.useState(true);
+  // on narrow screens the tree is an overlay drawer — it starts closed, as a drawer should
+  const [sidebar, setSidebar] = React.useState(() => (typeof window === "undefined" ? true : window.innerWidth > 820));
   const [switcher, setSwitcher] = React.useState(false);
 
   const active: PageNode | undefined = store.pages[store.activeId ?? ""] ?? rootPages(store)[0];
@@ -86,20 +91,37 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
   const crumbs = breadcrumb(store, active.id);
   const backs = backlinksOf(store, active.id);
 
+  /* Notion: double-clicking the current breadcrumb renames the page — here it hands focus to
+     the page's own title field (the one true title), which is the same gesture, one surface. */
+  const focusTitle = () => {
+    const el = document.querySelector('[data-testid="doc-title"]') as HTMLInputElement | null;
+    el?.focus(); el?.select();
+  };
+
+  /* the workspace ALWAYS owns the header's left slot — a page in a tree already states its
+     name in its own H1, so the surface must never fall back to repeating the title here */
   const topBar = (
     <div className="nxWs-crumbbar" data-testid="ws-breadcrumbs">
-      {!sidebar && <button className="nxWs-iconbtn" title="Show sidebar" onClick={() => setSidebar(true)}><PanelLeft size={15} /></button>}
-      <nav className="nxWs-crumbs">
-        {crumbs.map((c, i) => (
-          <React.Fragment key={c.id}>
-            {i > 0 && <ChevronRight size={13} className="nxWs-crumb-sep" />}
-            <button className={`nxWs-crumb${i === crumbs.length - 1 ? " is-current" : ""}`} data-testid={`crumb-${c.id}`} onClick={() => open(c.id)}>
-              {c.icon && <span className="nxWs-crumb-ic">{c.icon}</span>}{c.title || "Untitled"}
-            </button>
-          </React.Fragment>
-        ))}
-      </nav>
-      <button className="nxWs-kbar" data-testid="ws-search" onClick={() => setSwitcher(true)}><Search size={13} /> Search<kbd>⌘K</kbd></button>
+      {!sidebar && <button className="nxWs-iconbtn" title="Show sidebar" data-testid="ws-show-sidebar" onClick={() => setSidebar(true)}><PanelLeft size={15} /></button>}
+      {showCrumbs && <nav className="nxWs-crumbs">
+        {crumbs.map((c, i) => {
+          const isCurrent = i === crumbs.length - 1;
+          return (
+            <React.Fragment key={c.id}>
+              {i > 0 && <ChevronRight size={13} className="nxWs-crumb-sep" />}
+              <button className={`nxWs-crumb${isCurrent ? " is-current" : ""}`} data-testid={`crumb-${c.id}`}
+                title={isCurrent ? "Double-click to rename" : "Open"}
+                onClick={() => (isCurrent ? focusTitle() : open(c.id))}
+                onDoubleClick={focusTitle}>
+                {c.icon && <span className="nxWs-crumb-ic">{c.icon}</span>}{c.title || "Untitled"}
+              </button>
+            </React.Fragment>
+          );
+        })}
+      </nav>}
+      {/* only alongside the trail — without it the tree head's search is the single, closer
+          entry point, and two search affordances in one row read as clutter */}
+      {showCrumbs && <button className="nxWs-kbar" data-testid="ws-search" onClick={() => setSwitcher(true)}><Search size={13} /><span className="nxWs-kbar-tx">Search</span><kbd>⌘K</kbd></button>}
     </div>
   );
 
@@ -123,11 +145,8 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
     <div className={`nxWs${sidebar ? "" : " is-collapsed"}${className ? " " + className : ""}`} data-testid="page-workspace" {...rest}>
       {sidebar && (
         <aside className="nxWs-sidebar" data-testid="ws-sidebar">
-          <div className="nxWs-sidebar-top">
-            <span className="nxWs-brand"><FileText size={14} /> Workspace</span>
-            <button className="nxWs-iconbtn" title="Hide sidebar" data-testid="ws-hide-sidebar" onClick={() => setSidebar(false)}><PanelLeft size={15} /></button>
-          </div>
           <PageTree
+            onCollapse={() => setSidebar(false)}
             store={store}
             activeId={active.id}
             onOpen={open}
@@ -135,6 +154,7 @@ export function PageWorkspace({ value, onChange, reloadNonce = 0, className, rea
             onDuplicate={(id) => { const r = duplicatePage(storeRef.current, id); mutate(() => setActive(r.store, r.id)); }}
             onDelete={(id) => mutate((s) => deletePage(s, id))}
             onFavorite={(id) => mutate((s) => toggleFavorite(s, id))}
+            onRename={(id, title) => mutate((s) => renamePage(s, id, title))}
             onMove={(id, parent, after) => mutate((s) => movePage(s, id, parent, after))}
             onToggleExpand={(id, o) => mutate((s) => setExpanded(s, id, o))}
             onSearch={() => setSwitcher(true)}

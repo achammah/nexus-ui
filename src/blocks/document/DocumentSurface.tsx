@@ -137,14 +137,17 @@ export function DocumentSurface({ value, onChange, reloadNonce = 0, className, a
 
   return (
     <div className={["nxDoc", wide ? "is-wide" : "is-narrow", className].filter(Boolean).join(" ")} {...rest}>
-      {topBar}
-      {/* toolbar */}
+      {/* ONE header row. A host that supplies a `topBar` (breadcrumbs) owns the left side —
+          the surface does NOT then repeat the document title, which would stack a second
+          heading above the page's own H1. */}
       <div className="nxDoc-bar" data-testid="doc-toolbar">
         <div className="nxDoc-bar-l">
-          <span className="nxDoc-crumb">{snap.icon && <span className="nxDoc-crumb-ic">{snap.icon}</span>}{snap.title || "Untitled"}</span>
-          {showWordCount && <span className="nxDoc-count" data-testid="doc-wordcount">{counts.words} words · {counts.chars} chars</span>}
+          {topBar ?? (
+            <span className="nxDoc-crumb">{snap.icon && <span className="nxDoc-crumb-ic">{snap.icon}</span>}{snap.title || "Untitled"}</span>
+          )}
         </div>
         <div className="nxDoc-bar-r">
+          {showWordCount && <span className="nxDoc-count" data-testid="doc-wordcount">{counts.words} {counts.words === 1 ? "word" : "words"} · {counts.chars} chars</span>}
           {busy && <span className="nxDoc-busy">{busy}…</span>}
           {importing && <span className="nxDoc-busy">Importing…</span>}
           {showFind && (

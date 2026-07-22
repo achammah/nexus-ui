@@ -18,8 +18,22 @@ import { PageWorkspace, type PageStore } from "@nexus/ui";
   onChange={(next) => save(next)}  // fired on every mutation — the host persists the store
   reloadNonce={n}                  // bump to force a fresh mount from `value`
   documentConfig={docConfig}       // forwarded to each page's DocumentSurface
+  breadcrumbs={false}              // set false when the HOST renders its own page breadcrumb
 />
 ```
+
+### Mounting it inside an app shell
+
+The workspace paints **no background of its own** and renders **one** header row, so it reads
+as a native surface rather than a panel dropped into the shell. Two things the host controls:
+
+- **Breadcrumbs are mutually exclusive.** Either the host shows a breadcrumb for the page and
+  you pass `breadcrumbs={false}`, or you let the workspace render the trail (recommended — it
+  is tree-aware, so it shows the full root→here path for nested sub-pages, and each crumb
+  navigates).
+- **Give it a real height.** It fills its container (`height:100%`), so the mount point needs
+  to be a flex child with `flex:1; min-height:0` (or an explicit height) — not an auto-height
+  block, which collapses the internal scroll container.
 
 What you get, out of the box: nested **sub-pages** (infinite), a **tree sidebar** (expand/collapse, drag-to-move before/after/inside, new/duplicate/delete/favorite), **breadcrumbs** (root→here), inline **sub-page blocks** (`/page` or the tree `+`), **`[[`/`@` page-link autocomplete** → clickable links, a **backlinks** panel (“linked references”, with parent/sub-page/link kinds), a **⌘K quick-switcher**, and **full-text search** across pages.
 
