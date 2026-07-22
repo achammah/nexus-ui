@@ -112,14 +112,18 @@ export function accentScale(resolve: (expr: string) => string): ColorScale {
 /* The warm neutral ramp, light role table: 50/100 subtle surfaces, 200/300 borders,
    400..900 a text ramp toward --nx-fg. Univer's stock scale is a cool blue-gray;
    this is the single biggest "foreign widget" tell, so every step comes from our
-   neutral tokens (mix steps fill the gaps between the few tokens we define). */
+   neutral tokens (mix steps fill the gaps between the few tokens we define).
+   gray.300 carries a LOW ACCENT TINT: its one visible canvas consumer is the
+   frozen-pane divider (HeaderFreezeRenderController re-reads it on every
+   setTheme) — a quiet brand rule instead of a heavy gray bar; the DOM chrome
+   reads the independent --univer-* CSS tables, so this stays canvas-scoped. */
 export function neutralScale(resolve: (expr: string) => string): ColorScale {
   const mixFg = (pct: number) => resolve(`color-mix(in srgb, var(--nx-fg) ${pct}%, var(--nx-fg-muted))`);
   return {
     50: resolve("var(--nx-bg)"),
     100: resolve("var(--nx-bg-sunken)"),
     200: resolve("var(--nx-border)"),
-    300: resolve("var(--nx-border-strong)"),
+    300: resolve("color-mix(in srgb, var(--nx-accent) 25%, var(--nx-border))"),
     400: resolve("var(--nx-fg-faint)"),
     500: resolve("var(--nx-fg-muted)"),
     600: mixFg(35),
@@ -155,6 +159,43 @@ export function deriveWorkbookTheme(base: UniverTheme, resolve: (expr: string) =
     red: { ...(base.red as ColorScale), ...semanticScale(resolve, "--nx-danger") },
     green: { ...(base.green as ColorScale), ...semanticScale(resolve, "--nx-ok") },
     yellow: { ...(base.yellow as ColorScale), ...semanticScale(resolve, "--nx-warn") },
+  };
+}
+
+/* Canvas grid theme — the sheet-canvas surfaces the theme object does NOT reach:
+   the gridline stroke (an open `ctx.renderConfig.gridlinesColor` hook, stock
+   fallback rgb(214,216,219)) and the row/column header paint (render-component
+   `setCustomHeader`, stock cool-gray fills + #000 text). Light-anchored like the
+   main theme (Univer's canvas inverts for dark). Gridlines sit SOFTER than the
+   border token — faint guides, the modern-sheet feel — and headers take the sunken
+   surface, muted text, hairline borders and the app's own font. */
+export interface CanvasGridTheme {
+  gridlinesColor: string;
+  header: {
+    backgroundColor: string;
+    fontColor: string;
+    borderColor: string;
+    fontFamily: string;
+  };
+}
+
+export function canvasGridTheme(resolve: (expr: string) => string): CanvasGridTheme {
+  const fontFamily =
+    typeof document !== "undefined" ? getComputedStyle(document.body).fontFamily : "sans-serif";
+  return {
+    // whisper lines: a modern sheet's gridlines are barely-there guides — the
+    // delta against the stock gray mesh must be OBVIOUS at normal zoom
+    gridlinesColor: resolve("color-mix(in srgb, var(--nx-border) 32%, var(--nx-bg-raised))"),
+    header: {
+      // Notion-model chrome: the header band is ACHROMATIC-but-ours — our sunken
+      // surface, our font, our hairlines. Brand color lives in the STATES around
+      // it (the accent freeze rule, the active-header wash + stroke, selection),
+      // which read clearly against the neutral band
+      backgroundColor: resolve("var(--nx-bg-sunken)"),
+      fontColor: resolve("var(--nx-fg-muted)"),
+      borderColor: resolve("var(--nx-border)"),
+      fontFamily,
+    },
   };
 }
 

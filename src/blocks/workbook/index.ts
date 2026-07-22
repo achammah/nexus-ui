@@ -16,6 +16,8 @@ export {
   deriveWorkbookTheme,
   accentScale,
   neutralScale,
+  canvasGridTheme,
+  type CanvasGridTheme,
   resolveCssColor,
   withLightTokens,
   skinSignature,

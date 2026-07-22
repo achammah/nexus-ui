@@ -216,6 +216,20 @@
   :root:not([data-motion="always"]) .nxWorkbookOverlay--loading { transition: none; }
 }
 
+/* Toolbar identity: the single toolbar row wears the app's CHROME tone (the
+   sunken surface the sidebar family uses — visibly ours, where the page-bg
+   alignment was indistinguishable from the stock white strip), with our hairline
+   under it; its icons read muted like the app's toolbars, keeping their stronger
+   tone only on hover/active (Univer's own state classes still win the
+   background). The formula bar below stays raised, like an input. */
+.nxWorkbook .nxWorkbookMount div:has(> [data-u-comp="ribbon-toolbar"]) {
+  background: var(--nx-bg-sunken);
+  border-bottom: 1px solid var(--nx-border);
+}
+.nxWorkbook .nxWorkbookMount [data-u-comp="ribbon-toolbar"] button:not(:hover):not([data-state="on"]) svg {
+  color: var(--nx-fg-muted);
+}
+
 /* Mobile (>=390px): the single toolbar row scrolls through its overflow menu, the
    canvas scrolls and pinch-zooms but never traps the page. The action cluster
    compacts (icon-only buttons on the page side) so commands keep the row.
