@@ -191,6 +191,7 @@
 }
 .nxPresToolBtn:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
 .nxPresToolBtn.isOn { background: var(--nx-accent-soft); color: var(--nx-accent); }
+.nxPresToolBtn:disabled { opacity: 0.35; cursor: default; background: transparent; color: var(--nx-fg-faint); }
 .nxPresToolLabel { display: flex; align-items: center; gap: 6px; font: 500 var(--nx-text-micro) var(--nx-font-sans); color: var(--nx-fg-faint); }
 
 .nxPresCanvasWell {

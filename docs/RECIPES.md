@@ -98,8 +98,17 @@ source — as Slides/Pitch do). It is still re-skinnable: override any of
 `--nx-pres-stage-{bg,panel,fg,muted,line,btn-line,btn-fg,btn-hover}-override` on an ancestor to
 re-point the stage (e.g. onto `--nx-*` tokens for a light-stage kiosk).
 
+### History (undo/redo)
+
+ONE history for the whole deck. Structural ops (add / duplicate / delete / reorder / layout /
+transition, and share-link + data-room changes) each land as a step; continuous edits coalesce, so ⌘Z
+undoes a typing burst rather than a keystroke. Native contentEditable undo still owns caret-level
+history inside a focused text region — this stack exists to catch the destructive ops (delete slide,
+delete link) that otherwise had no undo path. Depth 60; a `reloadNonce` bump clears it (new document).
+Viewer analytics folds are deliberately NOT undoable — they are recorded facts, not edits.
+
 ### Keyboard
 
-Editor (outside text): ↑/↓ select slide, ⌘D duplicate, Delete remove, ⌘Enter present.
+Editor (outside text): ↑/↓ select slide, ⌘D duplicate, Delete remove, ⌘Enter present, ⌘Z / ⌘⇧Z (or ⌘Y) undo/redo.
 Present: ←/→/Space/PageUp/PageDown navigate, Home/End jump, P presenter notes, Esc exit.
 Viewer: ←/→/Space navigate.

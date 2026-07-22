@@ -73,6 +73,74 @@ export function PresentationSurface({
     onChangeRef.current?.(next);
   }, []);
 
+  /* ---- document history (undo/redo) ----
+     ONE history for the whole deck, as Slides/Pitch have: structural ops push a
+     step each; continuous edits (typing a title, dragging an expiry) COALESCE
+     into one step while the same tag keeps firing inside the window, so ⌘Z
+     undoes a word-burst rather than a keystroke. Native contentEditable undo
+     still owns caret-level text history INSIDE a focused region — this stack is
+     what catches the destructive ops (delete slide, delete link) that had no
+     undo path at all. Analytics folds are NOT history (they are viewer facts). */
+  const deckRef = React.useRef(deck);
+  deckRef.current = deck;
+  const histRef = React.useRef<{ past: DeckSnapshot[]; future: DeckSnapshot[]; tag: string | null; at: number }>({
+    past: [],
+    future: [],
+    tag: null,
+    at: 0,
+  });
+  const [histTick, setHistTick] = React.useState(0);
+  const HIST_CAP = 60;
+  const COALESCE_MS = 700;
+
+  const commit = React.useCallback(
+    (next: DeckSnapshot, tag?: string) => {
+      const h = histRef.current;
+      const now = Date.now();
+      const coalesce = tag != null && h.tag === tag && now - h.at < COALESCE_MS && h.past.length > 0;
+      if (!coalesce) {
+        h.past.push(deckRef.current);
+        if (h.past.length > HIST_CAP) h.past.shift();
+      }
+      h.future = [];
+      h.tag = tag ?? null;
+      h.at = now;
+      setHistTick((v) => v + 1);
+      update(next);
+    },
+    [update],
+  );
+
+  const undo = React.useCallback(() => {
+    const h = histRef.current;
+    const prev = h.past.pop();
+    if (!prev) return;
+    h.future.push(deckRef.current);
+    h.tag = null;
+    setHistTick((v) => v + 1);
+    update(prev);
+  }, [update]);
+
+  const redo = React.useCallback(() => {
+    const h = histRef.current;
+    const next = h.future.pop();
+    if (!next) return;
+    h.past.push(deckRef.current);
+    h.tag = null;
+    setHistTick((v) => v + 1);
+    update(next);
+  }, [update]);
+
+  /* a host-driven re-adopt is a new document — the old history no longer applies */
+  React.useEffect(() => {
+    histRef.current = { past: [], future: [], tag: null, at: 0 };
+    setHistTick((v) => v + 1);
+  }, [reloadNonce]);
+
+  const canUndo = histRef.current.past.length > 0;
+  const canRedo = histRef.current.future.length > 0;
+  void histTick; // canUndo/canRedo read a ref; the tick is what re-renders them
+
   const [tab, setTab] = React.useState<Tab>("slides");
   const [sel, setSel] = React.useState(0);
   const [notesOpen, setNotesOpen] = React.useState(true);
@@ -88,16 +156,16 @@ export function PresentationSurface({
   const selIdx = Math.min(sel, deck.slides.length - 1);
 
   /* ---- slide ops ---- */
-  const patchSlide = (id: string, p: Partial<Slide>) =>
-    update({ ...deck, slides: deck.slides.map((s) => (s.id === id ? { ...s, ...p } : s)) });
+  const patchSlide = (id: string, p: Partial<Slide>, tag?: string) =>
+    commit({ ...deck, slides: deck.slides.map((s) => (s.id === id ? { ...s, ...p } : s)) }, tag);
   const setBlock = (key: keyof SlideBlocks, html: string) =>
-    patchSlide(slide.id, { blocks: { ...slide.blocks, [key]: html } });
+    patchSlide(slide.id, { blocks: { ...slide.blocks, [key]: html } }, `text:${slide.id}:${key}`);
 
   const addSlide = (layout: SlideLayout) => {
     const s = createSlide(layout);
     const slides = deck.slides.slice();
     slides.splice(selIdx + 1, 0, s);
-    update({ ...deck, slides });
+    commit({ ...deck, slides });
     setSel(selIdx + 1);
   };
   const duplicateSlide = (i: number) => {
@@ -105,13 +173,13 @@ export function PresentationSurface({
     const copy: Slide = { ...src, id: `sl-${uid()}`, blocks: { ...src.blocks } };
     const slides = deck.slides.slice();
     slides.splice(i + 1, 0, copy);
-    update({ ...deck, slides });
+    commit({ ...deck, slides });
     setSel(i + 1);
   };
   const deleteSlide = (i: number) => {
     if (deck.slides.length <= 1) return;
     const slides = deck.slides.filter((_, x) => x !== i);
-    update({ ...deck, slides });
+    commit({ ...deck, slides });
     setSel(Math.max(0, Math.min(i, slides.length - 1)));
   };
   const moveSlide = (from: number, to: number) => {
@@ -119,7 +187,7 @@ export function PresentationSurface({
     const slides = deck.slides.slice();
     const [s] = slides.splice(from, 1);
     slides.splice(to, 0, s);
-    update({ ...deck, slides });
+    commit({ ...deck, slides });
     setSel(to);
   };
 
@@ -167,7 +235,21 @@ export function PresentationSurface({
   /* keyboard: filmstrip-level shortcuts only when focus is NOT inside a text region */
   const onSurfaceKey = (e: React.KeyboardEvent) => {
     const inText = (e.target as HTMLElement).closest('[contenteditable="true"], input, textarea');
+    /* ⌘Z/⌘⇧Z reach the document history even from inside a text region ONLY when
+       that region has nothing of its own left to undo would be unknowable, so we
+       leave native undo to own focused text and take the shortcut elsewhere. */
     if (inText) return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
+      e.preventDefault();
+      redo();
+      return;
+    }
     if (e.key === "ArrowDown" || e.key === "ArrowRight") {
       setSel((i) => Math.min(deck.slides.length - 1, i + 1));
       e.preventDefault();
@@ -219,7 +301,7 @@ export function PresentationSurface({
         <input
           className="nxPresDeckTitle"
           value={deck.title}
-          onChange={(e) => update({ ...deck, title: e.target.value })}
+          onChange={(e) => commit({ ...deck, title: e.target.value }, "deck-title")}
           aria-label="Deck title"
         />
         <nav className="nxPresTabs" role="tablist" aria-label="Presentation sections">
@@ -242,7 +324,7 @@ export function PresentationSurface({
         <select
           className="nxPresSelect"
           value={deck.theme}
-          onChange={(e) => update({ ...deck, theme: e.target.value as DeckThemeId })}
+          onChange={(e) => commit({ ...deck, theme: e.target.value as DeckThemeId }, "deck-theme")}
           aria-label="Deck theme"
         >
           {THEMES.map((t) => (
@@ -329,6 +411,10 @@ export function PresentationSurface({
           <div className="nxPresMain">
             <div className="nxPresToolbar" role="toolbar" aria-label="Slide formatting">
               <div className="nxPresToolGroup">
+                <button type="button" className="nxPresToolBtn" onClick={undo} disabled={!canUndo} title="Undo (⌘Z)" aria-label="Undo" data-testid="undo-btn">↩</button>
+                <button type="button" className="nxPresToolBtn" onClick={redo} disabled={!canRedo} title="Redo (⌘⇧Z)" aria-label="Redo" data-testid="redo-btn">↪</button>
+              </div>
+              <div className="nxPresToolGroup">
                 <button type="button" className="nxPresToolBtn" onMouseDown={(e) => e.preventDefault()} onClick={() => fmt("bold")} title="Bold (⌘B)"><b>B</b></button>
                 <button type="button" className="nxPresToolBtn" onMouseDown={(e) => e.preventDefault()} onClick={() => fmt("italic")} title="Italic (⌘I)"><i>I</i></button>
                 <button type="button" className="nxPresToolBtn" onMouseDown={(e) => e.preventDefault()} onClick={() => fmt("underline")} title="Underline (⌘U)"><u>U</u></button>
@@ -386,9 +472,9 @@ export function PresentationSurface({
         </div>
       )}
 
-      {tab === "share" && <SharePanel deck={deck} onChange={update} config={config} onOpenViewer={setPreviewSlug} />}
+      {tab === "share" && <SharePanel deck={deck} onChange={(d) => commit(d, "share-panel")} config={config} onOpenViewer={setPreviewSlug} />}
       {tab === "analytics" && <AnalyticsPanel deck={deck} />}
-      {tab === "rooms" && <RoomsPanel deck={deck} onChange={update} />}
+      {tab === "rooms" && <RoomsPanel deck={deck} onChange={(d) => commit(d, "rooms-panel")} />}
 
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => onImageFile(e.target.files?.[0])} />
 
