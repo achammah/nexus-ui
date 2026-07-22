@@ -323,3 +323,48 @@ The document surface is **one composable primitive dialable across a spectrum**:
 - **Export honesty** — with pending changes, every export (md/html/pdf/docx) renders them as visible marks `[-old-][+new+]` and the menu notes `N tracked changes marked`, so nothing is silently shipped.
 The **record `richText` field** path (server-proposed substring substitutions, no `blockId`) is unchanged — `changesFor`/`foldChange` fall back to the original first-occurrence substring match when a change carries no `blockId`.
 > v1 tracks TEXT edits within a block, one active change per block per pass; structural edits (adding/removing/retyping a block) commit directly. Resolve a block's change before re-editing that block.
+
+## Viewer3D — a claims viewer and an architect's drawing set from one config
+
+```tsx
+// A company points the object viewer at its OWN asset (bundled/self-hosted — strict CSP):
+const snapshot: Viewer3DSnapshot = {
+  version: 1, kind: "viewer3d", mode: "object",
+  title: `Claim ${claim.ref}`,
+  object: { source: { type: "gltf", url: "/models/vehicle.glb" }, scale: 1, up: "y" },
+  hotspots: claim.damages.map((d) => ({
+    id: d.id, label: d.part, detail: d.assessment,
+    tone: d.severity === "high" ? "danger" : "warn",
+    position: d.point,
+  })),
+};
+// OBJ from a CAD export (Z-up), imports disabled for a locked review page:
+{ object: { source: { type: "obj", url: "/models/part.obj", mtlUrl: "/models/part.mtl" }, up: "z", allowImport: false } }
+```
+
+- Users can always DROP a local `.glb` / `.gltf`(+bin/textures) / `.obj`(+mtl) onto the
+  stage (unless `allowImport: false`) — session-only, validated, progress-reported.
+- Floorplan mode is data-driven from `levels[].rooms[].poly` + `openings[]`; add
+  `roomType`/`finish`/`ceiling` per room and `floorplan.meta` for the title block and
+  the surface derives the dimensions, areas, schedule, elevations and sections itself:
+
+```tsx
+{
+  mode: "floorplan",
+  floorplan: {
+    wallThickness: 0.15,
+    meta: { project: "24 Elm Street", client: "Claim #4821", sheet: "A-101", northDeg: 15 },
+    levels: [{
+      id: "ground", name: "Ground floor", elevation: 0, height: 2.7,
+      rooms: [{ id: "living", label: "Living room", roomType: "Habitable", finish: "Oak",
+                poly: [[0, 0], [5.2, 0], [5.2, 4.4], [0, 4.4]] }],
+      openings: [{ id: "d1", kind: "door", edge: [[2.1, 4.4], [3.0, 4.4]], swing: 1 },
+                 { id: "w1", kind: "window", edge: [[1.0, 0], [3.4, 0]], sill: 0.9, head: 2.2 }],
+    }],
+  },
+}
+```
+
+- View state (`planView`, `units`, `activeLevel`) persists through the snapshot, so a
+  page reopens on the drawing the user left. PNG export works from every view; the 2D
+  plan exports at print resolution. Deep doc: `docs/viewer3d.md`.

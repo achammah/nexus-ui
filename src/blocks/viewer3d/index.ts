@@ -10,6 +10,7 @@ export {
   viewer3dStoreKey,
   isViewer3dSnapshot,
   seedScene,
+  seedClaim,
 } from "./scene";
 export type {
   Viewer3DSnapshot,
@@ -21,7 +22,27 @@ export type {
   Viewer3DFloorplanConfig,
   Viewer3DLevel,
   Viewer3DRoom,
+  Viewer3DOpening,
+  Viewer3DPlanMeta,
+  Viewer3DUnits,
+  PlanView,
+  Viewer3DLayers,
+  Viewer3DSelection,
+  Viewer3DClaimConfig,
+  ClaimAnnotation,
+  ClaimAttachment,
+  ClaimActivityEvent,
+  ClaimAssessment,
+  ClaimDecision,
+  ClaimSummaryMeta,
+  ClaimSeverity,
 } from "./scene";
+
+/* plan measurement math (areas, dimensions, unit formatting) — light, reusable
+   by hosts that print plan figures outside the viewer (reports, cards) */
+export {
+  polyArea, polyBounds, roomDims, levelArea, formatLen, formatArea,
+} from "./plan-geometry";
 export type { Viewer3DSurfaceProps } from "./Viewer3DSurface";
 
 /* the look/feel dial-board: lighting, exposure, shadow, material response and
@@ -32,3 +53,8 @@ export type { Viewer3DLook, ScenePalette, Preset } from "./look";
 
 /* the lazy surface — host renders it under a Suspense fallback */
 export const LazyViewer3DSurface = React.lazy(() => import("./Viewer3DSurface"));
+
+/* the claims DECISION workspace (activity/assessment rail · multi-modal stage ·
+   decision panel) — same lazy split, composes the surface as its centre pane */
+export const LazyClaimWorkspace = React.lazy(() => import("./ClaimWorkspace"));
+export type { ClaimWorkspaceProps } from "./ClaimWorkspace";
