@@ -1,0 +1,152 @@
+/* PageWorkspace + PageTree chrome — token-driven, both themes, mobile-aware. */
+
+/* Frame continuity: the workspace paints NO surface of its own — it inherits the host's
+   background so an embedded mount reads as one continuous page, not a bordered widget
+   sitting inside the app shell. Standalone hosts sit on --nx-bg, so this is identical there. */
+/* SELF-BOUND to the viewport. height:100% only bounds a scroll container when the PARENT is
+   height-bounded — but a host's content area often grows to content (unbounded), so height:100%
+   resolves to content height and NOTHING scrolls (the outline then moves nothing). max-height
+   establishes a bound that does NOT depend on the parent: the surface is at most one viewport
+   tall, so .nxDoc-main always forms a real scroll container. A host with chrome above the mount
+   (a topbar) sets --nx-doc-inset to its height for an exact fit; default 0 self-bounds to the
+   full viewport. In a already-bounded parent (a flex harness), height:100% wins and max-height
+   is a harmless ceiling. */
+.nxWs { display: flex; height: 100%; min-height: 0; max-height: calc(100dvh - var(--nx-doc-inset, 0px)); background: transparent; color: var(--nx-fg); font-family: var(--nx-font-sans); }
+.nxWs-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.nxWs-blank { margin: auto; text-align: center; color: var(--nx-fg-muted); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.nxWs-blank button { border: 1px solid var(--nx-border); background: var(--nx-bg); color: var(--nx-fg); border-radius: var(--nx-radius-s); padding: 7px 14px; cursor: pointer; font: var(--nx-text-body); }
+
+/* sidebar — a hairline seam, no panel fill and no panel header; the tree IS the sidebar */
+.nxWs-sidebar { flex: none; width: 258px; display: flex; flex-direction: column; background: transparent; border-right: 1px solid var(--nx-border); overflow-y: auto; }
+.nxWs-iconbtn { display: grid; place-items: center; width: 26px; height: 26px; border: 0; background: none; color: var(--nx-fg-faint); border-radius: var(--nx-radius-s); cursor: pointer; transition: background var(--nx-t-fast), color var(--nx-t-fast); }
+.nxWs-iconbtn:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+
+/* tree */
+.nxTree { padding: 4px 8px 24px; }
+/* head height matches the document's single header row, so the sidebar and the page share
+   one horizontal rhythm instead of reading as two stacked panels */
+.nxTree-head { display: flex; align-items: center; justify-content: space-between; min-height: 38px; padding: 2px 2px 4px; }
+.nxTree-head-actions { display: flex; gap: 2px; }
+.nxTree-rename { flex: 1; min-width: 0; border: 1px solid var(--nx-accent); background: var(--nx-bg); color: var(--nx-fg); border-radius: 4px; padding: 2px 6px; font-size: 13.5px; outline: none; }
+.nxTree-hbtn { display: grid; place-items: center; width: 24px; height: 24px; border: 0; background: none; color: var(--nx-fg-faint); border-radius: var(--nx-radius-s); cursor: pointer; transition: background var(--nx-t-fast), color var(--nx-t-fast); }
+.nxTree-hbtn:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxTree-section { margin-top: 4px; }
+.nxTree-section-h { font: var(--nx-text-micro); letter-spacing: var(--nx-tracking-micro); text-transform: uppercase; color: var(--nx-chrome-fg-faint); padding: 8px 6px 3px; }
+.nxTree-branch { position: relative; }
+.nxTree-row { position: relative; display: flex; align-items: center; gap: 3px; height: 29px; padding-inline-end: 6px; border-radius: var(--nx-radius-s); cursor: pointer; color: var(--nx-chrome-fg); transition: background var(--nx-t-fast) var(--nx-ease); }
+.nxTree-row:hover { background: var(--nx-bg-sunken); }
+.nxTree-row.is-active { background: var(--nx-accent-soft); color: var(--nx-accent); font-weight: 500; }
+.nxTree-row.is-dragging { opacity: .4; }
+.nxTree-row.drop-inside { box-shadow: inset 0 0 0 2px var(--nx-accent); }
+.nxTree-row.drop-before::before, .nxTree-row.drop-after::after { content: ""; position: absolute; left: 6px; right: 6px; height: 2px; background: var(--nx-accent); border-radius: 2px; }
+.nxTree-row.drop-before::before { top: -1px; }
+.nxTree-row.drop-after::after { bottom: -1px; }
+.nxTree-caret { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border: 0; background: none; color: var(--nx-fg-faint); cursor: pointer; border-radius: 4px; }
+.nxTree-caret:hover { background: color-mix(in oklab, var(--nx-fg) 8%, transparent); }
+.nxTree-caret svg { transition: transform var(--nx-t-fast) var(--nx-ease); }
+.nxTree-caret.is-open svg { transform: rotate(90deg); }
+.nxTree-caret.is-leaf { cursor: default; }
+.nxTree-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--nx-fg-faint); opacity: .5; }
+.nxTree-ic { flex: none; display: inline-flex; width: 18px; justify-content: center; font-size: 14px; }
+.nxTree-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; }
+.nxTree-fav { flex: none; color: var(--nx-warn); }
+.nxTree-actions { flex: none; display: flex; gap: 1px; opacity: 0; transition: opacity var(--nx-t-fast); }
+.nxTree-row:hover .nxTree-actions { opacity: 1; }
+.nxTree-add, .nxTree-more { display: grid; place-items: center; width: 22px; height: 22px; border: 0; background: none; color: var(--nx-fg-faint); border-radius: 4px; cursor: pointer; }
+.nxTree-add:hover, .nxTree-more:hover { background: color-mix(in oklab, var(--nx-fg) 10%, transparent); color: var(--nx-fg); }
+.nxTree-menu { position: absolute; right: 4px; top: 28px; z-index: 30; min-width: 168px; padding: 5px; background: var(--nx-bg-raised); border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m); box-shadow: var(--nx-shadow-2); }
+.nxTree-menu button { display: flex; align-items: center; gap: 9px; width: 100%; border: 0; background: none; color: var(--nx-fg); font: var(--nx-text-body); text-align: left; padding: 7px 9px; border-radius: var(--nx-radius-s); cursor: pointer; }
+.nxTree-menu button:hover { background: var(--nx-bg-sunken); }
+.nxTree-menu button svg { color: var(--nx-fg-muted); }
+.nxTree-menu button.is-danger { color: var(--nx-danger); }
+.nxTree-menu button.is-danger svg { color: var(--nx-danger); }
+.nxTree-empty { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: none; color: var(--nx-fg-faint); padding: 7px 8px; border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-body); }
+.nxTree-empty:hover { background: var(--nx-bg-sunken); color: var(--nx-fg-muted); }
+.nxTree-rootdrop { margin: 8px 4px 0; padding: 10px; border: 1.5px dashed var(--nx-border-strong); border-radius: var(--nx-radius-s); text-align: center; font: var(--nx-text-meta); color: var(--nx-fg-faint); }
+.nxTree-rootdrop.is-over { border-color: var(--nx-accent); color: var(--nx-accent); background: var(--nx-accent-soft); }
+
+/* breadcrumbs — rendered INSIDE the document's single header row (DocumentSurface's
+   `topBar` slot), so it carries no bar chrome of its own */
+.nxWs-crumbbar { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.nxWs-crumbs { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; overflow: hidden; }
+.nxWs-crumb { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--nx-fg-muted); font: var(--nx-text-meta); padding: 3px 6px; border-radius: var(--nx-radius-s); cursor: pointer; white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.nxWs-crumb:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxWs-crumb.is-current { color: var(--nx-fg); font-weight: 500; }
+.nxWs-crumb-ic { font-size: 13px; }
+.nxWs-crumb-sep { color: var(--nx-fg-faint); flex: none; }
+.nxWs-kbar { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--nx-border); background: var(--nx-bg); color: var(--nx-fg-muted); border-radius: var(--nx-radius-s); padding: 4px 9px; font: var(--nx-text-meta); cursor: pointer; }
+.nxWs-kbar:hover { border-color: var(--nx-border-strong); color: var(--nx-fg); }
+.nxWs-kbar kbd { font: var(--nx-text-micro); background: var(--nx-bg-sunken); border: 1px solid var(--nx-border); border-radius: 4px; padding: 1px 5px; color: var(--nx-fg-faint); }
+
+/* backlinks */
+.nxWs-backlinks { margin: 22px 0 8vh; padding-top: 16px; border-top: 1px solid var(--nx-border); }
+.nxWs-backlinks-h { font: var(--nx-text-micro); letter-spacing: var(--nx-tracking-micro); text-transform: uppercase; color: var(--nx-fg-faint); margin-bottom: 8px; }
+.nxWs-backlink { display: flex; align-items: center; gap: 9px; width: 100%; border: 1px solid transparent; background: none; color: var(--nx-fg); text-align: left; padding: 8px 10px; border-radius: var(--nx-radius-s); cursor: pointer; transition: background var(--nx-t-fast), border-color var(--nx-t-fast); }
+.nxWs-backlink:hover { background: var(--nx-bg-sunken); border-color: var(--nx-border); }
+.nxWs-backlink-ic { flex: none; font-size: 15px; display: inline-flex; }
+.nxWs-backlink-title { flex: 1; font-size: 14px; font-weight: 500; }
+.nxWs-backlink-kind { flex: none; font: var(--nx-text-micro); letter-spacing: var(--nx-tracking-micro); text-transform: uppercase; color: var(--nx-fg-faint); border: 1px solid var(--nx-border); border-radius: 20px; padding: 2px 8px; }
+
+/* quick-switcher (⌘K) */
+.nxWs-switcher-back { position: fixed; inset: 0; z-index: 80; background: color-mix(in oklab, #0b0b0b 42%, transparent); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; backdrop-filter: blur(2px); }
+.nxWs-switcher { width: min(600px, 92vw); background: var(--nx-bg-raised); border: 1px solid var(--nx-border); border-radius: var(--nx-radius-l); box-shadow: var(--nx-shadow-2); overflow: hidden; animation: nxPopIn var(--nx-t-fast) var(--nx-ease-settle); }
+.nxWs-switcher-in { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--nx-border); color: var(--nx-fg-muted); }
+.nxWs-switcher-in input { flex: 1; border: 0; background: none; outline: none; font: 400 16px/1.4 var(--nx-font-sans); color: var(--nx-fg); }
+.nxWs-switcher-in kbd { font: var(--nx-text-micro); background: var(--nx-bg-sunken); border: 1px solid var(--nx-border); border-radius: 4px; padding: 2px 6px; color: var(--nx-fg-faint); }
+.nxWs-switcher-list { max-height: 52vh; overflow-y: auto; padding: 6px; }
+.nxWs-switcher-empty { padding: 22px; text-align: center; color: var(--nx-fg-faint); font: var(--nx-text-body); }
+.nxWs-switcher-i { display: flex; align-items: center; gap: 11px; width: 100%; border: 0; background: none; text-align: left; padding: 9px 11px; border-radius: var(--nx-radius-s); cursor: pointer; color: var(--nx-fg); }
+.nxWs-switcher-i.is-sel { background: var(--nx-accent-soft); }
+.nxWs-switcher-ic { flex: none; display: inline-flex; width: 20px; justify-content: center; font-size: 16px; }
+.nxWs-switcher-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.nxWs-switcher-tx b { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nxWs-switcher-tx i { font-style: normal; font-size: 12px; color: var(--nx-fg-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nxWs-switcher-enter { flex: none; color: var(--nx-accent); }
+
+/* mobile: the sidebar becomes an overlay drawer */
+@media (max-width: 820px) {
+  /* as an OVERLAY drawer it sits above the page, so it must paint an opaque surface —
+     the transparent inline treatment only holds while it is an in-flow column */
+  .nxWs-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 60; width: 82vw; max-width: 320px; background: var(--nx-bg-raised); box-shadow: var(--nx-shadow-2); }
+  .nxWs.is-collapsed .nxWs-sidebar { display: none; }
+  .nxWs-crumb { max-width: 120px; }
+}
+/* narrow: the header must never push the surface wider than the viewport — the crumb trail
+   is the compressible part (the page's own H1 carries the name anyway) */
+@media (max-width: 640px) {
+  .nxWs-crumbbar { gap: 4px; }
+  .nxWs-crumbs { display: none; }
+  .nxWs-kbar { padding: 4px 7px; }
+  .nxWs-kbar-tx, .nxWs-kbar kbd { display: none; }
+}
+
+/* touch: the tree is a modal drawer, the trail becomes a back affordance */
+.nxWs-scrim { position: fixed; inset: 0; z-index: 55; background: color-mix(in oklab, #0b0b0b 42%, transparent); }
+.nxWs-back { display: inline-flex; align-items: center; gap: 2px; min-height: 36px; padding: 4px 10px 4px 4px; border: 0; background: none; color: var(--nx-fg); font: var(--nx-text-body); font-weight: 500; border-radius: var(--nx-radius-s); cursor: pointer; max-width: 52vw; }
+.nxWs-back span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nxWs-back:active { background: var(--nx-bg-sunken); }
+.nxWs-msearch { margin-inline-start: auto; width: 36px; height: 36px; }
+@media (pointer: coarse) and (max-width: 820px) {
+  .nxWs-iconbtn { width: 36px; height: 36px; }
+  .nxTree-row { height: 42px; }
+  .nxTree-hbtn { width: 34px; height: 34px; }
+  .nxTree-actions { opacity: 1; }
+  .nxTree-add, .nxTree-more { width: 32px; height: 32px; }
+  .nxWs-switcher { width: 96vw; }
+  .nxWs-switcher-i { padding: 13px 12px; }
+}
+
+/* PageTable — the "library" tree mode: pages as a record-table list in the sidebar. */
+.nxWs-table { display: flex; flex-direction: column; min-height: 0; }
+.nxTree-head-tx { font-family: var(--nx-font-mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--nx-fg-faint); padding-inline-start: 6px; }
+.nxWs-table-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 6px; font-family: var(--nx-font-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--nx-fg-faint); border-bottom: 1px solid var(--nx-border); }
+.nxWs-table-body { display: flex; flex-direction: column; overflow-y: auto; padding-top: 2px; }
+.nxWs-table-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 30px; padding: 0 8px 0 0; border: 0; background: none; color: var(--nx-chrome-fg); text-align: left; cursor: pointer; border-radius: var(--nx-radius-s); transition: background var(--nx-t-fast) var(--nx-ease); }
+.nxWs-table-row:hover { background: var(--nx-bg-sunken); }
+.nxWs-table-row.is-active { background: var(--nx-accent-soft); color: var(--nx-accent); font-weight: 500; }
+.nxWs-table-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; flex: 1; font: var(--nx-text-body); }
+.nxWs-table-ic { display: inline-grid; place-items: center; flex: none; }
+.nxWs-table-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nxWs-table-count { flex: none; min-width: 16px; height: 16px; padding: 0 4px; display: grid; place-items: center; font: var(--nx-text-meta); font-size: 10px; color: var(--nx-fg-faint); background: var(--nx-bg-sunken); border-radius: 8px; }
+.nxWs-table-meta { flex: none; font: var(--nx-text-meta); font-size: 11px; color: var(--nx-fg-faint); white-space: nowrap; }
+@media (pointer: coarse) and (max-width: 820px) { .nxWs-table-row { min-height: 42px; } }
