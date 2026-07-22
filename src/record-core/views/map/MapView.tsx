@@ -91,6 +91,22 @@ const DOM_MARKER_CAP = 400; // above this, un-clustered points render on the GPU
 const DECLUTTER_ZOOM = 9; // below this zoom, a dense un-clustered set also goes GPU (no teardrop wall)
 const CLUSTER_MAX_ZOOM = 14;
 
+/* luminance test on a resolved token color (rgb/rgba/hex) — used to read the app
+   theme off the live --nx-bg value so the globe atmosphere tracks light vs dark */
+function isDarkColor(c: string | undefined): boolean {
+  if (!c) return false;
+  let r = 0, g = 0, b = 0;
+  const m = c.match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
+  if (m) { r = +m[1]; g = +m[2]; b = +m[3]; }
+  else {
+    const h = c.replace("#", "").trim();
+    const hex = h.length === 3 ? h.split("").map((x) => x + x).join("") : h;
+    if (hex.length < 6) return false;
+    r = parseInt(hex.slice(0, 2), 16); g = parseInt(hex.slice(2, 4), 16); b = parseInt(hex.slice(4, 6), 16);
+  }
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < 0.5;
+}
+
 type Shape =
   | { kind: "line"; points: LngLat[] }
   | { kind: "polygon"; points: LngLat[] }
@@ -162,6 +178,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   const colors = useTokenColors([
     "nx-accent",
     "nx-accent-fg",
+    "nx-bg",
     "nx-bg-raised",
     "nx-bg-sunken",
     "nx-border",
@@ -177,6 +194,10 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   const accentFg = colors["nx-accent-fg"] || "rgba(255, 255, 255, 1)";
   const surface = colors["nx-bg-raised"] || "rgba(255, 255, 255, 1)";
   const buildingColor = colors["nx-border-strong"] || "#c8c6c1";
+  // the globe atmosphere follows the APP THEME (not the basemap): light theme →
+  // a light sky/halo, dark theme → dark space. Re-resolves whenever the theme
+  // flips (useTokenColors re-runs), so the sphere never keeps a stale-theme sky.
+  const appDark = isDarkColor(colors["nx-bg"]);
 
   /* ── basemap + tile-load robustness ─────────────────────────────────────────
      A basemap swap must never leave a blank canvas. The last-good basemap is
@@ -302,7 +323,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     } catch {
       /* projection unsupported on this build — stays mercator */
     }
-    applySky(m, projection === "globe", darkBasemap);
+    applySky(m, projection === "globe", appDark);
   };
   const applyAll = React.useCallback(() => {
     const map = mapRef.current?.getMap();
@@ -320,9 +341,26 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       } catch {
         /* ignore */
       }
-      applySky(map, projection === "globe", darkBasemap);
+      applySky(map, projection === "globe", appDark);
     }
-  }, [projection, ready, darkBasemap]);
+  }, [projection, ready, appDark]);
+  /* Re-assert projection + atmosphere after a basemap swap settles. `setStyle`
+     (every basemap switch) RESETS the projection to mercator and wipes the sky;
+     the re-apply inside the style-load handler lands too early to stick, so after
+     a switch the globe silently flattened to mercator and lost its halo (the
+     "globe light/dark is buggy" symptom). onIdle fires once the new style has
+     painted — re-assert both there so globe + sky survive every style change. */
+  const reassertProjection = React.useCallback(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !map.isStyleLoaded()) return;
+    const want = projection === "globe" ? "globe" : "mercator";
+    try {
+      if (map.getProjection()?.type !== want) map.setProjection({ type: want });
+    } catch {
+      /* projection unsupported on this build — stays mercator */
+    }
+    applySky(map, projection === "globe", appDark);
+  }, [projection, appDark]);
 
   /* ── projection ⟂ basemap: two orthogonal axes on ONE merged map view ──
      Projection (flat|globe) is a live toggle that changes ONLY the projection —
@@ -921,6 +959,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
         onIdle={(e) => {
           syncGlState(e.target);
           recomputeSpider();
+          reassertProjection(); // restore globe + atmosphere after a style swap settles
           if (switching) setSwitching(false);
         }}
         onMove={(e) => {
