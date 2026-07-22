@@ -225,7 +225,8 @@
   font-family: var(--nx-font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--nx-fg-muted);
-  min-width: 52px; text-align: right;
+  min-width: 62px; text-align: right;
+  white-space: nowrap;
 }
 .nxFocusItem--live .nxFocusSpent { color: var(--nx-accent); font-weight: 600; }
 .nxFocusTimer, .nxFocusMore, .nxFocusRemove {

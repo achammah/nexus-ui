@@ -73,6 +73,13 @@ export function entrySeconds(e: TimeEntry, now: Date = new Date()): number {
   return Math.max(0, Math.round((b - a) / 1000));
 }
 
+/* elapsed in the CURRENT running stretch (0 when idle) — what the running
+   banner reads: "how long have I been at this", distinct from the task total */
+export function sessionSeconds(row: RecordRow, now: Date = new Date(), key?: string): number {
+  const e = runningEntry(taskEntries(row, key));
+  return e ? entrySeconds(e, now) : 0;
+}
+
 /* total tracked seconds on a task */
 export function trackedSeconds(row: RecordRow, now: Date = new Date(), key?: string): number {
   return taskEntries(row, key).reduce((sum, e) => sum + entrySeconds(e, now), 0);

@@ -17,7 +17,7 @@ import { doneStatusValues, isoDay, parseDay, TASK_KEYS, taskHealth } from "../..
 import {
   dayLoad, focusSuggestions, formatClock, formatDuration, isPlannedFor, isTracking,
   logTimePatch, planForDayPatch, plannedRows, timeBudget, toggleTimerPatches,
-  trackedSecondsOn, trackingRow, TIME_KEYS, unplanPatch,
+  sessionSeconds, trackedSecondsOn, trackingRow, TIME_KEYS, unplanPatch,
 } from "../../timeTracking";
 import type { ViewProps } from "../types";
 import "./focus.css";
@@ -64,15 +64,17 @@ export function resolveKeys(object: ViewProps["object"], cfg: Record<string, unk
   };
 }
 
-/* live clock: re-render every second, but ONLY while something is running */
+/* live clock: re-render every second, but ONLY while something is running. The
+   returned counter is a memo DEPENDENCY — derived day totals must recompute on
+   the tick, not just re-render (else the header freezes while the row ticks). */
 function useTick(active: boolean): number {
-  const [, force] = React.useReducer((n: number) => n + 1, 0);
+  const [tick, force] = React.useReducer((n: number) => n + 1, 0);
   React.useEffect(() => {
     if (!active) return;
     const t = setInterval(force, 1000);
     return () => clearInterval(t);
   }, [active]);
-  return 0;
+  return tick;
 }
 
 export default function FocusView(props: ViewProps) {
@@ -86,10 +88,15 @@ export default function FocusView(props: ViewProps) {
     [statusField, viewConfig.doneStatuses],
   );
   const doneValue = React.useMemo(() => [...done][0] ?? "Done", [done]);
-  const openValue = React.useMemo(
-    () => (statusField?.options ?? []).map((o) => (typeof o === "string" ? o : o.value)).find((v) => !done.has(v)) ?? "Todo",
-    [statusField, done],
-  );
+  /* the status a task takes when it is created into (or re-opened in) the day.
+     Config wins — the first non-done option is a fallback, and on a workflow that
+     opens with a holding state ("Backlog") that fallback is the wrong commitment,
+     which is exactly why `newTaskStatus` is configurable. */
+  const openValue = React.useMemo(() => {
+    const cfgV = typeof viewConfig.newTaskStatus === "string" ? viewConfig.newTaskStatus : "";
+    if (cfgV) return cfgV;
+    return (statusField?.options ?? []).map((o) => (typeof o === "string" ? o : o.value)).find((v) => !done.has(v)) ?? "Todo";
+  }, [statusField, done, viewConfig.newTaskStatus]);
 
   /* the planned day — a stepper so tonight can plan tomorrow */
   const day = React.useMemo(() => {
@@ -107,7 +114,7 @@ export default function FocusView(props: ViewProps) {
   );
 
   const running = trackingRow(rows, keys.entries);
-  useTick(!!running);
+  const tick = useTick(!!running);
   const now = new Date();
 
   const planned = React.useMemo(
@@ -117,7 +124,7 @@ export default function FocusView(props: ViewProps) {
   const load = React.useMemo(
     () => dayLoad(scoped, day, { done, statusKey: keys.status, now, keys: { plannedFor: keys.plannedFor, focusOrder: keys.focusOrder, entries: keys.entries, estimate: keys.estimate } }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scoped, day, done, keys, running],
+    [scoped, day, done, keys, running, tick],
   );
   const suggestions = React.useMemo(
     () => focusSuggestions(scoped, day, { done, statusKey: keys.status, dueKey: keys.dueDate, keys: { plannedFor: keys.plannedFor } }),
@@ -215,8 +222,9 @@ export default function FocusView(props: ViewProps) {
           <span className="nxFocusRunDot" />
           <Flame size={13} />
           <strong>{String(running[keys.title] ?? "")}</strong>
+          {/* the banner reads the CURRENT stretch; the row keeps the task total */}
           <span className="nxFocusClock" data-testid="focus-running-clock">
-            {formatClock(timeBudget(running, now, { entries: keys.entries, estimate: keys.estimate }).spentSeconds)}
+            {formatClock(sessionSeconds(running, now, keys.entries))}
           </span>
           <button type="button" className="nxFocusStop" data-testid="focus-running-stop" onClick={() => toggleTimer(running.id)}>
             <Pause size={12} /> Stop

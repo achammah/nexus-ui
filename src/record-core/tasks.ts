@@ -135,7 +135,7 @@ export function taskObjectConfig(opts: TaskConfigOptions = {}): ObjectConfig {
     stageField: TASK_KEYS.status,
     columns: [TASK_KEYS.status, TASK_KEYS.assignee, TASK_KEYS.priority, TASK_KEYS.dueDate, TASK_KEYS.labels],
     views: opts.views ?? [
-      { type: "focus" },
+      { type: "focus", newTaskStatus: "Todo" },
       { type: "table" },
       { type: "kanban", groupField: TASK_KEYS.status },
       { type: "timeline" },
@@ -279,7 +279,16 @@ export function rollRecurrencePatch(
   if (!rule || rule === "None") return null;
   const shift = (d: Date): Date =>
     rule === "Daily" ? addDays(d, 1) : rule === "Weekly" ? addWeeks(d, 1) : rule === "Biweekly" ? addWeeks(d, 2) : addMonths(d, 1);
-  const patch: Record<string, unknown> = { [k.status]: opts.resetStatus, [k.progress]: 0 };
+  /* the next occurrence is NOT the one you just finished: it leaves the day plan
+     (else it sits in Today looking untouched) and starts its own time log */
+  const patch: Record<string, unknown> = {
+    [k.status]: opts.resetStatus,
+    [k.progress]: 0,
+    [k.plannedFor]: null,
+    [k.focusOrder]: null,
+    [k.timeEntries]: [],
+    [k.timeSpent]: null,
+  };
   const start = parseDay(row[k.startDate]);
   const due = parseDay(row[k.dueDate]);
   if (start) patch[k.startDate] = isoDay(shift(start));

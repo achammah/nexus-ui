@@ -51,6 +51,7 @@ const definition: ViewDefinition = {
     { key: "plannedForField", label: "Planned for", kind: "field", fieldTypes: ["date"] },
     { key: "focusOrderField", label: "Focus order", kind: "field", fieldTypes: ["number"] },
     { key: "doneStatuses", label: "Done statuses (comma-sep)", kind: "text" },
+    { key: "newTaskStatus", label: "Status for new/reopened tasks", kind: "text" },
   ],
   defaultConfig: () => ({}),
   validateConfig: (object, cfg) => {

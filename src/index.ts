@@ -52,7 +52,7 @@ export {
   trackedSeconds, trackedSecondsOn, totalTrackedOn, startTimerPatches,
   stopTimerPatch, toggleTimerPatches, logTimePatch, secondsToHours,
   formatDuration, formatClock, timeBudget, isPlannedFor, planForDayPatch,
-  unplanPatch, plannedRows, focusSuggestions, dayLoad,
+  unplanPatch, plannedRows, focusSuggestions, dayLoad, sessionSeconds,
 } from "./record-core/timeTracking";
 export type { TimeEntry, TimeFieldKeys, TimeBudget, DayLoad } from "./record-core/timeTracking";
 
