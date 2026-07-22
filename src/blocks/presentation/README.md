@@ -142,6 +142,12 @@ option list in `ElementControls.tsx` chart picker → `PPTX_CHART` mapping in ex
   extend the warning, never silently drop.
 - **PPTX export mirrors that honesty**: unexportable content emits a labeled placeholder (see
   the `video` branch).
+- **A seeded free-surface page shows STORED content.** The host serves the persisted snapshot,
+  so shipping a better seed changes NOTHING for an existing install unless the seed is
+  versioned and adopted (`SEED_REV`/`isStaleSeed` here). This trap is shaped into EVERY
+  free-surface block in this repo (workbook, document, whiteboard…) — if you are building one
+  and your demo content will ever improve, copy this mechanism on day one. It cost this block
+  a full "nothing changed" rejection cycle before it was found.
 - **`seedDeck()` is also the journey fixture.** Changing it means updating `dev/journeys.mjs`
   (index-sensitive tests create their own BLANK slide for gestures — keep that pattern) and
   bumping `SEED_REV`.
