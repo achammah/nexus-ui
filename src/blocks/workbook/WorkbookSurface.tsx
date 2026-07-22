@@ -7,9 +7,11 @@ import { createUniver, LocaleType, mergeLocales } from "@univerjs/presets";
 import { defaultTheme } from "@univerjs/themes";
 import { CommandType, ThemeService, type IWorkbookData } from "@univerjs/core";
 import { IRenderManagerService } from "@univerjs/engine-render";
+import { ComponentManager } from "@univerjs/ui";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "./workbook.css";
 import { canvasGridTheme, deriveWorkbookTheme, isDarkTheme, skinSignature, themeSignature, useThemeNonce, withLightTokens, type CanvasGridTheme, type UniverTheme } from "./workbook-theme";
+import { registerNxIcons, type IconRegistry } from "./workbook-icons";
 import { seedWorkbook } from "./snapshot";
 
 export interface WorkbookSurfaceProps {
@@ -148,6 +150,10 @@ export function WorkbookSurface({
       instance = created;
       apiRef.current = created.univerAPI;
       const injector = created.univer.__getInjector();
+      // icon-language swap BEFORE the workbench's first commit: every registry-
+      // resolved icon (toolbar, dropdowns, context menus) renders app-language
+      // from the first paint; registrations are per-instance, disposed with it
+      registerNxIcons(injector.get(ComponentManager) as IconRegistry);
       themeRef.current = injector.get(ThemeService) as UniverThemeService;
       appliedSigRef.current = sig;
       appliedSkinRef.current = skinSig;
@@ -162,7 +168,14 @@ export function WorkbookSurface({
       const grid = deriveGrid();
       let tries = 0;
       const tick = () => {
-        if (applyGridCanvasTheme(injector, data.id, grid) || tries++ > 120) return;
+        if (applyGridCanvasTheme(injector, data.id, grid)) {
+          // late sheet controllers (permission, gridlines) re-register a few stock
+          // icon names during workbook init — re-assert the app set once the
+          // render unit exists (idempotent, delete-then-register)
+          registerNxIcons(injector.get(ComponentManager) as IconRegistry);
+          return;
+        }
+        if (tries++ > 120) return;
         gridRaf = requestAnimationFrame(tick);
       };
       gridRaf = requestAnimationFrame(tick);
