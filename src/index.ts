@@ -35,6 +35,16 @@ export { FilterBar, FilterChips, matchFilters, opsFor, filterableFields } from "
 export type { FilterField, FilterCond } from "./record-core/Filters";
 export type { ObjectConfig, FieldDef, RecordRow, ViewDef, TimelineEvent, FieldType } from "./record-core/types";
 
+/* task model — pure helpers for task-shaped objects (subtasks + dependencies as
+   self-relations; the timeline view consumes these) + config factory + demo seed */
+export {
+  taskObjectConfig, TASK_KEYS, DEFAULT_TASK_STATUSES, DEFAULT_TASK_PRIORITIES,
+  buildTaskTree, flattenTree, subtaskRollup, taskParentId, taskDependencyIds,
+  taskHealth, doneStatusValues, rollRecurrencePatch,
+  seedTasks, SEED_TASK_USERS, SEED_TASK_LABELS,
+} from "./record-core/tasks";
+export type { TaskFieldKeys, TaskConfigOptions, TaskNode, TaskHealth, RepeatRule } from "./record-core/tasks";
+
 /* view registry — self-registering view types (views/<type>/definition.tsx) */
 export { viewDefinitions, getViewDefinition } from "./record-core/views/registry";
 export type { ViewDefinition, ViewProps, ViewToolbarProps, ViewConfigField, ViewInstanceConfig } from "./record-core/views/types";
