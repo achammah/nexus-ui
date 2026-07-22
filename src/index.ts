@@ -51,3 +51,6 @@ export * from "./blocks/mobile";
 
 /* blocks — full spreadsheet workbook (Univer) as a standalone surface (lazy engine) */
 export * from "./blocks/workbook";
+
+/* blocks — presentation deck editor + share/track (papermark) layer */
+export * from "./blocks/presentation";
