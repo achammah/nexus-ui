@@ -36,7 +36,7 @@ import {
   toFeatureCollection,
   type LocatedRow,
 } from "./geo";
-import { BASEMAP_LABELS, basemapHasGlyphs, basemapIsVector, basemapStyle, fallbackStyle, isDarkBasemap, type BasemapId } from "./basemaps";
+import { BASEMAP_LABELS, basemapHasGlyphs, basemapIsVector, basemapProbeUrl, basemapStyle, fallbackStyle, isDarkBasemap, type BasemapId } from "./basemaps";
 import {
   activeBasemap,
   buildings3dOn,
@@ -208,15 +208,17 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   const basemap = activeBasemap(opts, viewState);
   const vectorActive = basemapIsVector(basemap);
   const [styleFailed, setStyleFailed] = React.useState(false); // genuine offline → token canvas
-  const [tileWarn, setTileWarn] = React.useState<{ failed: BasemapId; kept: BasemapId } | null>(null);
+  const [tileWarn, setTileWarn] = React.useState<{ failed: BasemapId; kept: BasemapId; retrying?: boolean } | null>(null);
   const [styleNonce, setStyleNonce] = React.useState(0); // bump forces a style re-fetch (retry)
   const [switching, setSwitching] = React.useState(false); // crossfade dip during a swap
   const [ready, setReady] = React.useState(false);
   const loadedRef = React.useRef(false);
   const lastGoodRef = React.useRef<BasemapId | null>(null);
   const retryRef = React.useRef(0);
-  const timersRef = React.useRef<{ watchdog?: ReturnType<typeof setTimeout>; fail?: ReturnType<typeof setTimeout> }>({});
+  const timersRef = React.useRef<{ watchdog?: ReturnType<typeof setTimeout>; fail?: ReturnType<typeof setTimeout>; recover?: ReturnType<typeof setTimeout> }>({});
   const MAX_STYLE_RETRIES = 2;
+  const MAX_RECOVERY_ATTEMPTS = 3; // background re-tries of the basemap the USER chose
+  const recoverRef = React.useRef<{ want: BasemapId; attempts: number } | null>(null);
   // assigned once augments are known (below); lets succeed apply them without an
   // ordering cycle (the basemap block sits above the augments block)
   const applyAugmentsRef = React.useRef<(m: MaplibreMap) => void>(() => {});
@@ -245,7 +247,13 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     const good = lastGoodRef.current;
     if (good && good !== basemap) {
       setSwitching(false);
-      setTileWarn({ failed: basemap, kept: good });
+      // Keep the last working map visible, but DON'T abandon the user's choice —
+      // remember it and probe for it in the background (scheduleRecovery), so a
+      // transient hiccup ends with them on the style they picked, not parked on
+      // the fallback. The hard "unavailable · Retry" chip only appears once the
+      // background attempts are exhausted.
+      recoverRef.current = { want: basemap, attempts: 0 };
+      setTileWarn({ failed: basemap, kept: good, retrying: true });
       onViewState({ mapBasemap: good, mapTypeOpen: false }); // keep the last working map, never blank
     } else {
       setStyleFailed(true); // first-load offline (no good basemap yet)
@@ -261,6 +269,42 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   React.useEffect(() => {
     retryRef.current = 0; // a NEW basemap gets a fresh retry budget (nonce retries keep theirs)
   }, [basemap]);
+
+  /* Background recovery of the basemap the USER chose. While the last-good style
+     stays on screen, probe the failed one with backoff; the moment it answers,
+     re-apply it. Only when the attempts are exhausted does the chip harden into
+     "unavailable · Retry". A fresh user pick cancels any pending recovery. */
+  React.useEffect(() => {
+    const pending = recoverRef.current;
+    if (!pending || basemap !== tileWarn?.kept) return;
+    const delay = [4000, 10000, 20000][pending.attempts] ?? 20000;
+    timersRef.current.recover = setTimeout(async () => {
+      const cur = recoverRef.current;
+      if (!cur) return;
+      let alive = false;
+      try {
+        const r = await fetch(basemapProbeUrl(cur.want), { method: "GET", cache: "no-store" });
+        alive = r.ok;
+      } catch {
+        alive = false; // network still down
+      }
+      if (!recoverRef.current) return; // a user pick superseded us
+      if (alive) {
+        recoverRef.current = null;
+        setTileWarn(null);
+        onViewState({ mapBasemap: cur.want }); // land the user on what they picked
+        return;
+      }
+      cur.attempts += 1;
+      if (cur.attempts >= MAX_RECOVERY_ATTEMPTS) {
+        recoverRef.current = null;
+        setTileWarn((w) => (w ? { ...w, retrying: false } : w)); // harden to the manual chip
+      } else {
+        setTileWarn((w) => (w ? { ...w } : w)); // re-run this effect for the next backoff step
+      }
+    }, delay);
+    return () => clearTimeout(timersRef.current.recover);
+  }, [basemap, tileWarn, onViewState]);
   React.useEffect(() => {
     loadedRef.current = false;
     setStyleFailed(false);
@@ -435,6 +479,7 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
   const pickBasemap = React.useCallback(
     (id: string) => {
       setTileWarn(null); // a fresh user choice clears any prior "kept X" warning
+      recoverRef.current = null; // ...and supersedes any background recovery in flight
       if (!reduceMotion && id !== basemap) setSwitching(true);
       onViewState({ mapBasemap: id, mapTypeOpen: false }); // picking a base closes the menu (overlay toggles keep it open)
     },
@@ -1001,8 +1046,17 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
           // switch is confirmed here); the fallback style never counts as good.
           if (map.isStyleLoaded() && map.getStyle()?.name !== "offline-fallback") succeed(map);
         }}
-        onError={() => {
-          if (!loadedRef.current) scheduleFailure(); // retry-then-revert, never blank
+        onError={(e) => {
+          if (loadedRef.current) return;
+          /* Only a genuine SOURCE/TILE failure may condemn a basemap. A missing
+             glyph range or sprite is cosmetic — treating it as a style failure is
+             what made a perfectly healthy basemap "unavailable" and bounced the
+             user back to the last-good one. */
+          const err = (e as { error?: Error & { url?: string } })?.error;
+          const url = err?.url ?? "";
+          const msg = err?.message ?? "";
+          if (/\/fonts?\//i.test(url) || /sprite/i.test(url) || /glyph|sprite|font/i.test(msg)) return;
+          scheduleFailure(); // retry-then-revert, never blank
         }}
         onIdle={(e) => {
           syncGlState(e.target);
@@ -1070,8 +1124,18 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
                 "circle-radius": ["step", ["get", "point_count"], 16, 50, 22, 250, 28],
               }}
             />
+            {/* text-font is EXPLICIT: maplibre's default stack ("Open Sans Regular,
+                Arial Unicode MS Regular") is not hosted by these styles' glyph
+                servers and 404s — which used to condemn a healthy basemap. "Noto
+                Sans Regular" is served by both OpenFreeMap and CARTO. */}
             {glyphs && (
-              <Layer id="map-cluster-count" type="symbol" filter={["has", "point_count"]} layout={{ "text-field": "{point_count_abbreviated}", "text-size": 12 }} paint={{ "text-color": accentFg }} />
+              <Layer
+                id="map-cluster-count"
+                type="symbol"
+                filter={["has", "point_count"]}
+                layout={{ "text-field": "{point_count_abbreviated}", "text-size": 12, "text-font": ["Noto Sans Regular"] }}
+                paint={{ "text-color": accentFg }}
+              />
             )}
             <Layer
               id="map-point"
@@ -1357,21 +1421,30 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
       )}
       {tileWarn && (
         <span className="nxMapChip nxMapChip--tiles nxMapTileChip" role="status" data-testid="map-tile-warn">
-          <Badge tone="warn">{BASEMAP_LABELS[tileWarn.failed]} tiles unavailable · kept {BASEMAP_LABELS[tileWarn.kept]}</Badge>
-          <button
-            type="button"
-            className="nxMapTileRetry"
-            data-testid="map-tile-retry"
-            onClick={() => {
-              const failed = tileWarn.failed;
-              setTileWarn(null);
-              retryRef.current = 0;
-              if (!reduceMotion) setSwitching(true);
-              onViewState({ mapBasemap: failed });
-            }}
-          >
-            Retry
-          </button>
+          {/* while background recovery runs the message is soft ("retrying"); it
+              only hardens to "unavailable" once the attempts are exhausted */}
+          <Badge tone="warn">
+            {tileWarn.retrying
+              ? `${BASEMAP_LABELS[tileWarn.failed]} is slow to load · showing ${BASEMAP_LABELS[tileWarn.kept]}, retrying…`
+              : `${BASEMAP_LABELS[tileWarn.failed]} tiles unavailable · kept ${BASEMAP_LABELS[tileWarn.kept]}`}
+          </Badge>
+          {!tileWarn.retrying && (
+            <button
+              type="button"
+              className="nxMapTileRetry"
+              data-testid="map-tile-retry"
+              onClick={() => {
+                const failed = tileWarn.failed;
+                setTileWarn(null);
+                recoverRef.current = null;
+                retryRef.current = 0;
+                if (!reduceMotion) setSwitching(true);
+                onViewState({ mapBasemap: failed });
+              }}
+            >
+              Retry
+            </button>
+          )}
         </span>
       )}
       {styleFailed && (

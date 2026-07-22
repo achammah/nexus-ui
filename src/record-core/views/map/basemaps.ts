@@ -137,6 +137,16 @@ export const basemapStyle = (id: BasemapId): string | StyleSpecification => {
   return typeof s.style === "function" ? s.style() : s.style;
 };
 
+/* a cheap liveness probe for a basemap: the style URL for a vector basemap, one
+   low-zoom tile for a raster one. Used to auto-recover the user's CHOSEN basemap
+   after a transient failure instead of parking them on the fallback. */
+export const basemapProbeUrl = (id: BasemapId): string => {
+  const s = spec(id);
+  if (typeof s.style === "string") return s.style;
+  const tile = (t: string) => t.replace("{z}", "1").replace("{x}", "1").replace("{y}", "1");
+  return id === "terrain" ? tile("https://a.tile.opentopomap.org/{z}/{x}/{y}.png") : tile(ESRI_IMAGERY);
+};
+
 export const isDarkBasemap = (id: BasemapId): boolean => spec(id).dark;
 export const basemapHasGlyphs = (id: BasemapId): boolean => spec(id).hasGlyphs;
 /* vector basemaps carry building geometry → 3D extrusions can mount */
