@@ -21,10 +21,14 @@ import {
   AXON_DIR, derivePalette, derivePlanPalette, ELEV_DIRS, envIntensity, EASE, fitDistance, fitFor,
   groundShadowOpacity, LOOK, ORTHO, PRESET_DIRS, SUN, sunFor, type ElevationDir, type Preset,
 } from "./look";
-import { formatArea, formatLen, levelArea, polyArea, roomDims } from "./plan-geometry";
+import { formatArea, levelArea, levelWalls, type Wall } from "./plan-geometry";
+import { moveWall, patchOpening, patchRoom, resizeOpening, slideOpening, wallIsAxisAligned } from "./plan-edit";
 import { Plan2D, type Plan2DHandle } from "./Plan2D";
+import { Apron } from "./Apron";
 import {
-  seedScene, type PlanView, type Viewer3DHotspot, type Viewer3DSnapshot, type Viewer3DUnits,
+  seedScene, type PlanView, type Viewer3DFloorplanConfig, type Viewer3DHotspot,
+  type Viewer3DLayers, type Viewer3DOpening, type Viewer3DPlanMeta, type Viewer3DRoom,
+  type Viewer3DSelection, type Viewer3DSnapshot, type Viewer3DUnits,
 } from "./scene";
 import "./viewer3d.css";
 
@@ -130,7 +134,10 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
   const [sectionPos, setSectionPos] = React.useState(0.5);
   const [sunHour, setSunHour] = React.useState(SUN.hourDefault);
   const [measuring, setMeasuring] = React.useState(false);
-  const [scheduleOpen, setScheduleOpen] = React.useState(false);
+  const [selection, setSelection] = React.useState<Viewer3DSelection>(null);
+  const [layers, setLayers] = React.useState<Viewer3DLayers>(snap.layers ?? {});
+  const [apronOpen, setApronOpen] = React.useState(snap.apron !== false);
+  const [geomNonce, setGeomNonce] = React.useState(0); // bump: floorplan geometry changed → rebuild engine
   const [openHotspot, setOpenHotspot] = React.useState<Viewer3DHotspot | null>(null);
   const [importPct, setImportPct] = React.useState<number | null | false>(false); // false = idle
   const [importedName, setImportedName] = React.useState<string | null>(null);
@@ -393,7 +400,75 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       engineRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reloadNonce, innerNonce, engineOn]);
+  }, [reloadNonce, innerNonce, engineOn, geomNonce]);
+
+  /* ---- floorplan editing (apron fields + plan direct manipulation) ---- */
+
+  const setFloorplan = React.useCallback((next: Viewer3DFloorplanConfig) => {
+    persist({ floorplan: next });
+    setGeomNonce((n) => n + 1); // no-op while the engine is unmounted (plan view)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const dragFpRef = React.useRef<Viewer3DFloorplanConfig | null>(null);
+  const dragWallRef = React.useRef<Wall | null>(null);
+  const dragOpeningRef = React.useRef<{ id: string; wall: Wall } | null>(null);
+
+  const onWallDragStart = (wall: Wall) => { dragFpRef.current = snapRef.current.floorplan ?? null; dragWallRef.current = wall; };
+  const onWallDrag = (delta: number) => {
+    if (!dragFpRef.current || !dragWallRef.current) return;
+    setFloorplan(moveWall(dragFpRef.current, activeLevel, dragWallRef.current, delta));
+  };
+  const onWallDragEnd = () => {
+    /* re-anchor the selection to the moved wall (same axis + span + rooms) */
+    const old = dragWallRef.current;
+    const fp = snapRef.current.floorplan;
+    dragFpRef.current = null; dragWallRef.current = null;
+    if (!old || !fp) return;
+    const lvl = fp.levels.find((l) => l.id === activeLevel);
+    if (!lvl) return;
+    const axis = wallIsAxisAligned(old);
+    const span = (w: Wall) => axis === "x"
+      ? [Math.min(w.a[1], w.b[1]), Math.max(w.a[1], w.b[1])]
+      : [Math.min(w.a[0], w.b[0]), Math.max(w.a[0], w.b[0])];
+    const [lo, hi] = span(old);
+    const match = levelWalls(lvl).find((w) =>
+      wallIsAxisAligned(w) === axis
+      && Math.abs(span(w)[0] - lo) < 1e-3 && Math.abs(span(w)[1] - hi) < 1e-3
+      && w.rooms.slice().sort().join() === old.rooms.slice().sort().join());
+    if (match) setSelection({ kind: "wall", level: activeLevel, a: match.a, b: match.b });
+  };
+
+  const onOpeningDragStart = (id: string, wall: Wall) => {
+    dragFpRef.current = snapRef.current.floorplan ?? null;
+    dragOpeningRef.current = { id, wall };
+  };
+  const onOpeningDrag = (delta: number) => {
+    if (!dragFpRef.current || !dragOpeningRef.current) return;
+    setFloorplan(slideOpening(dragFpRef.current, activeLevel, dragOpeningRef.current.id, dragOpeningRef.current.wall, delta));
+  };
+  const onOpeningDragEnd = () => { dragFpRef.current = null; dragOpeningRef.current = null; };
+
+  const fpNow = () => snapRef.current.floorplan;
+  const apronHandlers = {
+    onPatchRoom: (levelId: string, roomId: string, patch: Partial<Viewer3DRoom>) => {
+      const fp = fpNow(); if (fp) setFloorplan(patchRoom(fp, levelId, roomId, patch));
+    },
+    onPatchOpening: (levelId: string, openingId: string, patch: Partial<Viewer3DOpening>) => {
+      const fp = fpNow(); if (fp) setFloorplan(patchOpening(fp, levelId, openingId, patch));
+    },
+    onResizeOpening: (levelId: string, openingId: string, width: number) => {
+      const fp = fpNow(); if (fp) setFloorplan(resizeOpening(fp, levelId, openingId, width));
+    },
+    onPatchMeta: (patch: Partial<Viewer3DPlanMeta>) => {
+      const fp = fpNow(); if (fp) setFloorplan({ ...fp, meta: { ...(fp.meta ?? {}), ...patch } });
+    },
+    onLayers: (patch: Partial<Viewer3DLayers>) => {
+      const next = { ...layers, ...patch };
+      setLayers(next);
+      persist({ layers: next });
+    },
+  };
 
   /* ---- model import (object mode) ---- */
 
@@ -690,9 +765,9 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
                 {units === "metric" ? "m" : "ft"}
               </button>
               {showSchedule && (
-                <button type="button" className="nxV3Btn" aria-pressed={scheduleOpen} data-testid="viewer3d-schedule-toggle"
-                  onClick={() => setScheduleOpen((o) => !o)}>
-                  Schedule
+                <button type="button" className="nxV3Btn" aria-pressed={apronOpen} data-testid="viewer3d-apron-toggle"
+                  onClick={() => { const next = !apronOpen; setApronOpen(next); persist({ apron: next }); }}>
+                  Panel
                 </button>
               )}
             </>
@@ -799,6 +874,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
         </div>
       )}
 
+      <div className="nxV3Body">
       <div className="nxV3Stage"
         onDragOver={allowImport ? (ev) => { ev.preventDefault(); setDragOver(true); } : undefined}
         onDragLeave={allowImport ? () => setDragOver(false) : undefined}
@@ -814,6 +890,18 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
               palette={planPalette}
               hotspots={visibleHotspots}
               measuring={measuring}
+              layers={layers}
+              selection={selection}
+              onSelect={setSelection}
+              editable
+              onWallDragStart={onWallDragStart}
+              onWallDrag={onWallDrag}
+              onWallDragEnd={onWallDragEnd}
+              onOpeningDragStart={onOpeningDragStart}
+              onOpeningDrag={onOpeningDrag}
+              onOpeningDragEnd={onOpeningDragEnd}
+              section={{ axis: sectionAxis, pos: sectionPos, onPos: setSectionPos, onOpen: () => setView("section") }}
+              onElevation={(d) => { setElevDir(d); setView("elevation"); }}
               onHotspot={(h) => setOpenHotspot((cur) => (cur?.id === h.id ? null : h))}
             />
           </div>
@@ -870,51 +958,6 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
           </div>
         )}
 
-        {/* room schedule */}
-        {scheduleOpen && showSchedule && snap.floorplan && (
-          <aside className="nxV3Schedule nx-rise-in-sm" data-testid="viewer3d-schedule" aria-label="Room schedule">
-            <div className="nxV3ScheduleHead">
-              <span>Room schedule</span>
-              <button type="button" className="nxV3CardClose" aria-label="Close schedule" onClick={() => setScheduleOpen(false)}>×</button>
-            </div>
-            <table>
-              <thead>
-                <tr><th>Room</th><th>Area</th><th>W × D</th><th>Ceil.</th><th>Type</th><th>Finish</th></tr>
-              </thead>
-              {levels.map((l) => (
-                <tbody key={l.id}>
-                  <tr className="nxV3SchedLevel"><td colSpan={6}>{l.name}</td></tr>
-                  {l.rooms.map((r) => {
-                    const { w, d } = roomDims(r);
-                    return (
-                      <tr key={r.id} data-testid={`schedule-row-${r.id}`}>
-                        <td>{r.label}</td>
-                        <td>{formatArea(polyArea(r.poly), units)}</td>
-                        <td>{formatLen(w, units)} × {formatLen(d, units)}</td>
-                        <td>{formatLen(r.ceiling ?? l.height, units)}</td>
-                        <td>{r.roomType ?? "—"}</td>
-                        <td>{r.finish ?? "—"}</td>
-                      </tr>
-                    );
-                  })}
-                  <tr className="nxV3SchedTotal">
-                    <td>Level total</td>
-                    <td data-testid={`schedule-total-${l.id}`}>{formatArea(levelArea(l), units)}</td>
-                    <td colSpan={4} />
-                  </tr>
-                </tbody>
-              ))}
-              <tbody>
-                <tr className="nxV3SchedTotal nxV3SchedGrand">
-                  <td>Gross internal area</td>
-                  <td data-testid="schedule-grand-total">{formatArea(levels.reduce((s, l) => s + levelArea(l), 0), units)}</td>
-                  <td colSpan={4} />
-                </tr>
-              </tbody>
-            </table>
-          </aside>
-        )}
-
         {engineOn && <div className="nxV3Hint" aria-hidden="true">Drag to orbit · Scroll to zoom · ⇧drag to pan</div>}
 
         {dragOver && allowImport && (
@@ -939,6 +982,22 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
             <button type="button" className="nxV3Btn" onClick={() => { setErrorMsg(""); setInnerNonce((n) => n + 1); }}>Try again</button>
           </div>
         )}
+      </div>
+
+      {/* the technical apron — persistent CAD dock beside the drawing */}
+      {mode === "floorplan" && showSchedule && apronOpen && snap.floorplan && (
+        <Apron
+          floorplan={snap.floorplan}
+          activeLevel={activeLevel}
+          selection={selection}
+          units={units}
+          layers={layers}
+          onSelect={setSelection}
+          onLevel={(id) => { setActiveLevel(id); persist({ activeLevel: id }); }}
+          onClose={() => { setApronOpen(false); persist({ apron: false }); }}
+          {...apronHandlers}
+        />
+      )}
       </div>
     </div>
   );

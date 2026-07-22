@@ -214,6 +214,7 @@ export interface PlanPalette {
   dims: string;       // dimension lines + text
   floorA: string;
   floorB: string;
+  floorSel: string;   // selected room fill
   accent: string;
   glass: string;      // window glazing line
   grid: string;       // faint background grid
@@ -229,6 +230,7 @@ export function derivePlanPalette(): PlanPalette {
     dims: r("color-mix(in srgb, var(--nx-fg) 72%, var(--nx-bg))"),
     floorA: r("color-mix(in srgb, var(--nx-fg) 3%, var(--nx-bg))"),
     floorB: r("color-mix(in srgb, var(--nx-accent) 6%, var(--nx-bg))"),
+    floorSel: r("color-mix(in srgb, var(--nx-accent) 16%, var(--nx-bg))"),
     accent: r("var(--nx-accent)"),
     glass: r("color-mix(in srgb, var(--nx-accent) 55%, var(--nx-fg))"),
     grid: r("color-mix(in srgb, var(--nx-fg) 7%, var(--nx-bg))"),

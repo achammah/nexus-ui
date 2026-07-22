@@ -1,18 +1,25 @@
-/* Plan2D — the true 2D technical drawing (SVG, orthographic top-down). This is
-   deliberately NOT the WebGL scene from above: architectural plan conventions —
-   double-line walls, door swing arcs, chain dimensions with extension lines and
-   oblique ticks, a scale bar, north arrow and title block — are linework, and
-   SVG keeps them crisp at any zoom and trivially exportable to print-res PNG.
-   Every number printed here derives from the same plan-geometry math the 3D
-   walls are built from. */
+/* Plan2D — the true 2D technical drawing (SVG, orthographic top-down) and the
+   primary EDITING surface. Architectural plan conventions — double-line walls,
+   door swing arcs, chain dimensions with extension lines and oblique ticks, a
+   scale bar, north arrow and title block — plus direct manipulation: click
+   selects a room / wall / opening (the apron shows its spec), dragging a wall
+   moves it (rooms, dims, areas, schedule and the 3D walls all recompute from
+   the same polygons), dragging a door/window slides it along its wall, the A–A
+   section marker drags to move the 3D cut plane, and facade markers jump to
+   that elevation. Every number printed here derives from the same
+   plan-geometry math the 3D walls are built from. */
 import * as React from "react";
 import {
   formatArea, formatDim, formatLen, gridStops, levelWalls, nearestScale,
   openingsOnWall, polyArea, polyBounds, polyCentroid, roomDims, scaleBarLength,
-  solidSpans, lerp2, type P2,
+  lerp2, type P2, type Wall,
 } from "./plan-geometry";
-import type { PlanPalette } from "./look";
-import type { Viewer3DFloorplanConfig, Viewer3DHotspot, Viewer3DLevel, Viewer3DUnits } from "./scene";
+import { wallIsAxisAligned } from "./plan-edit";
+import type { ElevationDir, PlanPalette } from "./look";
+import type {
+  Viewer3DFloorplanConfig, Viewer3DHotspot, Viewer3DLayers, Viewer3DLevel,
+  Viewer3DSelection, Viewer3DUnits,
+} from "./scene";
 
 export interface Plan2DProps {
   floorplan: Viewer3DFloorplanConfig;
@@ -21,7 +28,21 @@ export interface Plan2DProps {
   palette: PlanPalette;
   hotspots: Viewer3DHotspot[];
   measuring: boolean;
+  layers: Viewer3DLayers;
+  selection: Viewer3DSelection;
+  onSelect: (sel: Viewer3DSelection) => void;
   onHotspot?: (h: Viewer3DHotspot) => void;
+  /* direct-manipulation editing (absent = read-only drawing) */
+  editable?: boolean;
+  onWallDragStart?: (wall: Wall) => void;
+  onWallDrag?: (delta: number) => void;         // total perpendicular delta since start
+  onWallDragEnd?: () => void;
+  onOpeningDragStart?: (openingId: string, wall: Wall) => void;
+  onOpeningDrag?: (delta: number) => void;      // total along-wall delta since start
+  onOpeningDragEnd?: () => void;
+  /* section marker (A–A) drawn on the plan; drag moves the 3D cut */
+  section?: { axis: "x" | "z"; pos: number; onPos: (pos: number) => void; onOpen: () => void };
+  onElevation?: (dir: ElevationDir) => void;
 }
 
 export interface Plan2DHandle {
@@ -37,10 +58,21 @@ const T_TXT = 0.26;   // room name font size (m)
 const T_SUB = 0.2;    // secondary text
 const T_DIM = 0.19;   // dimension text
 
+type Drag =
+  | { kind: "wall"; wall: Wall; axis: "x" | "z"; start: P2 }
+  | { kind: "opening"; id: string; wall: Wall; ux: number; uz: number; start: P2 }
+  | { kind: "section"; start: P2 }
+  | null;
+
 export const Plan2D = React.forwardRef<Plan2DHandle, Plan2DProps>(function Plan2D(
-  { floorplan, level, units, palette: C, hotspots, measuring, onHotspot }, ref,
+  {
+    floorplan, level, units, palette: C, hotspots, measuring, layers, selection,
+    onSelect, onHotspot, editable, onWallDragStart, onWallDrag, onWallDragEnd,
+    onOpeningDragStart, onOpeningDrag, onOpeningDragEnd, section, onElevation,
+  }, ref,
 ) {
   const svgRef = React.useRef<SVGSVGElement>(null);
+  const dragRef = React.useRef<Drag>(null);
   const [pts, setPts] = React.useState<P2[]>([]);
   const [hover, setHover] = React.useState<P2 | null>(null);
 
@@ -61,34 +93,85 @@ export const Plan2D = React.forwardRef<Plan2DHandle, Plan2DProps>(function Plan2
   const walls = React.useMemo(() => levelWalls(level), [level]);
   const stops = React.useMemo(() => gridStops(level), [level]);
 
-  /* client point -> plan meters (snapped) */
-  const toPlan = (ev: React.PointerEvent): P2 | null => {
+  /* client point -> plan meters */
+  const toPlan = (ev: { clientX: number; clientY: number }): P2 | null => {
     const svg = svgRef.current;
     if (!svg) return null;
     const ctm = svg.getScreenCTM();
     if (!ctm) return null;
     const p = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(ctm.inverse());
-    const snap = (v: number) => Math.round(v * 20) / 20;
-    return [snap(p.x), snap(p.y)];
+    return [p.x, p.y];
   };
+  const snap05 = ([x, z]: P2): P2 => [Math.round(x * 20) / 20, Math.round(z * 20) / 20];
 
-  const onClick = (ev: React.PointerEvent) => {
+  /* ---- measuring + drag plumbing on the svg root ---- */
+
+  const onRootDown = (ev: React.PointerEvent) => {
     if (!measuring) return;
     const p = toPlan(ev);
     if (!p) return;
-    setPts((cur) => (cur.length >= 2 ? [p] : [...cur, p]));
+    setPts((cur) => (cur.length >= 2 ? [snap05(p)] : [...cur, snap05(p)]));
   };
-  const onMove = (ev: React.PointerEvent) => {
-    if (!measuring || pts.length !== 1) return;
-    setHover(toPlan(ev));
+  const onRootMove = (ev: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (d) {
+      const p = toPlan(ev);
+      if (!p) return;
+      if (d.kind === "wall") {
+        onWallDrag?.(d.axis === "x" ? p[0] - d.start[0] : p[1] - d.start[1]);
+      } else if (d.kind === "opening") {
+        onOpeningDrag?.((p[0] - d.start[0]) * d.ux + (p[1] - d.start[1]) * d.uz);
+      } else if (d.kind === "section" && section) {
+        const t = section.axis === "x"
+          ? (p[0] - b.minX) / Math.max(W, 1e-6)
+          : (p[1] - b.minZ) / Math.max(H, 1e-6);
+        section.onPos(Math.min(0.98, Math.max(0.02, t)));
+      }
+      return;
+    }
+    if (measuring && pts.length === 1) setHover(snap05(toPlan(ev) ?? pts[0]));
+  };
+  const endDrag = () => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (d?.kind === "wall") onWallDragEnd?.();
+    if (d?.kind === "opening") onOpeningDragEnd?.();
   };
   React.useEffect(() => { if (!measuring) { setPts([]); setHover(null); } }, [measuring]);
+
+  const startWallDrag = (wall: Wall) => (ev: React.PointerEvent) => {
+    if (measuring) return;
+    ev.stopPropagation();
+    onSelect({ kind: "wall", level: level.id, a: wall.a, b: wall.b });
+    const axis = wallIsAxisAligned(wall);
+    if (!editable || !axis) return;
+    const p = toPlan(ev);
+    if (!p) return;
+    try { (ev.currentTarget as Element).setPointerCapture?.(ev.pointerId); } catch { /* synthetic pointers have no capture */ }
+    dragRef.current = { kind: "wall", wall, axis, start: p };
+    onWallDragStart?.(wall);
+  };
+
+  const startOpeningDrag = (id: string, wall: Wall) => (ev: React.PointerEvent) => {
+    if (measuring) return;
+    ev.stopPropagation();
+    onSelect({ kind: "opening", level: level.id, id });
+    if (!editable) return;
+    const p = toPlan(ev);
+    if (!p) return;
+    const len = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]);
+    try { (ev.currentTarget as Element).setPointerCapture?.(ev.pointerId); } catch { /* synthetic pointers have no capture */ }
+    dragRef.current = { kind: "opening", id, wall, ux: (wall.b[0] - wall.a[0]) / len, uz: (wall.b[1] - wall.a[1]) / len, start: p };
+    onOpeningDragStart?.(id, wall);
+  };
 
   React.useImperativeHandle(ref, () => ({
     exportPng: (pxWidth = 3300) => new Promise((resolve, reject) => {
       const svg = svgRef.current;
       if (!svg) return reject(new Error("plan not mounted"));
       const clone = svg.cloneNode(true) as SVGSVGElement;
+      /* strip interactive-only artifacts (section marker, elevation markers) from the print */
+      clone.querySelectorAll("[data-screen-only]").forEach((n) => n.remove());
       const pxH = Math.round((vb.h / vb.w) * pxWidth);
       clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
       clone.setAttribute("width", String(pxWidth));
@@ -112,13 +195,12 @@ export const Plan2D = React.forwardRef<Plan2DHandle, Plan2DProps>(function Plan2
     }),
   }), [vb.w, vb.h, C.paper]);
 
-  /* ---- dimension helpers (SVG fragments) ---- */
+  /* ---- dimension helpers ---- */
 
   const tick = (x: number, y: number, key: string) => (
     <line key={key} x1={x - 0.09} y1={y + 0.09} x2={x + 0.09} y2={y - 0.09} stroke={C.dims} strokeWidth={0.035} />
   );
 
-  /* horizontal chain at yLine using stop xs; extension lines drop from yFrom */
   const chainH = (xs: number[], yLine: number, yFrom: number, id: string, overall = false) => {
     if (xs.length < 2) return null;
     const items: React.ReactNode[] = [];
@@ -169,41 +251,45 @@ export const Plan2D = React.forwardRef<Plan2DHandle, Plan2DProps>(function Plan2
       const a = lerp2(wall.a, wall.b, t0), c = lerp2(wall.a, wall.b, t1);
       const w = Math.hypot(c[0] - a[0], c[1] - a[1]);
       const ux = (c[0] - a[0]) / w, uz = (c[1] - a[1]) / w;
+      const isSel = selection?.kind === "opening" && selection.id === opening.id;
       openingErase.push(
         <line key={`er-${wi}-${oi}`} x1={a[0]} y1={a[1]} x2={c[0]} y2={c[1]} stroke={C.paper} strokeWidth={t + 0.02} />,
       );
+      if (layers.openings === false) return;
+      const grab = {
+        onPointerDown: startOpeningDrag(opening.id, wall),
+        style: { cursor: editable ? ("grab" as const) : ("pointer" as const) },
+      };
       if (opening.kind === "door") {
         const swing = opening.swing ?? 1;
-        /* hinge at `a`; leaf swings to the +90°(swing) side of the wall */
         const px = -uz * swing, pz = ux * swing;
         const L: P2 = [a[0] + px * w, a[1] + pz * w];
         const sweep = swing === 1 ? 0 : 1;
         openingSymbols.push(
-          <g key={`d-${wi}-${oi}`} data-testid={`plan-door-${opening.id}`}>
-            <line x1={a[0]} y1={a[1]} x2={L[0]} y2={L[1]} stroke={C.ink} strokeWidth={0.04} />
-            <path d={`M ${L[0]} ${L[1]} A ${w} ${w} 0 0 ${sweep} ${c[0]} ${c[1]}`} fill="none" stroke={C.muted} strokeWidth={0.022} strokeDasharray="0.09 0.07" />
+          <g key={`d-${wi}-${oi}`} data-testid={`plan-door-${opening.id}`} {...grab}>
+            {/* generous invisible hit zone */}
+            <line x1={a[0]} y1={a[1]} x2={c[0]} y2={c[1]} stroke="transparent" strokeWidth={t + 0.3} />
+            <line x1={a[0]} y1={a[1]} x2={L[0]} y2={L[1]} stroke={isSel ? C.accent : C.ink} strokeWidth={isSel ? 0.055 : 0.04} />
+            <path d={`M ${L[0]} ${L[1]} A ${w} ${w} 0 0 ${sweep} ${c[0]} ${c[1]}`} fill="none" stroke={isSel ? C.accent : C.muted} strokeWidth={0.022} strokeDasharray="0.09 0.07" />
           </g>,
         );
       } else {
-        /* window: jamb-to-jamb frame + central glazing line */
         const px = -uz, pz = ux;
         const ht = t * 0.5;
         openingSymbols.push(
-          <g key={`w-${wi}-${oi}`} data-testid={`plan-window-${opening.id}`}>
+          <g key={`w-${wi}-${oi}`} data-testid={`plan-window-${opening.id}`} {...grab}>
+            <line x1={a[0]} y1={a[1]} x2={c[0]} y2={c[1]} stroke="transparent" strokeWidth={t + 0.3} />
             <rect x={0} y={0} width={w} height={t}
               transform={`translate(${a[0] - px * ht} ${a[1] - pz * ht}) rotate(${(Math.atan2(uz, ux) * 180) / Math.PI})`}
-              fill={C.paper} stroke={C.ink} strokeWidth={0.028} />
-            <line x1={a[0]} y1={a[1]} x2={c[0]} y2={c[1]} stroke={C.glass} strokeWidth={0.045} />
+              fill={C.paper} stroke={isSel ? C.accent : C.ink} strokeWidth={isSel ? 0.045 : 0.028} />
+            <line x1={a[0]} y1={a[1]} x2={c[0]} y2={c[1]} stroke={isSel ? C.accent : C.glass} strokeWidth={0.045} />
           </g>,
         );
       }
     });
   });
 
-  /* ---- title block rows ---- */
-  const scaleLabel = meta.scale ?? nearestScale(
-    (svgRef.current?.clientWidth ?? 900) / vb.w,
-  );
+  const scaleLabel = meta.scale ?? nearestScale((svgRef.current?.clientWidth ?? 900) / vb.w);
   const barLen = scaleBarLength(W);
 
   const measureLen = pts.length === 2
@@ -214,6 +300,22 @@ export const Plan2D = React.forwardRef<Plan2DHandle, Plan2DProps>(function Plan2
   const titleX = b.maxX + PAD_R - 0.25 - titleW;
   const titleY = b.maxZ + PAD_B + 0.35;
 
+  const isWallSel = (w: Wall) => selection?.kind === "wall"
+    && ((Math.hypot(w.a[0] - selection.a[0], w.a[1] - selection.a[1]) < 1e-3 && Math.hypot(w.b[0] - selection.b[0], w.b[1] - selection.b[1]) < 1e-3)
+      || (Math.hypot(w.a[0] - selection.b[0], w.a[1] - selection.b[1]) < 1e-3 && Math.hypot(w.b[0] - selection.a[0], w.b[1] - selection.a[1]) < 1e-3));
+
+  /* section marker endpoints (drawn just outside the plan) */
+  const secA: P2 = section
+    ? (section.axis === "x"
+      ? [b.minX + W * section.pos, b.minZ - 0.45]
+      : [b.minX - 0.45, b.minZ + H * section.pos])
+    : [0, 0];
+  const secB: P2 = section
+    ? (section.axis === "x"
+      ? [b.minX + W * section.pos, b.maxZ + 0.45]
+      : [b.maxX + 0.45, b.minZ + H * section.pos])
+    : [0, 0];
+
   return (
     <svg
       ref={svgRef}
@@ -223,35 +325,53 @@ export const Plan2D = React.forwardRef<Plan2DHandle, Plan2DProps>(function Plan2
       role="img"
       aria-label={`Technical floor plan of ${level.name}: ${level.rooms.length} rooms, ${formatArea(level.rooms.reduce((s, r) => s + polyArea(r.poly), 0), units)}`}
       style={{ background: C.paper }}
-      onPointerDown={onClick}
-      onPointerMove={onMove}
+      onPointerDown={(ev) => { onRootDown(ev); if (!measuring && ev.target === svgRef.current) onSelect(null); }}
+      onPointerMove={onRootMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
     >
       {/* sheet frame */}
       <rect x={vb.x + 0.12} y={vb.y + 0.12} width={vb.w - 0.24} height={vb.h - 0.24}
         fill="none" stroke={C.ink} strokeWidth={0.035} />
 
-      {/* room floors */}
-      {level.rooms.map((r, i) => (
-        <polygon key={r.id} data-testid={`plan-room-${r.id}`}
-          points={r.poly.map(([x, z]) => `${x},${z}`).join(" ")}
-          fill={i % 2 === 0 ? C.floorA : C.floorB} stroke="none" />
-      ))}
+      {/* room floors (click selects) */}
+      {level.rooms.map((r, i) => {
+        const sel = selection?.kind === "room" && selection.id === r.id;
+        return (
+          <polygon key={r.id} data-testid={`plan-room-${r.id}`}
+            points={r.poly.map(([x, z]) => `${x},${z}`).join(" ")}
+            fill={sel ? C.floorSel : i % 2 === 0 ? C.floorA : C.floorB} stroke="none"
+            style={{ cursor: "pointer" }}
+            onPointerDown={(ev) => { if (!measuring) { ev.stopPropagation(); onSelect({ kind: "room", level: level.id, id: r.id }); } }} />
+        );
+      })}
 
-      {/* walls (double-line effect: one thick ink stroke per deduped wall) */}
-      {walls.map((wl, i) => (
-        <line key={i} x1={wl.a[0]} y1={wl.a[1]} x2={wl.b[0]} y2={wl.b[1]}
-          stroke={C.ink} strokeWidth={wl.shared ? tInt : tExt} strokeLinecap="square" />
-      ))}
+      {/* walls: visible stroke + generous transparent hit line; drag to move */}
+      {walls.map((wl, i) => {
+        const sel = isWallSel(wl);
+        const axis = wallIsAxisAligned(wl);
+        const draggable = editable && !!axis;
+        return (
+          <g key={i} onPointerDown={startWallDrag(wl)}
+            style={{ cursor: draggable ? (axis === "x" ? "ew-resize" : "ns-resize") : "pointer" }}>
+            <line x1={wl.a[0]} y1={wl.a[1]} x2={wl.b[0]} y2={wl.b[1]}
+              stroke={sel ? C.accent : C.ink} strokeWidth={wl.shared ? tInt : tExt} strokeLinecap="square" />
+            <line x1={wl.a[0]} y1={wl.a[1]} x2={wl.b[0]} y2={wl.b[1]}
+              stroke="transparent" strokeWidth={(wl.shared ? tInt : tExt) + 0.3} strokeLinecap="square"
+              data-testid={`plan-wall-${i}`} />
+          </g>
+        );
+      })}
       {openingErase}
       {openingSymbols}
 
-      {/* room labels: name, envelope dims, area */}
-      {level.rooms.map((r) => {
+      {/* room labels */}
+      {layers.labels !== false && level.rooms.map((r) => {
         const [cx, cz] = polyCentroid(r.poly);
         const { w, d } = roomDims(r);
         const small = polyArea(r.poly) < 4;
         return (
-          <g key={r.id} textAnchor="middle" fontFamily="ui-sans-serif, system-ui, sans-serif">
+          <g key={r.id} textAnchor="middle" fontFamily="ui-sans-serif, system-ui, sans-serif" style={{ pointerEvents: "none" }}>
             <text x={cx} y={cz - (small ? 0.1 : 0.24)} fontSize={small ? T_SUB : T_TXT} fill={C.ink}
               letterSpacing={0.03} style={{ textTransform: "uppercase" }} fontWeight={600}>{r.label}</text>
             {!small && (
@@ -267,7 +387,7 @@ export const Plan2D = React.forwardRef<Plan2DHandle, Plan2DProps>(function Plan2
       })}
 
       {/* hotspot markers */}
-      {hotspots.map((h) => (
+      {layers.hotspots !== false && hotspots.map((h) => (
         <g key={h.id} data-testid={`plan-hotspot-${h.id}`} onClick={() => onHotspot?.(h)} style={{ cursor: "pointer" }}>
           <circle cx={h.position[0]} cy={h.position[2]} r={0.17} fill={C.tones[h.tone ?? "accent"]} opacity={0.92} />
           <circle cx={h.position[0]} cy={h.position[2]} r={0.28} fill="none" stroke={C.tones[h.tone ?? "accent"]} strokeWidth={0.03} opacity={0.55} />
@@ -275,11 +395,55 @@ export const Plan2D = React.forwardRef<Plan2DHandle, Plan2DProps>(function Plan2
         </g>
       ))}
 
-      {/* chain dimensions: per-wall-stop row + overall, top and left */}
-      {chainH(stops.xs, b.minZ - 0.75, b.minZ, "top-chain")}
-      {chainH([b.minX, b.maxX], b.minZ - 1.35, b.minZ, "top-overall", true)}
-      {chainV(stops.zs, b.minX - 0.75, b.minX, "left-chain")}
-      {chainV([b.minZ, b.maxZ], b.minX - 1.35, b.minX, "left-overall", true)}
+      {/* chain dimensions */}
+      {layers.dims !== false && (
+        <>
+          {chainH(stops.xs, b.minZ - 0.75, b.minZ, "top-chain")}
+          {chainH([b.minX, b.maxX], b.minZ - 1.35, b.minZ, "top-overall", true)}
+          {chainV(stops.zs, b.minX - 0.75, b.minX, "left-chain")}
+          {chainV([b.minZ, b.maxZ], b.minX - 1.35, b.minX, "left-overall", true)}
+        </>
+      )}
+
+      {/* A–A section marker: drag moves the 3D cut plane (screen-only) */}
+      {section && (
+        <g data-testid="plan-section-marker" data-screen-only="1"
+          style={{ cursor: section.axis === "x" ? "ew-resize" : "ns-resize" }}
+          onPointerDown={(ev) => {
+            ev.stopPropagation();
+            const p = toPlan(ev);
+            if (!p) return;
+            try { (ev.currentTarget as Element).setPointerCapture?.(ev.pointerId); } catch { /* synthetic pointers have no capture */ }
+            dragRef.current = { kind: "section", start: p };
+          }}
+          onDoubleClick={section.onOpen}>
+          <line x1={secA[0]} y1={secA[1]} x2={secB[0]} y2={secB[1]}
+            stroke={C.accent} strokeWidth={0.04} strokeDasharray="0.5 0.14 0.06 0.14" />
+          {[secA, secB].map((p, i) => (
+            <g key={i} transform={`translate(${p[0]} ${p[1]})`}>
+              <circle r={0.22} fill={C.paper} stroke={C.accent} strokeWidth={0.04} />
+              <text y={0.075} fontSize={T_DIM} fill={C.accent} textAnchor="middle" fontWeight={700}
+                fontFamily="ui-sans-serif, system-ui, sans-serif">A</text>
+            </g>
+          ))}
+          <line x1={secA[0]} y1={secA[1]} x2={secB[0]} y2={secB[1]} stroke="transparent" strokeWidth={0.5} />
+        </g>
+      )}
+
+      {/* elevation markers on each facade: click to open that elevation (screen-only) */}
+      {onElevation && ([
+        ["north", (b.minX + b.maxX) / 2, b.minZ - 1.78, 180],
+        ["south", (b.minX + b.maxX) / 2, b.maxZ + 0.62, 0],
+        ["west", b.minX - 1.78, (b.minZ + b.maxZ) / 2, 90],
+        ["east", b.maxX + 0.95, (b.minZ + b.maxZ) / 2, -90],
+      ] as [ElevationDir, number, number, number][]).map(([dir, x, z, rot]) => (
+        <g key={dir} transform={`translate(${x} ${z}) rotate(${rot})`} data-screen-only="1"
+          data-testid={`plan-elev-${dir}`} style={{ cursor: "pointer" }} onClick={() => onElevation(dir)}>
+          <path d="M 0 0.16 L 0.17 -0.14 L -0.17 -0.14 Z" fill="none" stroke={C.muted} strokeWidth={0.03} />
+          <circle cy={-0.02} r={0.34} fill="transparent" />
+          <title>{`${dir[0].toUpperCase() + dir.slice(1)} elevation`}</title>
+        </g>
+      ))}
 
       {/* measure tool */}
       {measuring && pts.length > 0 && mEnd && (

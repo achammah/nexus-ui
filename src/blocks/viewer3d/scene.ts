@@ -116,6 +116,21 @@ export interface Viewer3DFloorplanConfig {
   wallThickness?: number;
 }
 
+/* drawing layers the plan/apron can toggle; absent = visible */
+export interface Viewer3DLayers {
+  dims?: boolean;
+  labels?: boolean;
+  openings?: boolean;
+  hotspots?: boolean;
+}
+
+/* a selected drawing element (plan-editing + the properties apron) */
+export type Viewer3DSelection =
+  | { kind: "room"; level: string; id: string }
+  | { kind: "opening"; level: string; id: string }
+  | { kind: "wall"; level: string; a: [number, number]; b: [number, number] }
+  | null;
+
 export interface Viewer3DSnapshot {
   version: 1;
   kind: "viewer3d";
@@ -129,6 +144,9 @@ export interface Viewer3DSnapshot {
   activeLevel?: string;
   units?: Viewer3DUnits;
   planView?: PlanView;
+  layers?: Viewer3DLayers;
+  /* the technical apron (properties/layers/levels/schedule dock) — default open */
+  apron?: boolean;
   /* chrome toggles a config can hide */
   controls?: {
     presets?: boolean;   // camera-angle buttons (default true)

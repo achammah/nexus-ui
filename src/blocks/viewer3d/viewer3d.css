@@ -319,52 +319,128 @@
   transition: width var(--nx-t-fast) var(--nx-ease);
 }
 
-/* ---- room schedule ---- */
-.nxV3Schedule {
-  position: absolute;
-  top: var(--nx-gap-3);
-  right: var(--nx-gap-3);
-  bottom: var(--nx-gap-3);
-  width: min(460px, calc(100% - 2 * var(--nx-gap-3)));
-  overflow: auto;
-  background: var(--nx-bg-raised);
-  border: 1px solid var(--nx-border);
-  border-radius: var(--nx-radius-m);
-  box-shadow: var(--nx-shadow-2);
-  z-index: 5;
+/* ---- body: drawing + the technical apron side by side ---- */
+.nxV3Body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
-.nxV3ScheduleHead {
+.nxV3Body .nxV3Stage { flex: 1; min-width: 0; }
+
+/* ---- the technical apron (CAD dock) ---- */
+.nxV3Apron {
+  width: 312px;
+  flex: none;
+  overflow-y: auto;
+  background: var(--nx-bg-raised);
+  border-left: 1px solid var(--nx-border);
+  font: var(--nx-text-meta);
+  color: var(--nx-fg);
+}
+.nxV3ApronHead {
   position: sticky;
   top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: var(--nx-gap-2) var(--nx-gap-3);
-  font: var(--nx-text-title);
-  color: var(--nx-fg);
+  font: var(--nx-text-micro);
+  letter-spacing: var(--nx-tracking-micro);
+  text-transform: uppercase;
+  color: var(--nx-fg-muted);
   background: var(--nx-bg-raised);
   border-bottom: 1px solid var(--nx-border);
 }
-.nxV3Schedule table {
+.nxV3ApronSec { border-bottom: 1px solid var(--nx-border); padding: 0 var(--nx-gap-3) var(--nx-gap-3); }
+.nxV3ApronSec > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: var(--nx-gap-2) 0;
+  font: var(--nx-text-micro);
+  letter-spacing: var(--nx-tracking-micro);
+  text-transform: uppercase;
+  color: var(--nx-accent);
+  user-select: none;
+}
+.nxV3ApronSec > summary::-webkit-details-marker { display: none; }
+.nxV3ApronSec > summary::before { content: "▸ "; color: var(--nx-fg-faint); }
+.nxV3ApronSec[open] > summary::before { content: "▾ "; }
+
+.nxV3PropKind { font: var(--nx-text-title); color: var(--nx-fg); margin-bottom: var(--nx-gap-2); }
+.nxV3PropRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--nx-gap-3);
+  padding: 3px 0;
+  border-bottom: 1px dotted color-mix(in srgb, var(--nx-border) 70%, transparent);
+}
+.nxV3PropRow > span:first-child { color: var(--nx-fg-muted); white-space: nowrap; }
+.nxV3PropRow > span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.nxV3PropHint { font: var(--nx-text-meta); color: var(--nx-fg-faint); margin: var(--nx-gap-2) 0 0; }
+
+.nxV3Field { display: flex; align-items: center; justify-content: space-between; gap: var(--nx-gap-2); padding: 3px 0; }
+.nxV3Field > span { color: var(--nx-fg-muted); white-space: nowrap; }
+.nxV3Field input {
+  width: 150px;
+  font: var(--nx-text-meta);
+  color: var(--nx-fg);
+  background: var(--nx-bg);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-s);
+  padding: 3px 7px;
+}
+.nxV3Field input:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 0; }
+.nxV3Field input[type="number"] { width: 84px; text-align: right; }
+.nxV3BtnBlock { display: block; width: 100%; margin-top: var(--nx-gap-2); }
+
+.nxV3LayerGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px var(--nx-gap-2); }
+.nxV3Layer { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--nx-fg); }
+.nxV3Layer input { accent-color: var(--nx-accent); }
+
+.nxV3Tree { display: flex; flex-direction: column; gap: 2px; }
+.nxV3TreeLevel, .nxV3TreeRoom {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--nx-gap-2);
+  width: 100%;
+  text-align: left;
+  font: var(--nx-text-meta);
+  color: var(--nx-fg);
+  background: transparent;
+  border: none;
+  border-radius: var(--nx-radius-s);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.nxV3TreeRoom { padding-left: 22px; color: var(--nx-fg-muted); }
+.nxV3TreeLevel em, .nxV3TreeRoom em { font-style: normal; color: var(--nx-fg-faint); font-variant-numeric: tabular-nums; }
+.nxV3TreeLevel:hover, .nxV3TreeRoom:hover { background: var(--nx-bg-sunken); }
+.nxV3TreeLevel[aria-pressed="true"], .nxV3TreeRoom[aria-pressed="true"] { background: var(--nx-accent-soft); color: var(--nx-accent); }
+
+.nxV3SchedTable {
   width: 100%;
   border-collapse: collapse;
   font: var(--nx-text-meta);
   color: var(--nx-fg);
 }
-.nxV3Schedule th {
+.nxV3SchedTable th {
   text-align: left;
   font: var(--nx-text-micro);
   letter-spacing: var(--nx-tracking-micro);
   text-transform: uppercase;
   color: var(--nx-fg-faint);
-  padding: var(--nx-gap-2) var(--nx-gap-3) var(--nx-gap-1);
+  padding: 2px 6px 4px;
   border-bottom: 1px solid var(--nx-border);
 }
-.nxV3Schedule td {
-  padding: 5px var(--nx-gap-3);
+.nxV3SchedTable td {
+  padding: 4px 6px;
   border-bottom: 1px solid color-mix(in srgb, var(--nx-border) 55%, transparent);
   white-space: nowrap;
 }
+.nxV3SchedTable tbody tr { cursor: pointer; }
+.nxV3SchedTable tbody tr:hover td { background: var(--nx-bg-sunken); }
+.nxV3SchedSel td { background: var(--nx-accent-soft); }
 .nxV3SchedLevel td {
   font: var(--nx-text-micro);
   letter-spacing: var(--nx-tracking-micro);
@@ -381,6 +457,13 @@
   .nxV3Title { display: none; }
   .nxV3Plan { min-width: 560px; height: auto; }
   .nxV3PlanWrap { align-items: flex-start; }
-  .nxV3Schedule { inset: var(--nx-gap-2); width: auto; }
+  /* the apron stacks UNDER the drawing on narrow screens (bottom sheet) */
+  .nxV3Body { flex-direction: column; }
+  .nxV3Apron {
+    width: auto;
+    max-height: 44vh;
+    border-left: none;
+    border-top: 1px solid var(--nx-border);
+  }
   .nxV3Slider input[type="range"] { width: 120px; }
 }
