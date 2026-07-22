@@ -1,7 +1,7 @@
 {
   "vendoredAt": "2026-07-19T15:24:27.759Z",
   "style": "new-york-v4",
-  "count": 122,
+  "count": 126,
   "items": [
     {
       "name": "accordion",
@@ -424,10 +424,10 @@
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
-      "name": "NotionEditor",
+      "name": "NotionEditor · textToBlocks · markdownToBlocks · htmlToBlocks · blocksToMarkdown · highlightCode",
       "kind": "record-core",
       "import": "src/record-core/NotionEditor.tsx",
-      "when": "Notion-grade block editor for the richText field type: hand-rolled contenteditable blocks (p/h/quote/list/divider/image/table), slash menu, drag-reorder, inline markdown, image-drop; controlled (blocks/onChange) + inline-change props for a suggestions layer",
+      "when": "Notion×Google-Docs block editor for the richText field type AND the document surface: contenteditable blocks (p/h1-3/quote/list/divider/image/table + to-do/toggle/callout/code + nested lists via a flat indent level), a slash command menu, block drag-reorder (mouse + touch), an inline formatting toolbar on selection (bold/italic/underline/strike/code/link/highlight/color), markdown shortcuts (# ▸ - [] ``` …), a dependency-free code highlighter, and Word/Google-Docs PASTE normalization (clipboard HTML → clean blocks, foreign styles stripped); config-composable (EditorConfig: which blocks/toolbar/shortcuts/slash), controlled (blocks/onChange) + inline-change props for the suggestions layer. Additive over the original Block union — every existing consumer keeps working",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
@@ -435,6 +435,20 @@
       "kind": "record-core",
       "import": "src/record-core/useSuggestions.ts",
       "when": "the accept/reject/undo engine for inline tracked changes over a Block[] document: folds an accepted change's original into replacement in the doc, tracks each change's status; entity-agnostic (no object/api coupling), pairs with SuggestionPanel + NotionEditor's inline-change props",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "DocumentOutline · outlineFromBlocks",
+      "kind": "record-core",
+      "import": "src/record-core/DocumentOutline.tsx",
+      "when": "a live table-of-contents derived from a document's headings (h1-3): click-to-scroll, active-section highlight tracked on scroll, collapsible, updates live as you edit; reads block rows by data-testid inside a passed scroll container, so it needs no editor coupling",
+      "source": "ours (rebuilt — PROVENANCE.md)"
+    },
+    {
+      "name": "blocksToHtml · inlineToHtml · exportMarkdown · exportHtml · exportPdf · exportDocx · docxBlob · importFile",
+      "kind": "record-core",
+      "import": "src/record-core/editor-io.ts",
+      "when": "import/export for the block model — all client-side, CSP-safe, MIT/permissive: export to Markdown, self-contained HTML, print-to-PDF, and Word .docx (lazy `docx`); import .docx (lazy `mammoth` → HTML → blocks), .html, and markdown. The heavy libs load ONLY on export/import, never in the base bundle",
       "source": "ours (rebuilt — PROVENANCE.md)"
     },
     {
@@ -778,6 +792,20 @@
       "kind": "wrapper",
       "import": "src/blocks/workbook/snapshot.ts",
       "when": "the workbook block's pure core (no @univerjs runtime, node-testable): app_state store-key namespacing, snapshot validation for a stored workbook blob, and the demo + 10k scale seed generators",
+      "source": "ours"
+    },
+    {
+      "name": "DocumentSurface · DocumentConfig",
+      "kind": "wrapper",
+      "import": "src/blocks/document/DocumentSurface.tsx",
+      "when": "a Notion×Google-Docs DOCUMENT as a native page surface: cover + icon + title header, a live outline rail, word/char count, page-width toggle, find & replace, and an export/import menu (Markdown / HTML / PDF / Word), wrapping the NotionEditor. Free-surface (host owns the snapshot via value/onChange), config-composable (DocumentConfig toggles every affordance), both themes, mobile-aware. Exported EAGERLY (the surface is light; its only heavy deps — docx/mammoth — are lazy inside editor-io), so a Pages host can mount a kind:document page with near-zero wiring — the same contract as WorkbookSurface",
+      "source": "ours"
+    },
+    {
+      "name": "documentStoreKey · isDocumentSnapshot · seedDocument · coverBackground · COVER_PRESETS",
+      "kind": "wrapper",
+      "import": "src/blocks/document/snapshot.ts",
+      "when": "the document block's pure core (no editor runtime, node-testable): DocumentSnapshot shape ({id,title,blocks,icon?,cover?,pageWidth?}), app_state store-key namespacing, snapshot validation for a stored blob, cover-preset gradients, and the rich demo seed (every block type + inline mark, several headings for the outline)",
       "source": "ours"
     },
     {

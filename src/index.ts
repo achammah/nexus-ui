@@ -23,8 +23,12 @@ export { skinPresets, warmOptPalette, warmOptSkin } from "./skins/presets";
 export { DataTable } from "./record-core/DataTable";
 export { KanbanBoard } from "./record-core/KanbanBoard";
 export { RecordPage } from "./record-core/RecordPage";
-export { NotionEditor, textToBlocks, blocksToMarkdown, bid } from "./record-core/NotionEditor";
-export type { Block, InlineChange } from "./record-core/NotionEditor";
+export { NotionEditor, textToBlocks, blocksToMarkdown, markdownToBlocks, htmlToBlocks, highlightCode, bid } from "./record-core/NotionEditor";
+export type { Block, BlockType, InlineChange, EditorConfig, CalloutTone } from "./record-core/NotionEditor";
+export { DocumentOutline, outlineFromBlocks } from "./record-core/DocumentOutline";
+export type { OutlineHeading } from "./record-core/DocumentOutline";
+export { blocksToHtml, inlineToHtml, exportMarkdown, exportHtml, exportPdf, exportDocx, docxBlob, importFile, downloadBlob, downloadText, IMPORT_ACCEPT } from "./record-core/editor-io";
+export type { ImportResult } from "./record-core/editor-io";
 export { useSuggestions } from "./record-core/useSuggestions";
 export type { Suggestion, UseSuggestions } from "./record-core/useSuggestions";
 export { SuggestionPanel } from "./record-core/SuggestionPanel";
@@ -51,3 +55,7 @@ export * from "./blocks/mobile";
 
 /* blocks — full spreadsheet workbook (Univer) as a standalone surface (lazy engine) */
 export * from "./blocks/workbook";
+
+/* blocks — Notion×Google-Docs document as a standalone surface (light editor + outline;
+   docx/mammoth lazy-loaded only on export/import) */
+export * from "./blocks/document";

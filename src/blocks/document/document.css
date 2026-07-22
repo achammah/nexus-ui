@@ -1,0 +1,88 @@
+/* DocumentSurface chrome — token-driven, both themes, mobile-aware. The editor itself
+   carries its own styles (NotionEditor's inline <style>); this dresses the page shell. */
+
+.nxDoc { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--nx-bg); color: var(--nx-fg); font-family: var(--nx-font-sans); }
+
+/* toolbar */
+.nxDoc-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--nx-gap-3); padding: 8px 14px; border-bottom: 1px solid var(--nx-border); background: var(--nx-bg); position: sticky; top: 0; z-index: 20; }
+.nxDoc-bar-l { display: flex; align-items: baseline; gap: var(--nx-gap-3); min-width: 0; }
+.nxDoc-bar-r { display: flex; align-items: center; gap: 4px; }
+.nxDoc-crumb { display: inline-flex; align-items: center; gap: 6px; font: var(--nx-text-title); color: var(--nx-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42vw; }
+.nxDoc-crumb-ic { font-size: 15px; }
+.nxDoc-count { font: var(--nx-text-meta); color: var(--nx-fg-faint); white-space: nowrap; }
+.nxDoc-busy { font: var(--nx-text-meta); color: var(--nx-accent); }
+
+.nxDoc-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 9px; border: 1px solid transparent; background: none; color: var(--nx-fg-muted); border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-meta); transition: background var(--nx-t-fast) var(--nx-ease), color var(--nx-t-fast) var(--nx-ease), border-color var(--nx-t-fast) var(--nx-ease); }
+.nxDoc-btn:hover { background: var(--nx-bg-sunken); color: var(--nx-fg); }
+.nxDoc-btn.is-on { background: var(--nx-accent-soft); color: var(--nx-accent); }
+.nxDoc-btn-primary { border-color: var(--nx-border); color: var(--nx-fg); }
+.nxDoc-btn-primary:hover { border-color: var(--nx-accent); color: var(--nx-accent); }
+
+/* export/import menu */
+.nxDoc-io { position: relative; }
+.nxDoc-io-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 232px; padding: 6px; background: var(--nx-bg-raised); border: 1px solid var(--nx-border); border-radius: var(--nx-radius-m); box-shadow: var(--nx-shadow-2); }
+.nxDoc-io-h { font-family: var(--nx-font-mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--nx-fg-faint); padding: 8px 10px 4px; }
+.nxDoc-io-pop button { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; color: var(--nx-fg); font: var(--nx-text-body); text-align: left; padding: 8px 10px; border-radius: var(--nx-radius-s); cursor: pointer; transition: background var(--nx-t-fast) var(--nx-ease); }
+.nxDoc-io-pop button:hover { background: var(--nx-bg-sunken); }
+.nxDoc-io-pop button svg { color: var(--nx-fg-muted); }
+
+/* find & replace */
+.nxDoc-find { display: flex; align-items: center; gap: 7px; padding: 7px 14px; border-bottom: 1px solid var(--nx-border); background: var(--nx-bg-sunken); flex-wrap: wrap; }
+.nxDoc-find-ic { color: var(--nx-fg-faint); flex: none; }
+.nxDoc-find input { height: 28px; min-width: 130px; flex: 0 1 200px; border: 1px solid var(--nx-border); background: var(--nx-bg); color: var(--nx-fg); border-radius: var(--nx-radius-s); padding: 0 9px; font: var(--nx-text-body); outline: none; }
+.nxDoc-find input:focus { border-color: var(--nx-accent); box-shadow: 0 0 0 3px var(--nx-accent-soft); }
+.nxDoc-find-n { font: var(--nx-text-meta); color: var(--nx-fg-muted); min-width: 18px; text-align: center; }
+.nxDoc-find-btn { height: 28px; padding: 0 10px; border: 1px solid var(--nx-border); background: var(--nx-bg); color: var(--nx-fg-muted); border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-meta); transition: border-color var(--nx-t-fast), color var(--nx-t-fast); }
+.nxDoc-find-btn:hover:not(:disabled) { border-color: var(--nx-accent); color: var(--nx-accent); }
+.nxDoc-find-btn[aria-pressed="true"] { background: var(--nx-accent-soft); color: var(--nx-accent); border-color: var(--nx-accent); }
+.nxDoc-find-btn.is-primary { background: var(--nx-accent); color: var(--nx-accent-fg); border-color: var(--nx-accent); }
+.nxDoc-find-btn:disabled { opacity: .5; cursor: default; }
+.nxDoc-find-x { margin-left: auto; display: grid; place-items: center; width: 26px; height: 26px; border: 0; background: none; color: var(--nx-fg-faint); border-radius: var(--nx-radius-s); cursor: pointer; }
+.nxDoc-find-x:hover { background: var(--nx-bg); color: var(--nx-fg); }
+
+/* body */
+.nxDoc-body { display: flex; flex: 1; min-height: 0; }
+.nxDoc-main { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; }
+.nxDoc-page { margin: 0 auto; padding: 0 26px 8vh; }
+.nxDoc.is-narrow .nxDoc-page { max-width: 720px; }
+.nxDoc.is-wide .nxDoc-page { max-width: 940px; }
+.nxDoc-page.has-cover .nxDoc-head { margin-top: -34px; }
+/* the editor fills the page column (its own 760px cap is released inside the surface) */
+.nxDoc .ne-root { max-width: none; min-height: 40vh; padding-left: 8px; }
+
+/* cover */
+.nxDoc-cover { position: relative; height: 190px; width: 100%; }
+.nxDoc-cover-ctl { position: absolute; right: 16px; bottom: 12px; display: flex; gap: 6px; opacity: 0; transition: opacity var(--nx-t-fast); }
+.nxDoc-cover:hover .nxDoc-cover-ctl { opacity: 1; }
+.nxDoc-cover-ctl button { height: 26px; padding: 0 10px; border: 0; background: color-mix(in oklab, #0b0b0b 55%, transparent); color: #fff; border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-meta); backdrop-filter: blur(4px); }
+.nxDoc-cover-ctl button:hover { background: color-mix(in oklab, #0b0b0b 72%, transparent); }
+
+/* header: icon + title */
+.nxDoc-head { padding: 30px 8px 6px; }
+.nxDoc-head-ctl { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+.nxDoc-icon { font-size: 46px; line-height: 1; width: 64px; height: 64px; display: grid; place-items: center; border: 0; background: none; cursor: pointer; border-radius: var(--nx-radius-m); transition: background var(--nx-t-fast); }
+.nxDoc-icon:hover { background: var(--nx-bg-sunken); }
+.nxDoc-page.has-cover .nxDoc-icon { background: var(--nx-bg); box-shadow: var(--nx-shadow-1); }
+.nxDoc-addcover { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 0; background: none; color: var(--nx-fg-faint); border-radius: var(--nx-radius-s); cursor: pointer; font: var(--nx-text-meta); opacity: 0; transition: opacity var(--nx-t-fast), background var(--nx-t-fast); }
+.nxDoc-head:hover .nxDoc-addcover { opacity: 1; }
+.nxDoc-addcover:hover { background: var(--nx-bg-sunken); color: var(--nx-fg-muted); }
+.nxDoc-title { display: block; width: 100%; border: 0; background: none; color: var(--nx-fg); font: 800 40px/1.15 var(--nx-font-sans); letter-spacing: -.03em; outline: none; padding: 6px 0 2px; margin-top: 4px; }
+.nxDoc-title::placeholder { color: var(--nx-fg-faint); }
+
+/* outline rail */
+.nxDoc-rail { flex: none; width: 250px; padding: 20px 16px 20px 8px; border-left: 1px solid var(--nx-border); overflow-y: auto; }
+
+/* mobile */
+@media (max-width: 900px) {
+  .nxDoc-rail { display: none; }
+  .nxDoc-crumb { max-width: 34vw; }
+  .nxDoc-count { display: none; }
+}
+@media (max-width: 640px) {
+  .nxDoc-bar { padding: 7px 10px; }
+  .nxDoc-btn { padding: 0 7px; }
+  .nxDoc-page { padding: 0 14px 8vh; }
+  .nxDoc-title { font-size: 30px; }
+  .nxDoc-icon { font-size: 38px; width: 52px; height: 52px; }
+  .nxDoc-io-pop { position: fixed; left: 8px; right: 8px; top: auto; min-width: 0; }
+}
