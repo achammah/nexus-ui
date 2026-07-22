@@ -282,7 +282,24 @@ export function DrawTools({
   );
   return (
     <div className="nxMapToolRail" role="toolbar" aria-label="Map tools" data-testid="map-tool-rail">
-      {routeEnabled && tool("route", "Directions", <RouteIcon size={16} />, routeOn, () => onRoute(!routeOn), "map-route-btn")}
+      {/* Directions is the rail's headline action, so it carries a visible LABEL
+          rather than being one more anonymous icon — users were not finding the
+          itinerary at all. The remaining tools stay icon-only. */}
+      {routeEnabled && (
+        <button
+          type="button"
+          className="nxMapTool nxMapTool--labelled"
+          data-active={routeOn || undefined}
+          data-testid="map-route-btn"
+          aria-pressed={routeOn}
+          aria-label="Directions"
+          title="Directions — build a multi-stop itinerary"
+          onClick={() => onRoute(!routeOn)}
+        >
+          <RouteIcon size={16} />
+          <span className="nxMapToolLabel">Directions</span>
+        </button>
+      )}
       {drawEnabled && (
         <>
           {tool("line", "Measure distance", <Ruler size={16} />, drawMode === "line", () => onDraw(drawMode === "line" ? null : "line"), "map-draw-line")}

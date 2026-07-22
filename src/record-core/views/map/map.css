@@ -729,3 +729,21 @@
 .nxMapAreaLabelRaw { color: var(--nx-fg-muted); }
 .nxMapAreaLabelRow { color: var(--nx-fg-muted); }
 .nxMapAreaLabelCount { color: var(--nx-accent); font-weight: 600; }
+
+/* Directions is the rail's primary action — a labelled pill, not a bare icon.
+   The rail sizes to it; the icon-only tools stay square beneath. */
+.nxMapTool--labelled {
+  width: auto;
+  min-width: 44px;
+  padding: 0 10px;
+  gap: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.nxMapToolLabel { font: var(--nx-text-micro); font-weight: 600; white-space: nowrap; }
+@media (max-width: 640px) {
+  /* on a phone the rail is tight — the label would push the map, so icon only */
+  .nxMapToolLabel { display: none; }
+  .nxMapTool--labelled { width: 44px; min-width: 44px; padding: 0; justify-content: center; }
+}
