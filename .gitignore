@@ -1,0 +1,3 @@
+
+# editor/scratch backups must never ride into a consumer via sync-ui
+*.bak
