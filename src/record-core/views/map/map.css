@@ -39,6 +39,15 @@
 .nxMapPin:focus-visible { outline: 2px solid var(--nx-accent); outline-offset: 2px; border-radius: var(--nx-radius-s); }
 @keyframes nxPinIn { from { opacity: 0; transform: translateY(-4px) scale(0.8); } to { opacity: 1; transform: none; } }
 
+/* spiderfy — colliding pins fan onto a ring; the offset rides a wrapper (so the
+   pin's own entry/hover transforms stay intact), and a dashed leader ties the
+   spread pin back to its true spot (a dot marks the true location). */
+.nxMapPinCell { position: relative; }
+.nxMapPinOffset { transition: transform var(--nx-t-med) var(--nx-ease-settle); }
+.nxMapLeader { position: absolute; left: 50%; bottom: 0; z-index: -1; pointer-events: none; }
+.nxMapLeader line { stroke: var(--nx-fg-faint); stroke-width: 1.5; stroke-dasharray: 2.5 2.5; opacity: 0.75; }
+.nxMapLeader circle { fill: var(--nx-fg-muted); }
+
 /* search result pin (geocode) + route waypoint pin */
 .nxMapSearchPin {
   display: block;
@@ -85,11 +94,11 @@
 .nxMapView .maplibregl-ctrl-group {
   background: var(--nx-bg-raised);
   border: 1px solid var(--nx-border);
-  border-radius: var(--nx-radius-s);
+  border-radius: var(--nx-radius-m); /* match the app's pill controls */
   box-shadow: var(--nx-shadow-1);
   overflow: hidden;
 }
-.nxMapView .maplibregl-ctrl-group button { background: transparent; }
+.nxMapView .maplibregl-ctrl-group button { background: transparent; width: 32px; height: 32px; }
 .nxMapView .maplibregl-ctrl-group button + button { border-top: 1px solid var(--nx-border); }
 .nxMapView .maplibregl-ctrl-scale {
   background: color-mix(in oklab, var(--nx-bg-raised) 82%, transparent);
@@ -112,8 +121,26 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .nxMapView .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(180deg); }
 }
-.nxMapView[data-map-dark="1"] .maplibregl-ctrl-attrib { background: color-mix(in oklab, #0b0e13 62%, transparent); color: rgb(255 255 255 / 0.7); }
-.nxMapView[data-map-dark="1"] .maplibregl-ctrl-attrib a { color: rgb(255 255 255 / 0.85); }
+/* ── dark basemap → the floating chrome drives the app's DARK tokens, so a LIGHT
+   app theme over a dark basemap isn't white-cards-on-black. The native maplibre
+   controls follow automatically (they read the same tokens). Same-property filter
+   below never double-inverts when app-dark AND basemap-dark both match. ── */
+.nxMapView[data-map-dark="1"] {
+  --nx-bg: #161513;
+  --nx-bg-raised: #1f1e1b;
+  --nx-bg-sunken: #121110;
+  --nx-fg: #eceae6;
+  --nx-fg-muted: #a29e96;
+  --nx-fg-faint: #6e6a63;
+  --nx-border: #2c2b27;
+  --nx-border-strong: #45433d;
+  --nx-accent: #818cf8;
+  --nx-accent-fg: #14131f;
+  --nx-accent-soft: #232438;
+  --nx-shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --nx-shadow-2: 0 4px 14px rgb(0 0 0 / 0.5);
+}
+.nxMapView[data-map-dark="1"] .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(180deg); }
 
 /* ── overlay containers ── */
 .nxMapTopLeft {
@@ -126,17 +153,30 @@
   gap: 8px;
   max-width: min(340px, calc(100% - 20px));
 }
-.nxMapControlsRow { display: flex; gap: 6px; align-items: flex-start; }
+/* basemap + layers render as ONE connected control group (a single raised
+   surface with a hairline divider) — no transparent inter-pill gap for the map's
+   own tile labels to bleed through */
+.nxMapControlsRow {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: var(--nx-radius-m);
+  box-shadow: var(--nx-shadow-1);
+}
+.nxMapControlsRow > .nxMapLayers { border-left: 1px solid var(--nx-border); }
 /* tool rail on the left edge, vertically centred — clear of the top-left controls
    AND the bottom-left legend (they used to overlap, stealing the lower buttons'
    clicks) */
 .nxMapLeftRail { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); z-index: 5; }
 
-/* floating control buttons (basemap switcher, layers) */
+/* the group's buttons are transparent (the group provides the surface) */
 .nxMapCtrlBtn {
-  box-shadow: var(--nx-shadow-1);
-  background: var(--nx-bg-raised) !important;
-  border: 1px solid var(--nx-border) !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: var(--nx-radius-m) !important;
 }
 
 /* ── layers panel ── */

@@ -63,12 +63,38 @@ const SPECS: Record<BasemapId, BasemapSpec> = {
     id: "satellite",
     dark: true,
     hasGlyphs: false,
-    // Esri World Imagery — ArcGIS REST tile order is {z}/{y}/{x}
-    style: () =>
-      raster(
-        ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-        "Imagery © Esri, Maxar, Earthstar Geographics",
-      ),
+    // HYBRID satellite (Google-default): Esri World Imagery + transparent reference
+    // overlays for roads + place labels, so the imagery carries orienting text.
+    // ArcGIS REST tile order is {z}/{y}/{x}.
+    style: () => ({
+      version: 8,
+      sources: {
+        basemap: {
+          type: "raster",
+          tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+          tileSize: 256,
+          attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
+          maxzoom: 19,
+        },
+        "sat-roads": {
+          type: "raster",
+          tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}"],
+          tileSize: 256,
+          maxzoom: 19,
+        },
+        "sat-labels": {
+          type: "raster",
+          tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"],
+          tileSize: 256,
+          maxzoom: 19,
+        },
+      },
+      layers: [
+        { id: "basemap", type: "raster", source: "basemap" },
+        { id: "sat-roads", type: "raster", source: "sat-roads" },
+        { id: "sat-labels", type: "raster", source: "sat-labels" },
+      ],
+    }),
   },
   terrain: {
     id: "terrain",

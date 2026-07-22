@@ -59,6 +59,7 @@ import {
   type LngLat,
 } from "./geomath";
 import { makeGeocodeProvider, makeRouteProvider, type RouteResult } from "./geocode";
+import { spiderfyLayout, type SpiderOffset } from "./spiderfy";
 import { BasemapSwitcher, DrawTools, LayersPanel, Legend, MapSearch, ReadoutChips, type SearchHit } from "./overlays";
 
 /* MapView — records on a free vector/raster basemap, taken to Google-Maps depth:
@@ -263,6 +264,26 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
     setZoomAttr(map.getZoom().toFixed(1));
     setClusterCount(map.getLayer("map-clusters") ? map.queryRenderedFeatures(undefined, { layers: ["map-clusters"] }).length : 0);
   }, []);
+
+  /* ── spiderfy: DOM pins that collide on screen fan out onto a ring with leader
+     lines. Projected fresh on every settle (zoom/pan changes pixel positions);
+     cleared outside DOM-marker mode. ── */
+  const [spider, setSpider] = React.useState<Map<string, SpiderOffset>>(new Map());
+  const recomputeSpider = React.useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !domRender) {
+      setSpider((s) => (s.size ? new Map() : s));
+      return;
+    }
+    const pts = visibleLocated.map(({ row, lat, lng }) => {
+      const p = map.project([lng, lat]);
+      return { id: String(row.id), x: p.x, y: p.y };
+    });
+    setSpider(spiderfyLayout(pts));
+  }, [visibleLocated, domRender]);
+  React.useEffect(() => {
+    if (ready) recomputeSpider();
+  }, [ready, recomputeSpider]);
 
   /* ── search + geocode ── */
   const geocode = React.useMemo(() => makeGeocodeProvider(typeof viewConfig.geocodeEndpoint === "string" ? viewConfig.geocodeEndpoint : undefined), [viewConfig.geocodeEndpoint]);
@@ -541,7 +562,10 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
         onError={() => {
           if (!loadedRef.current) setStyleFailed(true);
         }}
-        onIdle={(e) => syncGlState(e.target)}
+        onIdle={(e) => {
+          syncGlState(e.target);
+          recomputeSpider();
+        }}
         onZoomEnd={(e) => setZoomAttr(e.target.getZoom().toFixed(1))}
         attributionControl={{ compact: true }}
       >
@@ -623,25 +647,38 @@ function MapView({ object, rows, readOnly, viewConfig, viewState, onViewState, o
             const title = String(row[titleField.key] ?? row.id);
             const tint = colorField ? optionMeta(colorField, row[colorKey ?? ""]).color : undefined;
             const scale = sizeKey ? radiusFor(numericValue(row[sizeKey]), ext) / MARKER_DEFAULT_R : 1;
+            const off = spider.get(String(row.id));
+            const dx = off?.dx ?? 0;
+            const dy = off?.dy ?? 0;
             return (
               <Marker key={String(row.id)} longitude={lng} latitude={lat} anchor="bottom">
-                <button
-                  type="button"
-                  className="nxMapPin"
-                  data-testid={`map-marker-${row.id}`}
-                  aria-label={title}
-                  style={{ ...(tint ? { "--pin-color": `var(--nx-opt-${tint})` } : {}), "--pin-scale": scale } as React.CSSProperties}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (routeOn) addWaypoint([lng, lat]);
-                    else setPopupId(String(row.id));
-                  }}
-                >
-                  <svg width="28" height="34" viewBox="0 0 26 31" aria-hidden="true">
-                    <path d="M13 1C6.4 1 1 6.3 1 12.8 1 21.3 13 30 13 30s12-8.7 12-17.2C25 6.3 19.6 1 13 1Z" fill="currentColor" stroke="var(--nx-bg-raised)" strokeWidth="1.5" />
-                    <circle cx="13" cy="12.6" r="4.6" fill="var(--nx-bg-raised)" />
-                  </svg>
-                </button>
+                <div className="nxMapPinCell">
+                  {off?.spread && (
+                    <svg className="nxMapLeader" width="0" height="0" overflow="visible" aria-hidden="true">
+                      <line x1="0" y1="0" x2={dx.toFixed(1)} y2={dy.toFixed(1)} />
+                      <circle cx="0" cy="0" r="2.5" />
+                    </svg>
+                  )}
+                  <div className="nxMapPinOffset" style={{ transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)` }}>
+                    <button
+                      type="button"
+                      className="nxMapPin"
+                      data-testid={`map-marker-${row.id}`}
+                      aria-label={title}
+                      style={{ ...(tint ? { "--pin-color": `var(--nx-opt-${tint})` } : {}), "--pin-scale": scale } as React.CSSProperties}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (routeOn) addWaypoint([lng, lat]);
+                        else setPopupId(String(row.id));
+                      }}
+                    >
+                      <svg width="28" height="34" viewBox="0 0 26 31" aria-hidden="true">
+                        <path d="M13 1C6.4 1 1 6.3 1 12.8 1 21.3 13 30 13 30s12-8.7 12-17.2C25 6.3 19.6 1 13 1Z" fill="currentColor" stroke="var(--nx-bg-raised)" strokeWidth="1.5" />
+                        <circle cx="13" cy="12.6" r="4.6" fill="var(--nx-bg-raised)" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               </Marker>
             );
           })}
