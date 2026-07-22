@@ -273,7 +273,7 @@ export function sunFor(hour: number): { dir: [number, number, number]; color: st
 /* ---- orthographic views (elevation / section / axonometric) ---- */
 export const ORTHO = {
   /* frustum half-height in model radii (fit margin) */
-  fitMul: 1.12,
+  fitMul: 1.22,
   camDistMul: 4,
   zoomMin: 0.4,
   zoomMax: 8,

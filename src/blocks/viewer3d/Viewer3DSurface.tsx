@@ -61,6 +61,9 @@ interface Engine {
   raycaster: THREE.Raycaster;
   pmrem: THREE.PMREMGenerator;
   clip: THREE.Plane;
+  /* facade-fit half-height for the ortho frustum (set by the view rig; the
+     ResizeObserver must preserve it, not recompute from the fit sphere) */
+  orthoHalfH: number | null;
   anim: Anim | null;
   frame: number;
   /* re-run framing/ground/shadow fit after the model content changed */
@@ -210,7 +213,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       renderer, scene, persp, ortho, camera: persp, controls, key, sun, model, levels,
       sphere: new THREE.Sphere(new THREE.Vector3(), 3), box: new THREE.Box3(),
       raycaster: new THREE.Raycaster(), pmrem, clip: new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0),
-      anim: null, frame: 0, userRelease: null,
+      orthoHalfH: null, anim: null, frame: 0, userRelease: null,
       refit: () => {},
       dispose: () => {
         cancelAnimationFrame(engine.frame);
@@ -327,7 +330,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       renderer.setSize(w, h, false);
       persp.aspect = w / h;
       persp.updateProjectionMatrix();
-      const halfH = engine.sphere.radius * ORTHO.fitMul;
+      const halfH = engine.orthoHalfH ?? engine.sphere.radius * ORTHO.fitMul;
       const halfW = halfH * (w / h);
       ortho.left = -halfW; ortho.right = halfW; ortho.top = halfH; ortho.bottom = -halfH;
       ortho.updateProjectionMatrix();
@@ -494,6 +497,7 @@ export function Viewer3DSurface({ value, onChange, reloadNonce = 0, className, a
       const facadeW = planView === "axon" ? r * 2 : (Math.abs(dir[0]) > 0.5 ? bs.z : bs.x);
       const facadeH = planView === "axon" ? r * 2 : bs.y;
       const halfH = Math.max(facadeH / 2, facadeW / (2 * aspect)) * ORTHO.fitMul;
+      e.orthoHalfH = halfH;
       e.ortho.left = -halfH * aspect; e.ortho.right = halfH * aspect;
       e.ortho.top = halfH; e.ortho.bottom = -halfH;
       e.ortho.near = 0.01; e.ortho.far = r * 20;

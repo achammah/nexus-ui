@@ -145,10 +145,10 @@ export function buildSedan(pal: ScenePalette): THREE.Group {
   const stalkGeo = new THREE.BoxGeometry(0.03, 0.03, 0.09);
   for (const zc of [1, -1]) {
     const m = new THREE.Mesh(mirGeo, paintMat);
-    m.position.set(0.88, 1.0, zc * 1.0);
+    m.position.set(0.86, 0.985, zc * 0.965);
     const st = new THREE.Mesh(stalkGeo, trimMat);
     st.rotation.x = zc * 0.5;
-    st.position.set(0.88, 0.955, zc * 0.93);
+    st.position.set(0.86, 0.94, zc * 0.9);
     g.add(m, st);
   }
 
@@ -222,12 +222,15 @@ export function buildLevel(level: Viewer3DLevel, pal: ScenePalette, index: numbe
   level.rooms.forEach((room, ri) => {
     const shape = new THREE.Shape(room.poly.map(([x, z]) => new THREE.Vector2(x, z)));
     const floorGeo = new THREE.ShapeGeometry(shape);
-    floorGeo.rotateX(Math.PI / 2); // shape y -> world -z; flip below via scale
+    /* shape (x, y) -> plan (x, z): +90° about X maps shape-y onto +z so the
+       slab lies exactly under its walls; the face normal ends up pointing down,
+       so the material is double-sided. (A mesh-level scale.z = -1 mirror would
+       park every slab OUTSIDE the building and bloat the fit box.) */
+    floorGeo.rotateX(Math.PI / 2);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: (ri + index) % 2 === 0 ? pal.floor : pal.floorAlt, ...M.floor,
+      color: (ri + index) % 2 === 0 ? pal.floor : pal.floorAlt, ...M.floor, side: THREE.DoubleSide,
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.scale.z = -1; // undo the mirror from rotateX so (x,z) match the input
     floor.position.y = 0.011 * (ri + 1); // avoid z-fighting between slabs
     floor.receiveShadow = true;
     group.add(floor);
