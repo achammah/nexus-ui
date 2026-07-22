@@ -39,13 +39,13 @@ const VALIGN: Record<number, "top" | "middle" | "bottom"> = { 1: "top", 2: "midd
 const HALIGN_R: Record<string, number> = { left: 1, center: 2, right: 3 };
 const VALIGN_R: Record<string, number> = { top: 1, middle: 2, bottom: 3 };
 
-/* Excel's 1900 date system: serial 1 = 1900-01-01, with the well-known 1900 leap-year
-   bug (serial 60 = phantom Feb 29). Converting a JS Date to a serial matches Excel. */
+/* Excel's 1900 date system counts from the 1899-12-30 epoch, which ALREADY absorbs
+   the classic 1900 leap-year bug — so the 25569-day offset from the Unix epoch is the
+   whole conversion; adding a further leap correction would shift every date by a day. */
 const MS_PER_DAY = 86400000;
 function dateToSerial(d: Date): number {
   const utc = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds());
-  const serial = utc / MS_PER_DAY + 25569; // 25569 = days from 1900-01-01 to 1970-01-01
-  return serial + (serial > 59 ? 1 : 0); // 1900 leap bug
+  return utc / MS_PER_DAY + 25569; // 25569 = days from 1899-12-30 to 1970-01-01
 }
 
 /* ── EXPORT: IWorkbookData → exceljs Workbook → Blob ────────────────────────── */
