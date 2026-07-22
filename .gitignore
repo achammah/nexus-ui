@@ -1,0 +1,5 @@
+node_modules/
+_preview/
+package-lock.json
+.DS_Store
+*.log

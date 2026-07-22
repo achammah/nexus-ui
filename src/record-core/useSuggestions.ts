@@ -20,18 +20,38 @@ export interface Suggestion extends InlineChange {
 }
 
 const isTextBlock = (b: Block): b is Extract<Block, { text: string }> =>
-  b.type !== "divider" && b.type !== "image" && b.type !== "table";
+  b.type !== "divider" && b.type !== "image" && b.type !== "table" && b.type !== "page";
 
-/* fold a change's original → replacement into the FIRST text block that carries the
-   original (first occurrence only), leaving every other block untouched */
-function applyToDoc(blocks: Block[], from: string, to: string): { next: Block[]; applied: boolean } {
+/* Fold a change into the document. Two anchoring modes, both regression-safe:
+   - ANCHORED (blockId set — the live-capture path): target that exact block and splice at the
+     captured offset. This is the only correct path for insertions/deletions (empty original or
+     replacement), which a substring search cannot place.
+   - SUBSTRING (no blockId — server-proposed substitution): replace the first block carrying
+     the `from` text, first occurrence only, exactly as before.
+   `dir` is "apply" (original→replacement) or "revert" (replacement→original). */
+function foldChange(blocks: Block[], ch: Suggestion, dir: "apply" | "revert"): { next: Block[]; applied: boolean } {
+  const from = dir === "apply" ? ch.original : ch.replacement;
+  const to = dir === "apply" ? ch.replacement : ch.original;
+  if (ch.blockId) {
+    let applied = false;
+    const next = blocks.map((b) => {
+      if (b.id !== ch.blockId || !isTextBlock(b)) return b;
+      applied = true;
+      const clamped = Math.min(ch.offset ?? b.text.length, b.text.length);
+      // find where `from` actually sits: the anchor offset if it matches there, else its first
+      // occurrence in the block (offset drifted from later edits), else the clamped anchor for
+      // a pure insertion (from === "").
+      const at = b.text.slice(clamped, clamped + from.length) === from
+        ? clamped
+        : (from !== "" ? (b.text.indexOf(from) >= 0 ? b.text.indexOf(from) : clamped) : clamped);
+      return { ...b, text: b.text.slice(0, at) + to + b.text.slice(at + from.length) } as Block;
+    });
+    return { next, applied };
+  }
   let applied = false;
   const next = blocks.map((b) => {
     if (applied || !isTextBlock(b)) return b;
-    if (b.text.includes(from)) {
-      applied = true;
-      return { ...b, text: b.text.replace(from, to) } as Block;
-    }
+    if (from !== "" && b.text.includes(from)) { applied = true; return { ...b, text: b.text.replace(from, to) } as Block; }
     return b;
   });
   return { next, applied };
@@ -71,7 +91,7 @@ export function useSuggestions(
   // put an accepted change's replacement back to its original text in the document
   const revertInDoc = React.useCallback(
     (ch: Suggestion) => {
-      const { next, applied } = applyToDoc(blocksRef.current, ch.replacement, ch.original);
+      const { next, applied } = foldChange(blocksRef.current, ch, "revert");
       if (applied) onBlocksChange(next);
     },
     [onBlocksChange],
@@ -81,7 +101,7 @@ export function useSuggestions(
     (id: string) => {
       const ch = changesRef.current.find((c) => c.id === id);
       if (!ch) return;
-      const { next, applied } = applyToDoc(blocksRef.current, ch.original, ch.replacement);
+      const { next, applied } = foldChange(blocksRef.current, ch, "apply");
       if (applied) onBlocksChange(next);
       setStatus(id, "accepted");
     },
@@ -112,7 +132,7 @@ export function useSuggestions(
     let doc = blocksRef.current;
     let changed = false;
     for (const ch of changesRef.current.filter((c) => c.status === "pending")) {
-      const { next, applied } = applyToDoc(doc, ch.original, ch.replacement);
+      const { next, applied } = foldChange(doc, ch, "apply");
       if (applied) { doc = next; changed = true; }
     }
     if (changed) onBlocksChange(doc);
